@@ -496,6 +496,9 @@ if __name__ == "__main__":
                     # Skips the header in the CSV file, if it is present.
                     if "target_fw,admin_user," in line:
                         continue
+                    # Enables commenting lines to skip an entry.
+                    elif line.startswith("#"):
+                        continue
 
                     # target_fw,admin_user,admin_password,target_ssh_mgmt_port,enable_totp,enable_botnet_filtering
                     # When the CSV file has less than 6 columns, we'll fill the missing columns with 'None'.
