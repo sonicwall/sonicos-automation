@@ -23,17 +23,18 @@ Identify the number of targets and run the following routine for each valid targ
    2. If SonicOS API is disabled, try to enable it using SSH Management.
       - Gives up if unable to enable SonicOS API/unable to SSH into the target firewall.
    3. Retrieve firewall information (model, firmware version, etc.).
-   4. Checks if Botnet Filtering is licensed and enabled. If licensed but not enabled, the script can enable it for you.
-   5. Alerts the user if the target firewall is vulnerable to CVE-2024-40766 / SNWLID-2024-0015.
+   4. Alerts the user if the target firewall is vulnerable to CVE-2024-40766 / SNWLID-2024-0015.
          - For GEN7 firewalls, asks the user if they would like to upgrade now.
             - If so, the user is prompted to provide a file path to the firmware image. The script will upload and boot the image. The script will not proceed with this target. Please re-run the script against this target after the upgrade.
             - If the user chooses not to upgrade, the script will not proceed with this target.
          - For GEN6 firewalls, prompts the user to upgrade the firmware manually. The script will not proceed with this target. Please upgrade the firmware and re-run the script against this target.
          - If the target firewall is not vulnerable to CVE-2024-40766 / SNWLID-2024-0015, the script will proceed.
-   6. Use SonicOS API to retrieve the list of users.
-   7. Use SonicOS API to force all local users to change their password on next login, skipping domain users and special user entries.
+   5. Use SonicOS API to retrieve the list of users.
+   6. Use SonicOS API to force all local users to change their password on next login, skipping domain users and special user entries.
       - Optionally, the script can reset each user's password to a specified temporary password. The password can be set using the command line arguments or in the CSV file.
-   8. If SonicOS API was disabled, disable it again using SSH Management.
+   7. Checks if Botnet Filtering is licensed and enabled. If licensed but not enabled, the script can enable it for you.
+   8. Checks if App-based TOTP or Email-based OTP is enabled on the `SSLVPN Services` group. If not enabled, the script can enable it for you.
+   9. If SonicOS API was disabled, disable it again using SSH Management.
 
 
 ### Prerequisites
@@ -41,7 +42,9 @@ Identify the number of targets and run the following routine for each valid targ
   - requests module (install using `pip install requests`)
   - paramiko module (install using `pip install paramiko`)
   - Install all requirements using `pip install -r requirements.txt`
-- SonicWall GEN6 or GEN7 firewall with API enabled (or SSH management enabled for automatic enabling/disabling of SonicOS API).
+- SonicWall GEN6 or GEN7 firewall with SonicOS API enabled (or SSH management enabled for automatic enabling/disabling of SonicOS API).
+  - Basic and CHAP authentication are supported.
+- SSH Management access is recommended and may be required for certain actions. This is especially notable for GEN6.
 
 
 ### Usage

@@ -367,7 +367,7 @@ def commit_pending(fw, session):
 
 	# If the commit succeeds, return the response JSON.
 	if resp.status_code == requests.codes.ok:
-		print(f"{generate_timestamp()}: Commit action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+		print(f"{generate_timestamp()}: Commit action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}\n")
 		return resp.json()
 
 
@@ -479,29 +479,79 @@ def check_botnet_status(fw, session, firewall_generation=None):
 
 
 # Checks if TOTP is enabled on the input group name.
-# def check_totp_status(fw, session, group_name, enable_totp=False, firewall_generation=None):
-# 	start_time = generate_timestamp(split=False)
-# 	endpoint = '/api/sonicos/user/local/users/groups/name/'
-# 	if firewall_generation == 6:
-# 		endpoint = f'/api/sonicos/user/local/groups/name/{group_name.replace(" ", "%20")}'
-# 	elif firewall_generation == 7:
-# 		endpoint = f'/api/sonicos/user/local/groups/name/{group_name.replace(" ", "%20")}'
-#
-# 	try:
-# 		resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
-# 		r = resp.json()
-#
-# 		If the group name is found in the response, return the status.
-		# if group_name in r.get("totp", {}).get("group", ""):
-		# 	print(f"{generate_timestamp()}: TOTP is enabled on the '{group_name}' group.")
-			# return {"status": "enabled", "response": r}
-		# else:
-		# 	print(f"{generate_timestamp()}: TOTP is not enabled on the '{group_name}' group.")
-			# return {"status": "disabled", "response": r}
-	#
-	# except Exception as e:
-	# 	print(f"{generate_timestamp()}: Error checking TOTP status (1): {e}")
-	# 	return {"status": "error", "response": e}
+def check_totp_status(fw, session, group_name, enable_totp=False, firewall_generation=None):
+	start_time = generate_timestamp(split=False)
+	endpoint = '/api/sonicos/user/local/groups/name/'
+	if firewall_generation == 6:
+		endpoint = f'/api/sonicos/user/local/group/name/{group_name.replace(" ", "%20")}'
+	elif firewall_generation == 7:
+		endpoint = f'/api/sonicos/user/local/groups/name/{group_name.replace(" ", "%20")}'
+
+	try:
+		resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
+		r = resp.json()
+		groups = r.get("user", {}).get("local", {}).get("group", [{}])
+
+		for c, g in enumerate(groups):
+			if g.get("name", "").lower() == group_name.lower():
+				otp = g.get("one_time_password")
+				email_based = otp.get("otp", False)
+				app_based = otp.get("totp", False)
+
+				selected_otp = ""
+				if app_based:
+					selected_otp = "App-based TOTP"
+				elif email_based:
+					selected_otp = "Email-based OTP"
+
+				if otp == {}:
+					# print(f"{generate_timestamp()}: TOTP/OTP is disabled for {g['name']}")
+					if not enable_totp:
+						return {"status": "disabled", "mode": selected_otp, "autoenabled": False, "group_name": g['name']}
+
+				elif app_based or email_based:
+					# print(f"{generate_timestamp()}: {selected_otp} is enabled for {g['name']}")
+					enable_totp = False
+					return {"status": "enabled", "mode": selected_otp, "autoenabled": False, "group_name": g['name']}
+
+				if enable_totp:
+					print(f"{generate_timestamp()}: Enabling TOTP for {g['name']}")
+
+					r['user']['local']['group'][c]["one_time_password"] = {"totp": True}
+
+					enable_totp_response = {}
+					if firewall_generation == 6:
+						endpoint = f'/api/sonicos/user/local/group/name/{group_name.replace(" ", "%20")}'
+						enable_totp_response = put_request(fw, session, endpoint, r)
+						# print("\n\n--------")
+						# print(enable_totp_response)
+						# print("-------\n\n")
+
+					elif firewall_generation == 7:
+						endpoint = f'/api/sonicos/user/local/groups/name/{group_name.replace(" ", "%20")}'
+						enable_totp_response = patch_request(fw, session, endpoint, r)
+
+
+					if enable_totp_response.get('status', {}).get('success', False) is False:
+						err = enable_totp_response.get("status", {}).get("info", [{}])[0].get('message', "")
+						print(f"{generate_timestamp()}: Error enabling TOTP on {group_name}")
+						return {"status": "disabled",
+								"mode": "",
+								"autoenabled": False,
+								"group_name": g['name'],
+								"message": err,
+								"response": enable_totp_response,
+								"try_ssh": True}
+
+					# Commit the changes.
+					commit_pending(fw, session)
+
+					return {"status": "enabled", "mode": "App-based TOTP", "autoenabled": True, "group_name": g['name']}
+
+	except Exception as e:
+		print(f"{generate_timestamp()}: Error checking TOTP status (1): {e}")
+		return {"status": "error", "autoenabled": False, "message": "Error checking MFA status.", "response": e}
+
 
 # Enable the SonicOS API via SSH Management.
 def enable_sonicos_api_ssh(fw, sshport, admin_user, admin_password, disable_digest=False):
@@ -762,3 +812,73 @@ def get_firmware_version_ssh(fw, sshport, admin_user, admin_password):
 	ssh_conn.close()
 
 	return firmware_version
+
+
+# Enable TOTP on a given group.
+def enable_totp_ssh(fw, sshport, admin_user, admin_password, group_name):
+	print(f"{generate_timestamp()}: Enabling TOTP on {group_name} via SSH Management.")
+
+	# This prepares the SSH target.
+	fw = fw.strip("https://").split(":")[0]
+	# fw = fw + ":" + str(sshport)
+
+	# Connect to the firewall.
+	try:
+		ssh, ssh_conn = connect_ssh(fw,
+									sshport,
+									soniccore_user=admin_user,
+									soniccore_pass=admin_password,
+									sonicos_user=admin_user,
+									sonicos_pass=admin_password,
+									soniccore_prelogin=False)
+	except KeyboardInterrupt:
+		print(f"{generate_timestamp()}: Stopped!")
+		exit()
+	except KeyError as e:
+		print(f"{generate_timestamp()}: KeyError: Either ({e}) is missing or the configuration is invalid/not found.")
+		# exit()
+		return False
+	except Exception as e:
+		print(f"{generate_timestamp()}: Error with SSH connection (5):", str(e))
+		# exit()
+		return False
+
+	# Command list for enabling the SonicOS API.
+	command_list = [
+		"user local",
+		f'group "{group_name}"',
+		"one-time-password totp",
+		"commit",
+		"exit",
+		"exit",
+		"exit",
+		"exit"
+	]
+
+	cnt = 0
+	command_output = []
+	for cmd in command_list:
+		# Send commands to the firewall and write the output to separate files.
+		try:
+			cmd_response = send_cmd(ssh, cmd + "\r", get_cmd_response=True, silent=True)
+			command_output.append(cmd_response)
+			cnt += 1
+		except KeyboardInterrupt:
+			ssh.close()
+			ssh_conn.close()
+			print(f"{generate_timestamp()}: Stopped!")
+			exit()
+
+	successful = False
+	for line in command_output:
+		if "% Changes made." in line:
+			print(f"{generate_timestamp()}: TOTP sucessfully enabled.")
+			successful = True
+			break
+
+	# Close the SSH session.
+	ssh.close()
+	ssh_conn.close()
+
+	return successful
+

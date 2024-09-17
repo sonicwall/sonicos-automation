@@ -21,7 +21,9 @@ from sonicos.api import (
     logout,
     enable_sonicos_api_ssh,
     disable_sonicos_api_ssh,
-    check_botnet_status
+    check_botnet_status,
+    check_totp_status,
+    enable_totp_ssh
 )
 from sonicos.utils import (
     ensure_admin_api_session,
@@ -330,127 +332,146 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         commit_pending(api_base, api_session)
         routine_result_temp['commit_successful'] = True
 
-        # At this point, we will ask the user if they would like to do some extra stuff like enabling botnet filtering or TOTP.
-        routine_results[firewall]['botnet_filtering_licensed'] = None
-        routine_results[firewall]['botnet_filtering_enabled'] = None
-
-        routine_results[firewall]['sslvpn_services_totp_enabled'] = None
-        routine_results[firewall]['sslvpn_services_totp_autoenabled'] = None
-
-        # Check if Botnet Filtering is licensed and enabled.
-        try:
-            if firewall_generation == 5:
-                print("Not implemented for GEN5 firewalls.")
-
-            botnet_status = check_botnet_status(api_base, api_session, firewall_generation=firewall_generation)
-
-            if botnet_status["license_status"] == "not_licensed":
-                routine_results[firewall]['botnet_filtering_licensed'] = False
-                routine_results[firewall]['botnet_filtering_autoenabled'] = False
-                msg = botnet_status.get("message", "")
-                print(f"{generate_timestamp()}: Botnet Filtering is not licensed. {msg}")
-                enable_botnet_filtering = False
-            elif botnet_status["license_status"] == "licensed":
-                routine_results[firewall]['botnet_filtering_licensed'] = True
-                print(f"{generate_timestamp()}: Botnet Filtering is licensed.")
-
-            if botnet_status["status"] == "enabled":
-                routine_results[firewall]['botnet_filtering_enabled'] = True
-                routine_results[firewall]['botnet_filtering_autoenabled'] = False
-                enable_botnet_filtering = False
-                print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
-            elif botnet_status["status"] == "disabled":
-                routine_results[firewall]['botnet_filtering_enabled'] = False
-                print(f"{generate_timestamp()}: Botnet Filtering is not enabled.")
-
-        except KeyboardInterrupt:
-            print(f"\nStopped!")
-            exit()
-        except Exception as e:
-            print(f"{generate_timestamp()}: Error getting botnet status (0): {e}")
-            exit()
-
-        # This is the JSON response from the check_botnet_status function.
-        botnet_status_response = botnet_status['response']
-
-        # The idea is to enable Botnet if configured to do so or if argument is set, but to ask the user if they want to enable it if licensed but not enabled.
-        if enable_botnet_filtering or (
-                routine_results[firewall]['botnet_filtering_licensed'] and not routine_results[firewall][
-            'botnet_filtering_enabled']):
-            # If Botnet Filtering is licensed but not enabled, and the argument to enable it is not set.
-            if routine_results[firewall]['botnet_filtering_enabled'] is False:
-                if not enable_botnet_filtering:
-                    print(
-                        f"{generate_timestamp()}: Botnet Filtering is licensed but not enabled. Would you like to enable it?")
-                    routine_results[firewall]['prompted_to_enable_botnet_filtering'] = True
-                    enable_botnet = input("Enter 'y' to enable Botnet Filtering or 'n' to skip [y/N]: ")
-                    if enable_botnet.lower() == 'y' or enable_botnet.lower() == 'yes':
-                        enable_botnet_filtering = True
-
-            # If Botnet Filtering is licensed but not enabled, and the argument to enable it is set.
-            enable_botnet_resp = {}
-            if (enable_botnet_filtering and routine_results[firewall]['botnet_filtering_enabled'] is False and
-                    routine_results[firewall]['botnet_filtering_licensed'] is True):
-                print(f"{generate_timestamp()}: Enabling Botnet Filtering for all connections.")
-                botnet_status_response['botnet']['logging'] = True
-                try:
-                    if firewall_generation == 7:
-                        # I have not encountered any GEN7 issue with the dynamic list key, so I've left it in.
-                        botnet_status_response['botnet']['block']['connections'] = {'enable': True, 'mode': 'all'}
-                        enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/base',
-                                                         data=botnet_status_response)
-                    elif firewall_generation == 6:
-                        botnet_status_response['botnet']['block']['connections'] = {'all': True}
-                        print(botnet_status_response)
-
-                        # I noticed some out of bounds errors when including the dynamic_list key in the JSON.
-                        # Since we're enabling Botnet, it is safe to assume the dynamic list was not in use.
-                        botnet_status_response['botnet'].pop('dynamic_list', None)
-                        botnet_status_response['botnet'].pop('exclude', None)
-                        botnet_status_response['botnet'].pop('include', None)
-
-                        enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/global',
-                                                         data=botnet_status_response)
-                except KeyboardInterrupt:
-                    print(f"\nStopped!")
-                    exit()
-                except Exception as e:
-                    print(f"{generate_timestamp()}: Error enabling Botnet Filtering: {e}")
-                    exit()
-
-                if enable_botnet_resp.get('status', {}).get('success', False) is False:
-                    print(f"{generate_timestamp()}: Error enabling Botnet Filtering.")
-                    exit()
-
-                # Commit the changes.
-                commit_pending(api_base, api_session)
-                routine_results[firewall]['botnet_filtering_autoenabled'] = True
-            else:
-                routine_results[firewall]['botnet_filtering_autoenabled'] = False
-
-        # if enable_totp:
-        #     try:
-        #         if firewall_generation == 7:
-        #             enable_totp_resp = post_request(api_base, api_session, '/api/sonicos/user/auth/totp/enable')
-        #         elif firewall_generation == 6:
-        #             enable_totp_resp = post_request(api_base, api_session, '/api/sonicos/user/auth/totp/enable')
-        #     except KeyboardInterrupt:
-        #         print(f"\nStopped!")
-        #         exit()
-        #     except Exception as e:
-        #         print(f"{generate_timestamp()}: Error enabling TOTP: {e}")
-        #         exit()
-        #
-        #     if enable_totp_resp['status']['success'] is False:
-        #         print(f"{generate_timestamp()}: Error enabling TOTP.")
-        #         exit()
-
         routine_results[firewall]['users'].append(routine_result_temp)
         sleep(1)
         print()
         # End of the user loop
 
     # The following occurs after the user loop ends.
+
+    # At this point, we will ask the user if they would like to do some extra stuff like enabling botnet filtering or TOTP.
+    routine_results[firewall]['botnet_filtering_licensed'] = None
+    routine_results[firewall]['botnet_filtering_enabled'] = None
+
+    routine_results[firewall]['sslvpn_services_totp_enabled'] = None
+    routine_results[firewall]['sslvpn_services_totp_autoenabled'] = None
+
+    # Check if Botnet Filtering is licensed and enabled.
+    try:
+        print()
+        if firewall_generation == 5:
+            print("Not implemented for GEN5 firewalls.")
+
+        botnet_status = check_botnet_status(api_base, api_session, firewall_generation=firewall_generation)
+
+        if botnet_status["license_status"] == "not_licensed":
+            routine_results[firewall]['botnet_filtering_licensed'] = False
+            routine_results[firewall]['botnet_filtering_autoenabled'] = False
+            msg = botnet_status.get("message", "")
+            print(f"{generate_timestamp()}: Botnet Filtering is not licensed. {msg}")
+            enable_botnet_filtering = False
+        elif botnet_status["license_status"] == "licensed":
+            routine_results[firewall]['botnet_filtering_licensed'] = True
+            print(f"{generate_timestamp()}: Botnet Filtering is licensed.")
+
+        if botnet_status["status"] == "enabled":
+            routine_results[firewall]['botnet_filtering_enabled'] = True
+            routine_results[firewall]['botnet_filtering_autoenabled'] = False
+            enable_botnet_filtering = False
+            print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
+        elif botnet_status["status"] == "disabled":
+            routine_results[firewall]['botnet_filtering_enabled'] = False
+            print(f"{generate_timestamp()}: Botnet Filtering is not enabled.")
+
+    except KeyboardInterrupt:
+        print(f"\nStopped!")
+        exit()
+    except Exception as e:
+        print(f"{generate_timestamp()}: Error getting botnet status (0): {e}")
+
+    # This is the JSON response from the check_botnet_status function.
+    botnet_status_response = botnet_status['response']
+
+    # The idea is to enable Botnet if configured to do so or if argument is set, but to ask the user if they want to enable it if licensed but not enabled.
+    if enable_botnet_filtering or (
+            routine_results[firewall]['botnet_filtering_licensed'] and
+            not routine_results[firewall]['botnet_filtering_enabled']
+    ):
+        # If Botnet Filtering is licensed but not enabled, and the argument to enable it is not set.
+        if routine_results[firewall]['botnet_filtering_enabled'] is False:
+            if a.enable_botnet_filtering:
+                enable_botnet_filtering = True
+
+            # if not enable_botnet_filtering and a.enable_botnet_filtering is False:
+            #     print(f"{generate_timestamp()}: Botnet Filtering is licensed but not enabled. Would you like to enable it?")
+            #     routine_results[firewall]['prompted_to_enable_botnet_filtering'] = True
+            #     enable_botnet = input("Enter 'y' to enable Botnet Filtering or 'n' to skip [y/N]: ")
+            #     if enable_botnet.lower() == 'y' or enable_botnet.lower() == 'yes':
+            #         enable_botnet_filtering = True
+
+        # If Botnet Filtering is licensed but not enabled, and the argument to enable it is set.
+        enable_botnet_resp = {}
+        if (enable_botnet_filtering and routine_results[firewall]['botnet_filtering_enabled'] is False and
+                routine_results[firewall]['botnet_filtering_licensed'] is True):
+            print(f"{generate_timestamp()}: Enabling Botnet Filtering for all connections.")
+            botnet_status_response['botnet']['logging'] = True
+            try:
+                if firewall_generation == 7:
+                    # I have not encountered any GEN7 issue with the dynamic list key, so I've left it in.
+                    botnet_status_response['botnet']['block']['connections'] = {'enable': True, 'mode': 'all'}
+                    enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/base',
+                                                     data=botnet_status_response)
+                elif firewall_generation == 6:
+                    botnet_status_response['botnet']['block']['connections'] = {'all': True}
+                    # print(botnet_status_response)
+
+                    # I noticed some out of bounds errors when including the dynamic_list key in the JSON.
+                    # Since we're enabling Botnet, it is safe to assume the dynamic list was not in use.
+                    botnet_status_response['botnet'].pop('dynamic_list', None)
+                    botnet_status_response['botnet'].pop('exclude', None)
+                    botnet_status_response['botnet'].pop('include', None)
+
+                    enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/global',
+                                                     data=botnet_status_response)
+            except KeyboardInterrupt:
+                print(f"\nStopped!")
+                exit()
+            except Exception as e:
+                print(f"{generate_timestamp()}: Error enabling Botnet Filtering: {e}")
+
+            if enable_botnet_resp.get('status', {}).get('success', False) is False:
+                print(f"{generate_timestamp()}: Error enabling Botnet Filtering.")
+
+            # Commit the changes.
+            commit_pending(api_base, api_session)
+            routine_results[firewall]['botnet_filtering_autoenabled'] = True
+        else:
+            routine_results[firewall]['botnet_filtering_autoenabled'] = False
+
+    # Check if MFA is enabled on the SSLVPN Services group.
+    try:
+        print()
+        if firewall_generation == 5:
+            print("Not implemented for GEN5 firewalls.")
+
+        totp_status = check_totp_status(api_base,
+                                        api_session,
+                                        group_name="SSLVPN Services",
+                                        enable_totp=enable_totp,
+                                        firewall_generation=firewall_generation
+                                        )
+
+        if totp_status["status"] == "enabled":
+            routine_results[firewall]['sslvpn_services_totp_enabled'] = True
+            routine_results[firewall]['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
+            routine_results[firewall]['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
+            print(f"{generate_timestamp()}: {totp_status.get('mode', '')} is enabled on the SSLVPN Services group.")
+        elif totp_status["status"] == "disabled":
+            routine_results[firewall]['sslvpn_services_totp_enabled'] = False
+            routine_results[firewall]['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
+            routine_results[firewall]['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
+            routine_results[firewall]['sslvpn_services_totp_error_msg'] = totp_status.get("message", "")
+            print(f"{generate_timestamp()}: TOTP/OTP is not enabled on the SSLVPN Services group.")
+            if totp_status.get("try_ssh", None):
+                print(f"{generate_timestamp()}: Unable to enable TOTP via API. Trying SSH instead. ({totp_status.get('message', '')})\n")
+                enable_totp_ssh(firewall, sshport, username, password, "SSLVPN Services")
+
+
+    except KeyboardInterrupt:
+        print(f"\nStopped!")
+        exit()
+    except Exception as e:
+        print(f"{generate_timestamp()}: Error getting MFA status or setting new MFA configuration (0): {e}")
 
     # Stats (such as users that were/were not updated).
     routine_results[firewall]['total_users_forced_to_update_password'] = len([u for u in routine_results[firewall]['users'] if u['commit_successful'] is True])

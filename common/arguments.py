@@ -15,10 +15,10 @@ def get_parser():
     ap.add_argument("-s", "--sshport", type=str, default='22',
                     help="If SonicOS API is disabled, the script will attempt to use SSH Management on port 22 to *temporarily* enable SonicOS API. Use this argument to specify a different SSH port. This has no effect if using a CSV file.")
 
-    ap.add_argument("-et", "--enabletotp", action='store_true',
+    ap.add_argument("-et", "--enable_totp", action='store_true',
                     help="If set, the script will enable Two-Factor Authentication (TOTP) on the 'SSLVPN Services' group. SSLVPN users will be prompted to set up the TOTP on their next login.")
 
-    ap.add_argument("-eb", "--enablebotnet", action='store_true',
+    ap.add_argument("-eb", "--enable_botnet_filtering", action='store_true',
                     help="If set, the script will enable Botnet Filtering. This currently has no effect. The next version will include this feature.")
 
     ap.add_argument("-tp", "--temp_password", type=str, default='',
