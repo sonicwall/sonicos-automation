@@ -61,3 +61,4 @@ Identify the number of targets and run the following routine for each valid targ
        IPorHostname2,AdminUsername2,AdminPassword2,SSHMgmtPort,true|false,true|false,TemporaryPassword
        IPorHostname3,AdminUsername3,AdminPassword3,SSHMgmtPort,true|false,true|false,TemporaryPassword
        ```
+   - You can prepend lines your CSV file with `#` to comment the line/skip the line.
