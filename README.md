@@ -66,3 +66,15 @@ Identify the number of targets and run the following routine for each valid targ
        IPorHostname3,AdminUsername3,AdminPassword3,SSHMgmtPort,true|false,true|false,TemporaryPassword
        ```
    - You can prepend lines your CSV file with `#` to comment the line/skip the line.
+
+
+## Support
+The scripts and code provided in this repository are offered "as-is" and are not officially supported by SonicWall 
+as they fall outside the scope of our technical support services. SonicWall will not provide technical support for these scripts.
+
+For issues related to the scripts, please open an issue in this GitHub repository.
+
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
