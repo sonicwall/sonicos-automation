@@ -69,14 +69,12 @@ Identify the number of targets and run the following routine for each valid targ
 
 
 ## Support
-The scripts and code provided in this repository are offered "as-is" and are not officially supported by SonicWall as they fall outside the scope of our technical support services.
-SonicWall is not responsible for any issues, errors, or damage that may arise from using or modifying these scripts.
+The scripts and code provided in this repository are offered "as-is" and are not officially supported by SonicWall 
+as they fall outside the scope of our technical support services. SonicWall will not provide technical support for these scripts.
 
-Before implementing any of the code, users are encouraged to thoroughly review and test it in a controlled environment to ensure it meets their needs and adheres to their security and operational standards.
+For issues related to the scripts, please open an issue in this GitHub repository.
 
-By using or distributing the code in this repository, you acknowledge that:
 
-- The scripts are not guaranteed to be free of errors or suitable for all environments.
-- No warranties or guarantees are made regarding the functionality or security of the scripts.
-- SonicWall will not provide technical support for these scripts, nor will we assume responsibility for any outcomes arising from their use.
-If you choose to use, modify, or distribute this code, you assume full responsibility for any consequences.
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
