@@ -215,6 +215,15 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         print(f"{generate_timestamp()}: Error getting users from API: {e}")
         exit()
 
+    if isinstance(users, bytes):
+        # There may be expired users pulled from a GEN6 firewall. Expired users will have "expired" in the JSON
+        # unquoted and will cause a JSON error.
+        # Replaces b": expired\n" with b": \"expired\"\n" to make the JSON valid.
+        users = users.replace(b': expired', b': "expired"')
+
+        # Converts the bytes to a string and then to a JSON object.
+        users = json.loads(users.decode('utf-8'))
+
     if users.get('user', {}).get('local', {}).get('user', None) is None:
         print(f"{generate_timestamp()}: Error: No local users found.")
         return "NO_LOCAL_USERS"
@@ -236,6 +245,23 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
                 "forced_password_change": False,
                 "skipped": True,
                 "reason": "Special user entry",
+                "commit_successful": None
+            })
+            continue
+
+        # Skipping expired users.
+        # GEN6: usr['account_lifetime']['lifetime'] is "expired"
+        # GEN7: usr['account_lifetime']['expired'] is True
+        if (
+                usr.get('account_lifetime', {}).get('lifetime', "") == "expired" or
+                usr.get('account_lifetime', {}).get('expired', False) is True
+        ):
+            print(f"{generate_timestamp()}: Skipping {usr['name']} (expired user)")
+            routine_results[firewall]['users'].append({
+                "name": usr['name'],
+                "forced_password_change": False,
+                "skipped": True,
+                "reason": "Expired user",
                 "commit_successful": None
             })
             continue

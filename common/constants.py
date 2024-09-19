@@ -3,7 +3,7 @@ from common.arguments import a
 from common.utils import generate_timestamp
 
 
-VERSION_STRING = '0.5'
+VERSION_STRING = '0.6'
 
 # Base folder path for the application.
 BASE_PATH = path.dirname(path.dirname(path.abspath(__file__)))

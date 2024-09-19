@@ -330,7 +330,10 @@ def get_request(fw, session, api_path):
 	start_time = generate_timestamp(split=False)
 	resp = session.get(fw + api_path, headers=sonicos_api_headers, verify=False)
 	print_response_info(resp, start_time=start_time)
-	return resp.json()
+	try:
+		return resp.json()
+	except json.JSONDecodeError:
+		return resp.content
 
 
 # Generic POST request
