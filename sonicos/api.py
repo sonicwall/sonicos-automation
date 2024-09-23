@@ -388,6 +388,53 @@ def logout(fw, session):
 		return resp.json()
 
 
+# Downloads the tech support report (TSR) from the firewall.
+# For GEN7, there is an endpoint to download it. For GEN6 we need to use the /direct/cli endpoint.
+def download_tsr(fw, session, filepath, firewall_generation=None):
+	start_time = generate_timestamp(split=False)
+	endpoint = '/api/sonicos/direct/cli'
+	if firewall_generation == 6:
+		endpoint = '/api/sonicos/direct/cli'
+	elif firewall_generation == 7:
+		endpoint = '/api/sonicos/export/tech-support-report'
+
+	resp = None
+	try:
+		if firewall_generation == 6:
+			# Update the Content-Type request header to plain/text.
+			sonicos_api_headers['Content-Type'] = 'text/plain'
+
+			resp = session.post(fw + endpoint,
+								headers=sonicos_api_headers,
+								data="show tech-support-report",
+								verify=False)
+
+			# Set the Content-Type header back to application/json.
+			sonicos_api_headers['Content-Type'] = 'application/json'
+
+		elif firewall_generation == 7:
+			resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
+		# print_response_info(resp, start_time=start_time)
+	except Exception as e:
+		print(f"{generate_timestamp()}: Error downloading TSR: {e}")
+		return False
+
+	if resp:
+		if resp.status_code == requests.codes.ok:
+			try:
+				with open(filepath, 'wb') as file:
+					file.write(resp.content)
+			except Exception as e:
+				print(f"{generate_timestamp()}: Error writing TSR to file: {e}")
+				return False
+
+			print(f"{generate_timestamp()}: TSR download successful!")
+			return True
+		else:
+			print(f"{generate_timestamp()}: Error downloading TSR: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+			return False
+
+
 # Upload a firmware image to the firewall via SonicOS API.
 def upload_firmware(fw, session, filepath, firewall_generation=None):
 	start_time = generate_timestamp(split=False)
@@ -777,11 +824,11 @@ def get_firmware_version_ssh(fw, sshport, admin_user, admin_password):
 	except KeyError as e:
 		print(f"{generate_timestamp()}: KeyError: Either ({e}) is missing or the configuration is invalid/not found.")
 		# exit()
-		return False
+		return False, None
 	except Exception as e:
 		print(f"{generate_timestamp()}: Error with SSH connection (4):", str(e))
 		# exit()
-		return False
+		return False, None
 
 	# Command list for enabling the SonicOS API.
 	command_list = [
@@ -805,16 +852,20 @@ def get_firmware_version_ssh(fw, sshport, admin_user, admin_password):
 			exit()
 
 	firmware_version = ""
+	serial_number = ""
 	for line in command_output:
 		if "firmware-version" in line:
 			firmware_version = line.split(" ")[-1].strip('"').strip()
-			break
+			continue
+		elif "serial-number" in line:
+			serial_number = line.split(" ")[-1].strip('"').strip().replace("-", "")
+			continue
 
 	# Close the SSH session.
 	ssh.close()
 	ssh_conn.close()
 
-	return firmware_version
+	return firmware_version, serial_number
 
 
 # Enable TOTP on a given group.

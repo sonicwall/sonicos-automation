@@ -23,7 +23,8 @@ from sonicos.api import (
     disable_sonicos_api_ssh,
     check_botnet_status,
     check_totp_status,
-    enable_totp_ssh
+    enable_totp_ssh,
+    download_tsr
 )
 from sonicos.utils import (
     ensure_admin_api_session,
@@ -104,6 +105,7 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     firewall_generation = None
     firmware_version = None
     device_model = None
+    serial_number = None
     # Determine if this is a GEN7 firewall or a GEN6 firewall, as they have different endpoints.
     try:
         info = get_request(api_base, api_session, '/api/sonicos/version')
@@ -111,6 +113,7 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         if info.get('firmware_version', None):
             firmware_version = info['firmware_version'].split(' ')[-1]
             device_model = info['model']
+            serial_number = info['serial_number'].replace("-", "")
             constants.set_fw_model(device_model)
             if firmware_version.startswith('7'):
                 firewall_generation = 7
@@ -131,6 +134,7 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     routine_results[firewall]['firewall_generation'] = firewall_generation
     routine_results[firewall]['firmware_version'] = firmware_version
     routine_results[firewall]['device_model'] = device_model
+    routine_results[firewall]['serial_number'] = serial_number
 
     # TODO: Firmware version override for testing
     # firmware_version = "6.5.4.15-114"
@@ -498,6 +502,21 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         exit()
     except Exception as e:
         print(f"{generate_timestamp()}: Error getting MFA status or setting new MFA configuration (0): {e}")
+
+    # Download the TSR from the firewall.
+    print(f"{generate_timestamp()}: Downloading TSR...")
+    routine_results[firewall]['tsr_downloaded'] = False
+    dm = routine_results[firewall]['device_model'].replace(" ", "")
+    sn = routine_results[firewall]['serial_number']
+    tsr_file_name = f"{dm}-{sn}-tsr.wri"
+    tsr_downloaded = download_tsr(api_base,
+                 api_session,
+                 filepath=f"{constants.START_TIMESTAMP_FOLDER}/{tsr_file_name}",
+                 firewall_generation=firewall_generation)
+
+    if tsr_downloaded:
+        print(f"{generate_timestamp()}: TSR downloaded to {tsr_file_name}")
+        routine_results[firewall]['tsr_downloaded'] = True
 
     # Stats (such as users that were/were not updated).
     routine_results[firewall]['total_users_forced_to_update_password'] = len([u for u in routine_results[firewall]['users'] if u['commit_successful'] is True])
