@@ -435,6 +435,58 @@ def download_tsr(fw, session, filepath, firewall_generation=None):
 			return False
 
 
+# Downloads the trace logs from the firewall.
+# For GEN7, there is an endpoint to download it. For GEN6 we need to use the /direct/cli endpoint.
+def download_tracelog(fw, session, filepath, log_selection="current", firewall_generation=None):
+	start_time = generate_timestamp(split=False)
+	endpoint = '/api/sonicos/direct/cli'
+
+	if log_selection == "all":
+		log_selection = "current"
+
+	if firewall_generation == 6:
+		endpoint = '/api/sonicos/direct/cli'
+	elif firewall_generation == 7:
+		endpoint = f'/api/sonicos/export/trace-log/{log_selection}'
+
+	resp = None
+	try:
+		if firewall_generation == 6:
+			# Update the Content-Type request header to plain/text.
+			sonicos_api_headers['Content-Type'] = 'text/plain'
+
+			resp = session.post(fw + endpoint,
+								headers=sonicos_api_headers,
+								data=f"diag show tracelog {log_selection}",
+								verify=False)
+			# print_response_info(resp, start_time=start_time)
+
+			# Set the Content-Type header back to application/json.
+			sonicos_api_headers['Content-Type'] = 'application/json'
+
+		elif firewall_generation == 7:
+			resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
+			# print_response_info(resp, start_time=start_time)
+	except Exception as e:
+		print(f"{generate_timestamp()}: Error downloading trace log: {e}")
+		return False
+
+	if resp:
+		if resp.status_code == requests.codes.ok:
+			try:
+				with open(filepath, 'wb') as file:
+					file.write(resp.content)
+			except Exception as e:
+				print(f"{generate_timestamp()}: Error writing trace log to file: {e}")
+				return False
+
+			print(f"{generate_timestamp()}: Trace log download successful!")
+			return True
+		else:
+			print(f"{generate_timestamp()}: Error downloading trace log: HTTP {resp.status_code} -  {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+			return False
+
+
 # Upload a firmware image to the firewall via SonicOS API.
 def upload_firmware(fw, session, filepath, firewall_generation=None):
 	start_time = generate_timestamp(split=False)
