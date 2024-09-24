@@ -138,15 +138,6 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     routine_results[firewall]['device_model'] = device_model
     routine_results[firewall]['serial_number'] = serial_number
 
-    # Text to search for in the TSR and trace logs that could be indicative of exploitation or compromise.
-    # This list may not be exhaustive and does not confirm compromise or exploitation as these strings may be present for other reasons.
-    iocs = [
-        r".*Reboot due to task suspension(.*)Task Trace tWebMain.*:",
-        r".*task tWebMain.* was suspended.*",
-        "Task Trace tWebMain",
-        "- Stack trace of tWebMain"
-    ]
-
     # Download the TSR from the firewall.
     print(f"{generate_timestamp()}: Downloading TSR...")
     routine_results[firewall]['tsr_downloaded'] = False
@@ -162,20 +153,6 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         print(f"{generate_timestamp()}: TSR downloaded to {tsr_file_name}")
         routine_results[firewall]['tsr_downloaded'] = True
 
-    # We need to parse the TSR for some information
-    if tsr_downloaded:
-        print(f"{generate_timestamp()}: Parsing TSR...")
-        tsr_results = tsrparser.parse_file(f"{constants.START_TIMESTAMP_FOLDER}/{tsr_file_name}", iocs)
-        print(f"{generate_timestamp()}: TSR results:")
-        print(f"{generate_timestamp()}: Found {len(tsr_results)} matches.")
-        print(f"{generate_timestamp()}: ---------")
-        for i in tsr_results:
-            print(i.strip())
-        print(f"{generate_timestamp()}: ---------")
-        print()
-    else:
-        tsr_results = []
-
     # Download the trace logs.
     print(f"{generate_timestamp()}: Downloading trace logs...")
     routine_results[firewall]['trace_logs_downloaded'] = False
@@ -189,30 +166,8 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     if trace_logs_downloaded:
         print(f"{generate_timestamp()}: Trace logs downloaded.")
         routine_results[firewall]['trace_logs_downloaded'] = True
-        print()
-        print(f"{generate_timestamp()}: Parsing trace logs...")
-        tracelog_results = tsrparser.parse_file(f"{constants.START_TIMESTAMP_FOLDER}/{tracelog_filename}", iocs)
-        print(f"{generate_timestamp()}: Trace log results:")
-        print(f"{generate_timestamp()}: Found {len(tracelog_results)} match(es).")
-        print(f"{generate_timestamp()}: ---------")
-        for i in tracelog_results:
-            print(i.strip())
-        print(f"{generate_timestamp()}: ---------")
-        print()
-    else:
-        tracelog_results = []
 
     print()
-
-    # If there are any matches in the TSR or trace logs, the user should be alerted.
-    if len(tsr_results) > 0 or len(tracelog_results) > 0:
-        routine_results[firewall]['iocs_found'] = True
-        print(f"{generate_timestamp()}: Warning: The TSR or trace logs contain potential indicators of compromise/exploitation of CVE-2024-40766 / SNWLID-2024-0015.")
-        print(f"{generate_timestamp()}: TSR: {tsr_file_name}")
-        print(f"{generate_timestamp()}: Trace logs: {tracelog_filename}")
-        print(f"{generate_timestamp()}: The firmware version will be checked for the vulnerability.")
-        print(f"{generate_timestamp()}: If your firmware is not vulnerable, these logs may be indicative of other issues or may be from prior to the firmware upgrade to a non-vulnerable version.")
-        print()
 
     # TODO: Firmware version override for testing
     # firmware_version = "6.5.4.15-114"
