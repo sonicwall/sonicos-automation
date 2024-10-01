@@ -48,14 +48,14 @@ def connect_ssh(host, port, soniccore_user="", soniccore_pass="", sonicos_user="
     # Start an interactive shell
     c_channel = c.invoke_shell()
 
-    if a.verbose:
-        print(f"{generate_timestamp()}: DEBUG: Created channel...")
+    # if a.verbose:
+    #     print(f"{generate_timestamp()}: DEBUG: Created channel...")
 
     # Get login SSH output.
     authentication_output = get_command_results(c_channel)
 
-    if a.verbose:
-        print(f"{generate_timestamp()}: DEBUG: \n->{authentication_output}<-\n")
+    # if a.verbose:
+    #     print(f"{generate_timestamp()}: DEBUG: \nSTART->{authentication_output}<-END\n")
 
     # Check if there was an authentication failure.
     if 'Password:' in authentication_output[-20:] and '\n' in authentication_output[-1]:
@@ -609,9 +609,9 @@ def send_cmd(shell, data, output_file='', silent=False, get_cmd_response=True):
             output_file = None
 
         if output_file:
-            print(f"{generate_timestamp()}: Sending '{data}' --> {output_file}")
+            print(f"{generate_timestamp()}: Sending '{data.strip()}' --> {output_file}")
         else:
-            print(f"{generate_timestamp()}: Sending '{data}'")
+            print(f"{generate_timestamp()}: Sending '{data.strip()}'")
 
     # Send the command
     shell.send(data)

@@ -1,3 +1,6 @@
+from common.utils import generate_timestamp
+
+
 # Compares the versions to a required version.
 def compare_versions(current_version, required_version, fw_gen=None):
     def version_tuple(v):
@@ -11,15 +14,15 @@ def compare_versions(current_version, required_version, fw_gen=None):
 
     # Compare the two versions
     if current_tuple > required_tuple:
-        print(f"Info: Version {current_version} is newer than {required_version}. We can proceed!")
+        print(f"{generate_timestamp()}: INFO: Version {current_version} is newer than {required_version}. We can proceed!")
         return {"vulnerable": False}
 
     if current_tuple == required_tuple:
         if fw_gen == 5:
-            print(f"Info: {current_version} is the same as the minimum recommended version. We can proceed!")
+            print(f"{generate_timestamp()}: INFO: {current_version} is the same as the minimum recommended version. We can proceed!")
             return {"vulnerable": False}
         elif fw_gen == 6:
-            print(f"Info: Version {current_version} is the same as the minimum recommended version. We can proceed!")
+            print(f"{generate_timestamp()}: INFO: Version {current_version} is the same as the minimum recommended version. We can proceed!")
             return {"vulnerable": False}
         # This logic excludes GEN7 because of a special case where I set the minimum/required version to -5036 for the check.
         # It ensures anything after -5035 is OK and any up to -5035 gets flagged.
@@ -34,10 +37,10 @@ def compare_versions(current_version, required_version, fw_gen=None):
         if required_version == "7.0.1-5036" or required_version == "7.0.1-5035":
             required_version = "7.0.1-5035"
             append_text = "and older versions are vulnerable to CVE-2024-40766 (SNWLID-2024-0015).\nPlease upgrade to a newer firmware release, per the SonicWall Security Advisory."
-        print(f"Warning: {current_version} is older than the minimum recommended version. {required_version} {append_text}")
+        print(f"{generate_timestamp()}: WARNING: {current_version} is older than the minimum recommended version. {required_version} {append_text}")
         return {"vulnerable": True}
     else:
-        print(f"Info: Version {current_version} is newer than {required_version}. We can proceed!")
+        print(f"{generate_timestamp()}: INFO: Version {current_version} is newer than {required_version}. We can proceed!")
         return {"vulnerable": False}
 
 

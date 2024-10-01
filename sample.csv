@@ -1,3 +1,5 @@
-target_fw,admin_user,admin_password,target_ssh_mgmt_port,enable_totp,enable_botnet_filtering,temporary_password
-192.168.0.1:4000,admin,password,4001,false,false,PASSWORD12345
-192.168.100.10,admin,password,22,true,true,TEMPORARYPASSWORD12345
+target_fw,admin_user,admin_password,target_ssh_mgmt_port,enable_totp,enable_botnet_filtering,temporary_password,upgrade_to_firmware_image
+192.168.0.1:4000,admin,password,4001,false,false,PASSWORD12345,
+192.168.100.10,admin,password,22,true,true,,
+192.168.100.10,admin,password,22,true,true,TEMPORARYPASSWORD12345,
+192.168.100.10,admin,password,22,true,true,TEMPORARYPASSWORD12345,"C:\Users\jdoe\Downloads\firmware_image.sig"

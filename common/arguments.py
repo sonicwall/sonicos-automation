@@ -24,6 +24,9 @@ def get_parser():
     ap.add_argument("-tp", "--temp_password", type=str, default='',
                     help="If set, the script will reset each user's password to the specified temporary password. This has no effect if using a CSV file.")
 
+    ap.add_argument("-uf", "--upgrade_firmware", type=str, default="",
+                    help="If set and a valid path is specified, the script will attempt to upgrade the firmware to the specified image. This has no effect if using a CSV file.")
+
     ap.add_argument("-v", "--verbose", action='store_true',
                     help="Enable verbose output. This will print additional information to the console.")
 

@@ -2,6 +2,7 @@ from collections import OrderedDict
 from datetime import datetime
 from codecs import decode as dc
 from hashlib import md5
+import os
 import json
 import requests
 import urllib3
@@ -17,6 +18,7 @@ from common.constants import (
 	PROMPT_LEVEL,
 	AUTOENABLED_SONICOS_API
 )
+from sonicos.api2 import Login
 
 
 # Hide the certificate warnings.
@@ -178,7 +180,8 @@ def create_admin_session(firewall, admin_user, admin_password, sshport='22'):
 
 			# When the target is a GEN5, there's a 404 at /api/sonicos/auth.
 			if "not found" in str(resp_json).lower():
-				print(f"{generate_timestamp()}: Please make sure the target firewall is a SonicWall GEN6 or GEN7 firewall.")
+				# print(f"{generate_timestamp()}: Please make sure the target firewall is a SonicWall GEN6 or GEN7 firewall.")
+				print(f"{generate_timestamp()}: SonicOS API is unavailable. Possibly a GEN5 firewall.")
 				return "E_GEN5", str(resp_json)
 
 			# When the SonicOS API is disabled, response is HTTP 403 with code E_DISABLED and message "Service disabled.".
@@ -375,17 +378,24 @@ def commit_pending(fw, session):
 
 
 # Log out of the API session.
-def logout(fw, session):
+def logout(fw, session, firewall_generation=None):
 	start_time = generate_timestamp(split=False)
-	resp = session.delete(fw + '/api/sonicos/auth',
-						headers=sonicos_api_headers,
-						verify=False)
-	# print_response_info(resp, start_time=start_time)
 
-	# If the logout succeeds, return the response JSON.
-	if resp.status_code == requests.codes.ok:
-		print(f"{generate_timestamp()}: Logged out successfully! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
-		return resp.json()
+	if firewall_generation == 5:
+		resp = session.logout()
+		if resp:
+			print(f"{generate_timestamp()}: Logged out successfully!")
+			return resp
+	else:
+		resp = session.delete(fw + '/api/sonicos/auth',
+							headers=sonicos_api_headers,
+							verify=False)
+		# print_response_info(resp, start_time=start_time)
+
+		# If the logout succeeds, return the response JSON.
+		if resp.status_code == requests.codes.ok:
+			print(f"{generate_timestamp()}: Logged out successfully! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+			return resp.json()
 
 
 # Downloads the tech support report (TSR) from the firewall.
@@ -400,7 +410,15 @@ def download_tsr(fw, session, filepath, firewall_generation=None):
 
 	resp = None
 	try:
-		if firewall_generation == 6:
+		if firewall_generation == 5:
+			got_tsr = session.download_tsr(filepath)
+			if got_tsr:
+				print(f"{generate_timestamp()}: TSR download successful!")
+				return True
+			else:
+				print(f"{generate_timestamp()}: Error downloading TSR.")
+				return False
+		elif firewall_generation == 6:
 			# Update the Content-Type request header to plain/text.
 			sonicos_api_headers['Content-Type'] = 'text/plain'
 
@@ -451,7 +469,15 @@ def download_tracelog(fw, session, filepath, log_selection="current", firewall_g
 
 	resp = None
 	try:
-		if firewall_generation == 6:
+		if firewall_generation == 5:
+			got_tracelog = session.download_tracelog(filepath)
+			if got_tracelog:
+				print(f"{generate_timestamp()}: Trace log download successful!")
+				return True
+			else:
+				print(f"{generate_timestamp()}: Error downloading trace log.")
+				return False
+		elif firewall_generation == 6:
 			# Update the Content-Type request header to plain/text.
 			sonicos_api_headers['Content-Type'] = 'text/plain'
 
@@ -487,51 +513,118 @@ def download_tracelog(fw, session, filepath, log_selection="current", firewall_g
 			return False
 
 
+# Export settings from the firewall.
+def export_preferences(fw, session, filepath, firewall_generation=None):
+	start_time = generate_timestamp(split=False)
+	endpoint = '/api/sonicos/export/current-config/exp'
+
+	try:
+		# GEN6 does not have an endpoint for exporting preferences and needs SCP/FTP to export via CLI.
+		if firewall_generation == 5 or firewall_generation == 6:
+			# https://192.168.0.107/sonicwall-TZ_400-6_5_4_15-116n.exp?auditPath=MONITOR%20/%20System%20/%20Settings
+			# https://192.168.0.107/sonicwall.exp
+			got_preferences = session.export_preferences(filepath)
+			if got_preferences:
+				print(f"{generate_timestamp()}: Preferences export successful!")
+				return True
+			else:
+				print(f"{generate_timestamp()}: Error exporting preferences.")
+				return False
+		elif firewall_generation == 7:
+			resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
+			# print_response_info(resp, start_time=start_time)
+
+			if resp.status_code == requests.codes.ok:
+				try:
+					with open(filepath, 'wb') as file:
+						file.write(resp.content)
+				except Exception as e:
+					print(f"{generate_timestamp()}: Error writing preferences to file: {e}")
+					return False
+
+				print(f"{generate_timestamp()}: Preferences export successful!")
+				return True
+			else:
+				print(f"{generate_timestamp()}: Error exporting preferences: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+				return False
+	except Exception as e:
+		print(f"{generate_timestamp()}: Error exporting preferences: {e}")
+		return False
+
+
 # Upload a firmware image to the firewall via SonicOS API.
 def upload_firmware(fw, session, filepath, firewall_generation=None):
 	start_time = generate_timestamp(split=False)
 
-	filename = filepath.split("/")[-1]
+	# GEN5/GEN6 firmware upload.
+	if firewall_generation == 5 or firewall_generation == 6:
+		if isinstance(session, Login):
+			r = session.login2()
+			if r == 1:
+				print(f"{generate_timestamp()}: Logged in.")
+				rc, rcode, rncode = session.upload_firmware(filepath)
+				if rcode == 1:
+					if a.verbose:
+						print(f"{generate_timestamp()}: Firmware upload successful.")
+					return True
+				else:
+					if a.verbose:
+						print(f"{generate_timestamp()}: Firmware upload failed.")
+					return False
+	# GEN7
+	else:
+		filename = filepath.split("/")[-1]
 
-	# Opens the file, reads it into memory, and uploads it to the firewall.
-	with open(filename, 'rb') as file:
-		endpoint = '/api/sonicos/import/firmware'
-		if firewall_generation == 6:
-			endpoint = '/upload.cgi?safeMode=1'
-		try:
-			response = session.post(fw + endpoint,
-									files=dict(firmware=(filename, file, 'application/octet-stream')),
-									verify=False)
-			print_response_info(response, start_time=start_time, override_verbose=True)
-		except Exception as e:
-			print(f"{generate_timestamp()}: Error uploading firmware: {e}")
-			return False
+		# Opens the file, reads it into memory, and uploads it to the firewall.
+		with open(filename, 'rb') as file:
+			endpoint = '/api/sonicos/import/firmware'
+			if firewall_generation == 6:
+				endpoint = '/upload.cgi?safeMode=1'
+			try:
+				response = session.post(fw + endpoint,
+										files=dict(firmware=(filename, file, 'application/octet-stream')),
+										verify=False)
+				print_response_info(response, start_time=start_time, override_verbose=True)
+			except Exception as e:
+				print(f"{generate_timestamp()}: Error uploading firmware: {e}")
+				return False
 
 
 # Boot uploaded firmware
 def boot_firmware(fw, session, firewall_generation=None):
 	start_time = generate_timestamp(split=False)
-	endpoint = '/api/sonicos/boot/uploaded'
-	if firewall_generation == 6:
-		# Placeholder for GEN6 boot.
-		endpoint = ''
 
-	try:
-		resp = session.post(fw + endpoint,
-							headers=sonicos_api_headers,
-							verify=False)
-		print_response_info(resp, start_time=start_time, override_verbose=True)
-	except Exception as e:
-		print(f"{generate_timestamp()}: Error booting firmware: {e}")
-		return False
-
-	# If the boot succeeds, return the response JSON.
-	if resp.status_code == requests.codes.ok:
-		print(f"{generate_timestamp()}: Boot action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
-		return resp.json()
+	# GEN5/GEN6 firmware boot.
+	if firewall_generation == 5 or firewall_generation == 6:
+		if isinstance(session, Login):
+			res = session.boot_uploaded_firmware()
+			if res:
+				if a.verbose:
+					print(f"{generate_timestamp()}: Firmware boot successful.")
+				return True
+			else:
+				if a.verbose:
+					print(f"{generate_timestamp()}: Firmware boot failed.")
+				return False
+	# GEN7
 	else:
-		print(f"{generate_timestamp()}: Error booting firmware: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
-		return False
+		endpoint = '/api/sonicos/boot/uploaded'
+		try:
+			resp = session.post(fw + endpoint,
+								headers=sonicos_api_headers,
+								verify=False)
+			print_response_info(resp, start_time=start_time, override_verbose=True)
+		except Exception as e:
+			print(f"{generate_timestamp()}: Error booting firmware: {e}")
+			return False
+
+		# If the boot succeeds, return the response JSON.
+		if resp.status_code == requests.codes.ok:
+			print(f"{generate_timestamp()}: Boot action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+			return resp.json()
+		else:
+			print(f"{generate_timestamp()}: Error booting firmware: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+			return False
 
 
 # Get the current state of Botnet Filtering.
@@ -543,41 +636,61 @@ def check_botnet_status(fw, session, firewall_generation=None):
 	elif firewall_generation == 7:
 		endpoint = '/api/sonicos/botnet/base'
 
-	try:
-		resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
-		r = resp.json()
+	r = {}
+	if firewall_generation == 5:
+		if isinstance(session, Login):
+			sess = session.login2()
+			if sess == 1:
+				print(f"{generate_timestamp()}: Logged in.")
+				r = session.get_botnet_status()
 
-		for kv in r.get("status", {}).get("info", []):
-			for key, value in kv.items():
-				if "Licensing must be activated" in value:
-					botnet_message = value
-					print(f"{generate_timestamp()}: Botnet Filtering is not licensed. {botnet_message}")
-					return {"status": "error", "license_status": "not_licensed", "message": botnet_message, "response": r}
+	else:
+		try:
+			resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
+			r = resp.json()
+		except Exception as e:
+			print(f"{generate_timestamp()}: Error checking Botnet status (1): {e}")
+			return {"status": "error", "license_status": "unknown", "message": e}
 
-		if firewall_generation == 6:
-			# This logic: If botnet is disabled (either mode). Hits if either mode is enabled.
-			if r.get("botnet", {}).get("block", {}).get("connections", {}).get("all", False) or	r.get("botnet", {}).get("block", {}).get("connections", {}).get("firewall_rule_based", False):
-				# print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
-				return {"status": "enabled", "license_status": "licensed", "message": "", "response": r}
+	for kv in r.get("status", {}).get("info", []):
+		for key, value in kv.items():
+			if "Licensing must be activated" in value:
+				botnet_message = value
+				print(f"{generate_timestamp()}: Botnet Filtering is not licensed. {botnet_message}")
+				return {"status": "error", "license_status": "not_licensed", "message": botnet_message, "response": r}
 
-			# This logic: If botnet is enabled (no modes)
-			elif r.get("botnet", {}).get("block", {}).get("connections", {}) == {}:
-				# print(f"{generate_timestamp()}: Botnet Filtering is disabled.")
-				return {"status": "disabled", "license_status": "licensed", "message": "", "response": r}
+	if firewall_generation == 6:
+		# This logic: If botnet is disabled (either mode). Hits if either mode is enabled.
+		if r.get("botnet", {}).get("block", {}).get("connections", {}).get("all", False) or	r.get("botnet", {}).get("block", {}).get("connections", {}).get("firewall_rule_based", False):
+			# print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
+			return {"status": "enabled", "license_status": "licensed", "message": "", "response": r}
 
-		elif firewall_generation == 7:
-			if r.get("botnet", {}).get("block", {}).get("connections", {}).get("enable", False) is True:
-				# print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
-				return {"status": "enabled", "license_status": "licensed", "message": "", "response": r}
-			elif r.get("botnet", {}).get("block", {}).get("connections", {}).get("enable", False) is False:
-				return {"status": "disabled", "license_status": "licensed", "message": "", "response": r}
-		else:
+		# This logic: If botnet is enabled (no modes)
+		elif r.get("botnet", {}).get("block", {}).get("connections", {}) == {}:
 			# print(f"{generate_timestamp()}: Botnet Filtering is disabled.")
 			return {"status": "disabled", "license_status": "licensed", "message": "", "response": r}
 
-	except Exception as e:
-		print(f"{generate_timestamp()}: Error checking Botnet status (1): {e}")
-		return {"status": "error", "license_status": "unknown", "message": e}
+	elif firewall_generation == 7:
+		if r.get("botnet", {}).get("block", {}).get("connections", {}).get("enable", False) is True:
+			# print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
+			return {"status": "enabled", "license_status": "licensed", "message": "", "response": r}
+		elif r.get("botnet", {}).get("block", {}).get("connections", {}).get("enable", False) is False:
+			return {"status": "disabled", "license_status": "licensed", "message": "", "response": r}
+
+	elif firewall_generation == 5:
+		if r.get("botnet", {}).get("block", {}).get("connections", {}).get("all", False) or r.get("botnet", {}).get("block", {}).get("connections", {}).get("firewall_rule_based", False):
+			if r.get("botnet", {}).get("block", {}).get("connections", {}).get("enable", False):
+				# print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
+				return {"status": "enabled", "license_status": "licensed", "message": "", "response": r}
+			else:
+				# print(f"{generate_timestamp()}: Botnet Filtering is enabled.")
+				return {"status": "disabled", "license_status": "licensed", "message": "", "response": r}
+		elif r.get("botnet", {}).get("block", {}).get("connections", {}) == {}:
+			# print(f"{generate_timestamp()}: Botnet Filtering is disabled.")
+			return {"status": "disabled", "license_status": "licensed", "message": "", "response": r}
+	else:
+		# print(f"{generate_timestamp()}: Botnet Filtering is disabled.")
+		return {"status": "disabled", "license_status": "licensed", "message": "", "response": r}
 
 
 # Checks if TOTP is enabled on the input group name.
@@ -988,3 +1101,177 @@ def enable_totp_ssh(fw, sshport, admin_user, admin_password, group_name):
 
 	return successful
 
+
+# Get users via SSH Management.
+def get_users_ssh(fw, sshport, admin_user, admin_password):
+	print(f"{generate_timestamp()}: Getting users via SSH Management.")
+
+	# This prepares the SSH target.
+	fw = fw.strip("https://").split(":")[0]
+	# fw = fw + ":" + str(sshport)
+
+	# Connect to the firewall.
+	try:
+		ssh, ssh_conn = connect_ssh(fw,
+									sshport,
+									soniccore_user=admin_user,
+									soniccore_pass=admin_password,
+									sonicos_user=admin_user,
+									sonicos_pass=admin_password,
+									soniccore_prelogin=False)
+	except KeyboardInterrupt:
+		print(f"{generate_timestamp()}: Stopped!")
+		exit()
+	except KeyError as e:
+		print(f"{generate_timestamp()}: KeyError: Either ({e}) is missing or the configuration is invalid/not found.")
+		# exit()
+		return False
+	except Exception as e:
+		print(f"{generate_timestamp()}: Error with SSH connection (6):", str(e))
+		# exit()
+		return False
+
+	# Command list for enabling the SonicOS API.
+	command_list = [
+		"show user local users custom",
+		"exit",
+		"exit"
+	]
+
+	cnt = 0
+	command_output = []
+	for cmd in command_list:
+		# Send commands to the firewall and write the output to separate files.
+		try:
+			cmd_response = send_cmd(ssh, cmd + "\r", get_cmd_response=True, silent=True)
+			command_output.append(cmd_response)
+			cnt += 1
+		except KeyboardInterrupt:
+			ssh.close()
+			ssh_conn.close()
+			print(f"{generate_timestamp()}: Stopped!")
+			exit()
+
+	# Parse the user data.
+	users = {
+		"user": {
+			"local": {
+				"user": []
+			}
+		}
+	}
+	for line in command_output:
+		ln = line.split("\n")
+		for l in ln:
+			l = l.strip()
+			if l == "user local-users":
+				continue
+			# On GEN5, expired users do not have a CLI flag. Seems we cannot tell if a user has expired via CLI.
+			# Setting the force password change flag does not have an effect on the expired users.
+			# So I'll treat all the users as not expired.
+			if l.startswith("user "):
+				u = {
+					"name": l.split("user ")[-1].strip('"').strip(),
+					"uuid": "",
+					"password": "",
+					"account_lifetime": {
+						"expired": False
+					}
+				}
+				users["user"]["local"]["user"].append(u)
+
+	print(f"{generate_timestamp()}: Users retrieved via SSH Management.")
+
+	# Close the SSH session.
+	ssh.close()
+	ssh_conn.close()
+
+	return users
+
+
+# Set the force password change flag via SSH Management.
+def force_password_change_ssh(ssh, ssh_conn, data):
+	print(f"{generate_timestamp()}: Setting force password change flag via SSH Management.")
+
+	command_list = [
+		"user local",
+		"user <username>",
+		"force-password-change",
+		"password <password>",
+		"commit",
+		"exit",
+		"exit"
+	]
+
+	# Replace the username and password in the command list.
+	for i, cmd in enumerate(command_list):
+		if "<username>" in cmd:
+			command_list[i] = cmd.replace("<username>", data["name"])
+
+		elif "<password>" in cmd:
+			if data["password"] != "":
+				command_list[i] = cmd.replace("<password>", data["password"])
+				print(f"{generate_timestamp()}: Setting new password for {data['name']} to {data['password']}.")
+
+	try:
+		command_list.remove("password <password>")
+	except ValueError:
+		pass
+
+	cnt = 0
+	command_output = []
+	for cmd in command_list:
+		# Send commands to the firewall and write the output to separate files.
+		try:
+			cmd_response = send_cmd(ssh, cmd + "\r", get_cmd_response=True, silent=True)
+			command_output.append(cmd_response)
+			cnt += 1
+		except KeyboardInterrupt:
+			ssh.close()
+			ssh_conn.close()
+			print(f"{generate_timestamp()}: Stopped!")
+			exit()
+
+	successful = False
+	for line in command_output:
+		if "% Changes made." in line:
+			print(f"{generate_timestamp()}: Force password change flag set.")
+			successful = True
+			break
+		# Can occur if the flag is already set.
+		elif "% No changes made." in line:
+			print(f"{generate_timestamp()}: No changes made.")
+			successful = True
+			break
+
+	if successful:
+		return {"status": {"success": True, "message": "Force password change flag set."}}
+	if not successful:
+		return {"status": {"success": False, "message": "Error setting force password change flag."}}
+
+
+# Returns an SSH session.
+def get_ssh_session(fw, sshport, admin_user, admin_password):
+	print(f"{generate_timestamp()}: Trying to establish an SSH session.")
+
+	fw = fw.strip("https://").split(":")[0]
+
+	try:
+		ssh, ssh_conn = connect_ssh(fw,
+									sshport,
+									soniccore_user=admin_user,
+									soniccore_pass=admin_password,
+									sonicos_user=admin_user,
+									sonicos_pass=admin_password,
+									soniccore_prelogin=False)
+	except KeyboardInterrupt:
+		print(f"{generate_timestamp()}: Stopped!")
+		exit()
+	except KeyError as e:
+		print(f"{generate_timestamp()}: KeyError: Either ({e}) is missing or the configuration is invalid/not found.")
+		return False, None
+	except Exception as e:
+		print(f"{generate_timestamp()}: Error with SSH connection (7):", str(e))
+		return False, None
+
+	return ssh, ssh_conn

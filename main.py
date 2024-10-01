@@ -25,7 +25,11 @@ from sonicos.api import (
     check_totp_status,
     enable_totp_ssh,
     download_tsr,
-    download_tracelog
+    download_tracelog,
+    export_preferences,
+    get_ssh_session,
+    get_users_ssh,
+    force_password_change_ssh
 )
 from sonicos.utils import (
     ensure_admin_api_session,
@@ -33,6 +37,7 @@ from sonicos.utils import (
 )
 import common.constants as constants
 import tsr.parser as tsrparser
+from sonicos.api2 import Login
 
 
 # This variable stores the results of the routine for each firewall.
@@ -40,7 +45,14 @@ routine_results = {}
 
 
 # The routine function will get the list of users, update the force password reset flag, and commit the changes.
-def routine(firewall, username=None, password=None, sshport='22', enable_totp=False, enable_botnet_filtering=False, temp_password=""):
+def routine(firewall,
+            username=None,
+            password=None,
+            sshport='22',
+            enable_totp=False,
+            enable_botnet_filtering=False,
+            temp_password="",
+            upgrade_firmware=""):
     """
     Main routine.
     """
@@ -70,6 +82,7 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         print(f"{generate_timestamp()}: Enable TOTP on 'SSLVPN Services' group: {enable_totp}")
         print(f"{generate_timestamp()}: Enable Botnet Filtering service: {enable_botnet_filtering}")
         print(f"{generate_timestamp()}: Temporary Password for users: {temp_password}")
+        print(f"{generate_timestamp()}: Firmware upgrade file: {upgrade_firmware}")
         print(f"{generate_timestamp()}: ----------------------")
 
     routine_results[firewall]['api_base'] = api_base
@@ -77,6 +90,10 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     routine_results[firewall]['firewall_generation'] = None
     routine_results[firewall]['firmware_version'] = None
     routine_results[firewall]['device_model'] = None
+    routine_results[firewall]['serial_number'] = None
+    if upgrade_firmware != "":
+        routine_results[firewall]['firmware_upgrade_requested'] = False
+        routine_results[firewall]['firmware_image'] = upgrade_firmware
 
     try:
         api_session = ensure_admin_api_session(api_base, api_user=username, api_password=password, sshport=sshport)
@@ -102,36 +119,57 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
 
         return False
 
-    routine_results[firewall]['api_session_successful'] = True
+    if isinstance(api_session, Login):
+        routine_results[firewall]['api_session_successful'] = False
+        routine_results[firewall]['alternate_session_successful'] = True
+    else:
+        routine_results[firewall]['api_session_successful'] = True
 
     firewall_generation = None
     firmware_version = None
     device_model = None
     serial_number = None
-    # Determine if this is a GEN7 firewall or a GEN6 firewall, as they have different endpoints.
-    try:
-        info = get_request(api_base, api_session, '/api/sonicos/version')
+    # Determine firewall generation.
+    if isinstance(api_session, Login):
+        try:
+            info = api_session.get_firewall_info()
+            if info.get('firmware_version', None):
+                firmware_version = info['firmware_version']
+                device_model = info['model']
+                serial_number = info['serial_number']
+                constants.set_fw_model(device_model)
+                firewall_generation = 5
+                constants.set_fw_generation(5)
+        except KeyboardInterrupt:
+            print(f"\nStopped!")
+            exit()
+        except Exception as e:
+            print(f"{generate_timestamp()}: Error getting version information: {e}")
 
-        if info.get('firmware_version', None):
-            firmware_version = info['firmware_version'].split(' ')[-1]
-            device_model = info['model']
-            serial_number = info['serial_number'].replace("-", "")
-            constants.set_fw_model(device_model)
-            if firmware_version.startswith('7'):
-                firewall_generation = 7
-                constants.set_fw_generation(7)
-            elif firmware_version.startswith('6'):
-                firewall_generation = 6
-                constants.set_fw_generation(6)
-        else:
-            raise Exception("Unable to determine the firmware version.")
+    else:
+        try:
+            info = get_request(api_base, api_session, '/api/sonicos/version')
 
-    except KeyboardInterrupt:
-        print(f"\nStopped!")
-        exit()
-    except Exception as e:
-        print(f"{generate_timestamp()}: Error getting version information: {e}")
-        exit()
+            if info.get('firmware_version', None):
+                firmware_version = info['firmware_version'].split(' ')[-1]
+                device_model = info['model']
+                serial_number = info['serial_number'].replace("-", "")
+                constants.set_fw_model(device_model)
+                if firmware_version.startswith('7'):
+                    firewall_generation = 7
+                    constants.set_fw_generation(7)
+                elif firmware_version.startswith('6'):
+                    firewall_generation = 6
+                    constants.set_fw_generation(6)
+            else:
+                raise Exception("Unable to determine the firmware version.")
+
+        except KeyboardInterrupt:
+            print(f"\nStopped!")
+            exit()
+        except Exception as e:
+            print(f"{generate_timestamp()}: Error getting version information: {e}")
+            exit()
 
     routine_results[firewall]['firewall_generation'] = firewall_generation
     routine_results[firewall]['firmware_version'] = firmware_version
@@ -153,6 +191,8 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         print(f"{generate_timestamp()}: TSR downloaded to {tsr_file_name}")
         routine_results[firewall]['tsr_downloaded'] = True
 
+    print()
+
     # Download the trace logs.
     print(f"{generate_timestamp()}: Downloading trace logs...")
     routine_results[firewall]['trace_logs_downloaded'] = False
@@ -169,9 +209,54 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
 
     print()
 
+    # Export the settings from the firewall.
+    print(f"{generate_timestamp()}: Exporting settings...")
+    routine_results[firewall]['settings_exported'] = False
+    prefs_file_name = f"{dm}-{sn}-prefs.exp"
+
+    # Establish a new alternate session to get the preferences from GEN6.
+    prefs_downloaded = False
+    if firewall_generation == 6:
+        if a.verbose:
+            verbose_int = 1
+        else:
+            verbose_int = 0
+
+        alternate_session = Login(
+            ipaddress=firewall,
+            userid=username,
+            passwd=password,
+            admin_mode="config",
+            http_type="https",
+            brwsr_cache=0,
+            verbose=verbose_int,
+            sessIdRef=0
+        )
+
+        logged_in = alternate_session.login2()
+        if logged_in == 1:
+            print(f"{generate_timestamp()}: Successfully logged in to the firewall for settings export.")
+            prefs_downloaded = export_preferences(api_base,
+                                                  alternate_session,
+                                                  filepath=f"{constants.START_TIMESTAMP_FOLDER}/{prefs_file_name}",
+                                                  firewall_generation=firewall_generation)
+
+    # GEN5 will have its session already established. GEN7 will have it's session established.
+    else:
+        prefs_downloaded = export_preferences(api_base,
+                                              api_session,
+                                              filepath=f"{constants.START_TIMESTAMP_FOLDER}/{prefs_file_name}",
+                                              firewall_generation=firewall_generation)
+    if prefs_downloaded:
+        print(f"{generate_timestamp()}: Settings exported.")
+        routine_results[firewall]['settings_exported'] = True
+
+
     # TODO: Firmware version override for testing
-    # firmware_version = "6.5.4.15-114"
-    # firmware_version = "7.0.0-1234"
+    # firmware_version = "5.9.2.14-12"  # Present warning
+    # firmware_version = "5.9.2.100-12"  # Skip warning
+    # firmware_version = "6.5.4.15-114"  # Present warning
+    # firmware_version = "7.0.0-1234"  # Present warning
 
     # Alert the user if their firmware version is currently vulnerable to CVE-2024-40766 / SNWLID-2024-0015.
     v = notice_check(firmware_version, device_model)
@@ -186,21 +271,53 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
             }
         ]
         print(f"{generate_timestamp()}: Warning: This firmware version is vulnerable to CVE-2024-40766 / SNWLID-2024-0015.")
-        print("Please upgrade the firmware per the SonicWall Security Advisory and re-run this script against the target firewall.")
+        print("Please upgrade the firmware per the SonicWall Security Advisory and re-run this script against the target firewall.\n")
 
         routine_results[firewall]['prompted_to_upgrade'] = True
         routine_results[firewall]['upgraded_firmware'] = False
         routine_results[firewall]['completed_routine_successfully'] = False
 
-        # API is not available on GEN5 firewalls.
-        if firewall_generation == 5:
-            print(f"{generate_timestamp()}: SonicOS API is not available on GEN5 firewalls. Please upgrade the firmware manually.")
+        # API is not available on GEN5 firewalls. API endpoint is not available on GEN6 firewalls.
+        if firewall_generation == 5 or firewall_generation == 6:
             routine_results[firewall]['upgrade_via_api_supported'] = False
+            routine_results[firewall]['alternate_upgrade_method'] = True
 
-        # API endpoint is not available on GEN6 firewalls.
-        elif firewall_generation == 6:
-            # print(f"{generate_timestamp()}: The API endpoint is not available on GEN6 firewalls. Please upgrade the firmware manually.")
-            routine_results[firewall]['upgrade_via_api_supported'] = False
+            # Ask the user if they want to upgrade.
+            if a.verbose:
+                verbose_int = 1
+            else:
+                verbose_int = 0
+
+            gsession = Login(
+                ipaddress=firewall,
+                userid=username,
+                passwd=password,
+                admin_mode="config",
+                http_type="https",
+                brwsr_cache=0,
+                verbose=verbose_int,
+                sessIdRef=0
+            )
+
+            if upgrade_firmware != "":
+                print(f"{generate_timestamp()}: Firmware upgrade requested. Upgrading firmware to {upgrade_firmware} ...")
+                upgraded = firmware_upgrade_prompt(api_base, session=gsession, bypass_prompt=True, image_path=upgrade_firmware)
+                if upgraded:
+                    print(f"{generate_timestamp()}: The firmware upgrade was initiated. Please re-run this script against the target firewall once it is done booting.")
+                    routine_results[firewall]['upgraded_firmware'] = True
+
+                    # Sorting the keys in the results dictionary for consistency and readability.
+                    routine_results[firewall] = dict(sorted(routine_results[firewall].items()))
+
+                    # Convert the results dictionary/json to string.
+                    results_str = json.dumps(routine_results[firewall], indent=4)
+                    results_str = "\n" + results_str + "\n"
+
+                    # Write the results to a file
+                    write_to_file(results_str, filename=f"{constants.START_TIMESTAMP_FOLDER}/results.txt")
+
+                    # Script will not wait for the upgrade. This return will end the routine.
+                    return "UPGRADED_FIRMWARE"
 
         # API endpoint is available on GEN7 firewalls.
         elif firewall_generation == 7:
@@ -245,6 +362,13 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
             users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
         elif firewall_generation == 6:
             users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+        elif firewall_generation == 5:
+            users = get_users_ssh(firewall, sshport, username, password)
+
+            if users:
+                print(f"{generate_timestamp()}: Users retrieved from SSH.")
+            else:
+                print(f"{generate_timestamp()}: Error getting users from SSH.")
     except KeyboardInterrupt:
         print(f"\nStopped!")
         exit()
@@ -273,6 +397,17 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     print(f"{generate_timestamp()}: Updating the force password reset flag for all local users...")
     if temp_password != "":
         print(f"{generate_timestamp()}: Passwords will be reset to '{temp_password}'")
+
+    # Create an SSH session for GEN5 firewalls.
+    ssh_session = None
+    ssh_connection = None
+    if firewall_generation == 5:
+        ssh_session, ssh_connection = get_ssh_session(firewall, sshport, username, password)
+
+        if not ssh_session:
+            print(f"{generate_timestamp()}: Error creating SSH session.")
+            return False
+
     for usr in users['user']['local']['user']:
         # Skip these users
         skip_users = ['All LDAP Users', 'All RADIUS Users']
@@ -347,6 +482,8 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
                 usr['password'] = temp_password
             elif firewall_generation == 6:
                 usr['password']["pwd"] = temp_password
+            elif firewall_generation == 5:
+                usr['password'] = temp_password
 
         uname = usr['name']
         uuid = usr['uuid']
@@ -360,7 +497,10 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
             "commit_successful": False
         }
 
-        print(f"\nUpdating '{uname}' ({uuid})", end='')
+        if not firewall_generation == 5:
+            print(f"\nUpdating '{uname}'", end='')
+        else:
+            print(f"\nUpdating '{uname}'")
 
         # Creates the expected JSON structure
         data_structure = {
@@ -384,6 +524,10 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
                                       api_session,
                                       api_path=f"/api/sonicos/user/local/user/uuid/{uuid}",
                                       data=data_structure)
+        elif firewall_generation == 5:
+            update_resp = force_password_change_ssh(ssh_session,
+                                                    ssh_connection,
+                                                    data=usr)
 
         if update_resp['status']['success'] is False:
             print(f"{generate_timestamp()}: Error updating user: {uname}")
@@ -391,8 +535,9 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
 
         routine_result_temp['user_update_successful'] = True
 
-        # Commit the changes.
-        commit_pending(api_base, api_session)
+        # Commit the changes. GEN5 commit was already done. Keep that SSH session open.
+        if not firewall_generation == 5:
+            commit_pending(api_base, api_session)
         routine_result_temp['commit_successful'] = True
 
         routine_results[firewall]['users'].append(routine_result_temp)
@@ -412,9 +557,6 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     # Check if Botnet Filtering is licensed and enabled.
     try:
         print()
-        if firewall_generation == 5:
-            print("Not implemented for GEN5 firewalls.")
-
         botnet_status = check_botnet_status(api_base, api_session, firewall_generation=firewall_generation)
 
         if botnet_status["license_status"] == "not_licensed":
@@ -486,6 +628,9 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
 
                     enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/global',
                                                      data=botnet_status_response)
+
+                elif firewall_generation == 5:
+                    enable_botnet_resp = api_session.enable_botnet_filtering()
             except KeyboardInterrupt:
                 print(f"\nStopped!")
                 exit()
@@ -496,7 +641,8 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
                 print(f"{generate_timestamp()}: Error enabling Botnet Filtering.")
 
             # Commit the changes.
-            commit_pending(api_base, api_session)
+            if not firewall_generation == 5:
+                commit_pending(api_base, api_session)
             routine_results[firewall]['botnet_filtering_autoenabled'] = True
         else:
             routine_results[firewall]['botnet_filtering_autoenabled'] = False
@@ -504,15 +650,29 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
     # Check if MFA is enabled on the SSLVPN Services group.
     try:
         print()
-        if firewall_generation == 5:
-            print("Not implemented for GEN5 firewalls.")
+        # Check the status of TOTP on the SSLVPN Services group on GEN6 and GEN7 firewalls.
+        if firewall_generation != 5:
+            totp_status = check_totp_status(api_base,
+                                            api_session,
+                                            group_name="SSLVPN Services",
+                                            enable_totp=enable_totp,
+                                            firewall_generation=firewall_generation
+                                            )
+        # GEN5 does not support TOTP--only Email-based OTP.
+        # For OTP to work, users' email addresses must be configured for each user.
+        # Because of this, we will not enable OTP on GEN5 even if configured to via CSV or by CLI argument.
+        elif firewall_generation == 5:
+            totp_status = {
+                "status": "disabled",
+                "mode": "",
+                "autoenabled": False,
+                "message": "GEN5 firewalls do not support TOTP. Consider enabling Email-based OTP manually.",
+                "try_ssh": False
+            }
+            if enable_totp:
+                print("TOTP is not available on GEN5 firewalls. Only Email-based OTP, which requires an email address configured for each user.")
+                print("Please consider enabling Email-based OTP manually after configuring an email address for each user.")
 
-        totp_status = check_totp_status(api_base,
-                                        api_session,
-                                        group_name="SSLVPN Services",
-                                        enable_totp=enable_totp,
-                                        firewall_generation=firewall_generation
-                                        )
 
         if totp_status["status"] == "enabled":
             routine_results[firewall]['sslvpn_services_totp_enabled'] = True
@@ -524,11 +684,13 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
             routine_results[firewall]['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
             routine_results[firewall]['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
             routine_results[firewall]['sslvpn_services_totp_error_msg'] = totp_status.get("message", "")
-            print(f"{generate_timestamp()}: TOTP/OTP is not enabled on the SSLVPN Services group.")
+            if firewall_generation == 5:
+                print(f"{generate_timestamp()}: {totp_status.get('message', '')}")
+            else:
+                print(f"{generate_timestamp()}: TOTP/OTP is not enabled on the SSLVPN Services group.")
             if totp_status.get("try_ssh", None):
                 print(f"{generate_timestamp()}: Unable to enable TOTP via API. Trying SSH instead. ({totp_status.get('message', '')})\n")
                 enable_totp_ssh(firewall, sshport, username, password, "SSLVPN Services")
-
 
     except KeyboardInterrupt:
         print(f"\nStopped!")
@@ -558,7 +720,7 @@ def routine(firewall, username=None, password=None, sshport='22', enable_totp=Fa
         disable_sonicos_api_ssh(firewall, sshport, username, password)
 
     # Done with the routine.
-    logout(api_base, api_session)
+    logout(api_base, api_session, firewall_generation=firewall_generation)
 
 
 # Main function
@@ -584,8 +746,8 @@ if __name__ == "__main__":
                     elif line.startswith("#"):
                         continue
 
-                    # target_fw,admin_user,admin_password,target_ssh_mgmt_port,enable_totp,enable_botnet_filtering
-                    # When the CSV file has less than 6 columns, we'll fill the missing columns with 'None'.
+                    # target_fw,admin_user,admin_password,target_ssh_mgmt_port,enable_totp,enable_botnet_filtering,temporary_password,upgrade_to_firmware_image
+                    # When the CSV file has less than 8 columns, we'll fill the missing columns with 'None'.
                     # Handles empty lines, ip and user (no password, etc), and missing columns (for users of previous versions)
                     item_count = len(line.strip().split(','))
                     if item_count == 0:
@@ -593,10 +755,10 @@ if __name__ == "__main__":
                     if item_count <= 2:
                         print(f"{generate_timestamp()}: Error: Cannot add this entry. Please review this entry: '{line}'.")
                         continue
-                    if item_count < 7:
+                    if item_count < 9:
                         line = line.strip() + (7 - item_count) * ',None'
 
-                    fw, user, pw, ssh_port, enable_totp, enable_botnet_filtering, temp_password = line.strip().split(',')
+                    fw, user, pw, ssh_port, enable_totp, enable_botnet_filtering, temp_password, upgrade_to_firmware_image = line.strip().split(',')
 
                     # This normalizes the Nones to expected values or default values.
                     if ssh_port == 'None' or ssh_port == 'false':
@@ -610,7 +772,14 @@ if __name__ == "__main__":
                     if len(temp_password) < 8 and temp_password != "":
                         print(f"{generate_timestamp()}: Error: The temporary password for {fw} is less than 8 characters. Padding the password with 'x'.")
                         temp_password = temp_password + 'x' * (8 - len(temp_password))
-                    targets.append((fw, user, pw, ssh_port, enable_totp, enable_botnet_filtering, temp_password))
+                    if upgrade_to_firmware_image == 'None' or upgrade_to_firmware_image == 'false' or upgrade_to_firmware_image == '' or upgrade_to_firmware_image == ' ':
+                        upgrade_to_firmware_image = ""
+                    if upgrade_to_firmware_image != "":
+                        upgrade_to_firmware_image = upgrade_to_firmware_image.strip('"').strip("'")
+                        if path.exists(upgrade_to_firmware_image) is False:
+                            print(f"{generate_timestamp()}: Error: The firmware upgrade file '{upgrade_to_firmware_image}' does not exist.")
+                            upgrade_to_firmware_image = ""
+                    targets.append((fw, user, pw, ssh_port, enable_totp, enable_botnet_filtering, temp_password, upgrade_to_firmware_image))
         except KeyboardInterrupt:
             print("\nStopped!")
             exit()
@@ -618,7 +787,24 @@ if __name__ == "__main__":
             print(f"{generate_timestamp()}: Error opening/parsing input file: {e}")
             exit()
     else:
-        targets.append((a.target, None, None, a.sshport, a.enable_totp, a.enable_botnet_filtering, a.temp_password))
+        if a.upgrade_firmware == 'None' or a.upgrade_firmware == 'false' or a.upgrade_firmware == '' or a.upgrade_firmware == ' ':
+            a.upgrade_firmware = ""
+
+        if a.upgrade_firmware != "":
+            if path.exists(a.upgrade_firmware) is False:
+                print(f"{generate_timestamp()}: Error: The firmware upgrade file '{a.upgrade_firmware}' does not exist.")
+                a.upgrade_firmware = ""
+
+            a.upgrade_firmware = path.abspath(a.upgrade_firmware)
+
+        if a.temp_password == 'None' or a.temp_password == 'false' or a.temp_password == '':
+            a.temp_password = ""
+
+        if len(a.temp_password) < 8 and a.temp_password != "":
+            print(f"{generate_timestamp()}: Error: The temporary password for {a.target} is less than 8 characters. Padding the password with 'x'.")
+            a.temp_password = a.temp_password + 'x' * (8 - len(a.temp_password))
+
+        targets.append((a.target, None, None, a.sshport, a.enable_totp, a.enable_botnet_filtering, a.temp_password, a.upgrade_firmware))
 
     print(f"{generate_timestamp()}: Target Count: {len(targets)}\n")
 
@@ -629,11 +815,18 @@ if __name__ == "__main__":
     for target in targets:
         # If the target is a CSV file, the target will be a tuple (ip, user, password)
         if isinstance(target, tuple):
-            fw, user, pw, ssh_port, enable_totp, enable_botnet_filtering, temp_password = target
+            fw, user, pw, ssh_port, enable_totp, enable_botnet_filtering, temp_password, upgrade_to_firmware_image = target
         # When it's not a CSV file, the target will be a string (ip). The user and password will be None.
         # User/password will be prompted later.
         else:
-            fw, user, pw, ssh_port, enable_totp, enable_botnet_filtering, temp_password = target, None, None, a.sshport, a.enable_totp, a.enable_botnet_filtering, temp_password
+            fw = target
+            user = None
+            pw = None
+            ssh_port = a.sshport
+            enable_totp = a.enable_totp
+            enable_botnet_filtering = a.enable_botnet_filtering
+            temp_password = temp_password
+            upgrade_to_firmware_image = a.upgrade_firmware
 
         if fw == "" or fw is None:
             print(f"{generate_timestamp()}: Error: The target firewall is empty.")
@@ -645,6 +838,13 @@ if __name__ == "__main__":
         routine_results[fw] = {}
 
         # Run the routine
-        res = routine(fw, username=user, password=pw, sshport=ssh_port, enable_totp=enable_totp, enable_botnet_filtering=enable_botnet_filtering, temp_password=temp_password)
+        res = routine(fw,
+                      username=user,
+                      password=pw,
+                      sshport=ssh_port,
+                      enable_totp=enable_totp,
+                      enable_botnet_filtering=enable_botnet_filtering,
+                      temp_password=temp_password,
+                      upgrade_firmware=upgrade_to_firmware_image)
 
         print(f"{generate_timestamp()}: {get_fw_model()} - {fw}: Done.\n\n")
