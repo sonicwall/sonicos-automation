@@ -5,8 +5,25 @@ from common.utils import generate_timestamp
 def compare_versions(current_version, required_version, fw_gen=None):
     def version_tuple(v):
         # Split the version into major, minor, patch, and build number
-        version_main, build = v.split('-')
-        return tuple(map(int, version_main.split('.'))) + (int(build),)
+        try:
+            if "---" in v:
+                v = v.replace("---", "-")
+
+            if "--" in v:
+                version_main = v.split('-')[0]  # 6.5.4.6
+                build = v.split('-')[1].replace("n", "").replace("o", "")  # 79n
+                hf = v.split('--')[1]  # HFGEN6-4345-3n
+                print(f"{generate_timestamp()}: INFO: Detected Hotfix: {v} = {version_main} Build: {build} HF: {hf}")
+                return tuple(map(int, version_main.split('.'))) + (int(build),)
+
+            version_main, build = v.split('-')
+            return tuple(map(int, version_main.split('.'))) + (int(build),)
+        except ValueError:
+            version_main = v.split('-')[0]
+            build = v.split('-')[1]
+            build2 = v.split('-')[-1]
+            print(f"{generate_timestamp()}: INFO: Detected ValueError: {version_main} Build: {build} Build2: {build2}")
+            return tuple(map(int, version_main.split('.'))) + (int(build),)
 
     # Convert the versions to tuples of integers
     current_tuple = version_tuple(current_version)
@@ -79,8 +96,12 @@ def notice_check(firmware_version, model):
             # The minimum/required version to -2. This ensures anything after -2 is OK and any up to -2 are flagged.
             r = compare_versions(firmware_version, "6.5.2.8-2", fw_gen=generation)
         else:
-            # Versions 6.5.4.14-109n and older are vulnerable. Fixed is 6.5.4.15-116n. The min/required version: -116.
-            r = compare_versions(firmware_version, "6.5.4.15-116", fw_gen=generation)
+            # For 6.2.7, we have 6.2.7.1-24n.
+            if firmware_version.startswith('6.2.7.'):
+                r = compare_versions(firmware_version, "6.2.7.1-24", fw_gen=generation)
+            else:
+                # Versions 6.5.4.14-109n and older should be upgraded to 6.5.4.15-116n. The min/req version: -116.
+                r = compare_versions(firmware_version, "6.5.4.15-116", fw_gen=generation)
 
     elif generation == 5:
         # Versions 5.9.2.14-12o and older are vulnerable. Fixed is 5.9.2.14-13o. The minimum/required version: -13.

@@ -3,11 +3,12 @@ import re
 import requests
 import hashlib
 import os
+from datetime import datetime
 
 
 class Login:
     def __init__(self, ipaddress, userid, passwd, admin_mode, http_type, brwsr_cache, verbose, sessIdRef):
-        self.ipaddress = ipaddress
+        self.ipaddress = ipaddress.strip("https://").strip("http://").strip("/")
         self.userid = userid
         self.passwd = passwd
         self.admin_mode = self.get_admin_mode(admin_mode)
@@ -24,6 +25,10 @@ class Login:
         self.model = ""
         self.serial_number = ""
         self.firmware_version = ""
+        self.ha_status = ""
+        self.ha_primary_state = ""
+        self.ha_secondary_state = ""
+        self.ha_uptime = ""
         self.stored_params = {}
 
     def get_admin_mode(self, admin_mode_str):
@@ -43,7 +48,11 @@ class Login:
         details = {
             "model": self.model,
             "serial_number": self.serial_number,
-            "firmware_version": self.firmware_version
+            "firmware_version": self.firmware_version,
+            "ha_status": self.ha_status,
+            "ha_primary_state": self.ha_primary_state,
+            "ha_secondary_state": self.ha_secondary_state,
+            "ha_uptime": self.ha_uptime
         }
         return details
 
@@ -95,9 +104,12 @@ class Login:
 
         result_code = re.search(r"<result>([0-1])</result>", content)
         restart_needed = re.search(r"<restart_needed>([0-1])</restart_needed>", content)
+        error_msg = re.search(r"<error>\s*<desc>(.*?)</desc>\s*</error>", content)
 
         result_code = result_code.group(1)
         restart_needed = restart_needed.group(1)
+        if error_msg:
+            error_msg = error_msg.group(1)
 
         if self.verbose:
             print("Parsed XML response:")
@@ -120,16 +132,23 @@ class Login:
                 print("  Restart needed?:", restart_needed)
             restart_needed = int(restart_needed)
 
-        return result_code, restart_needed
+        if not error_msg:
+            if self.verbose:
+                print("  No error message.")
+        else:
+            if self.verbose:
+                print("  Error message:", error_msg)
+
+        return result_code, restart_needed, error_msg
 
     def login2(self, sess_id_ref=None):
-        print(f"ipaddress    = {self.ipaddress}\n"
-              f"userid       = {self.userid}\n"
-              f"passwd       = {self.passwd}\n"
-              f"adminMode    = {self.admin_mode}\n"
-              f"httpType     = {self.http_type}\n"
-              f"brwsrCache   = {self.brwsr_cache}\n"
-              f"verbose      = {self.verbose}\n")
+        # print(f"ipaddress    = {self.ipaddress}\n"
+              # f"userid       = {self.userid}\n"
+              # f"passwd       = {self.passwd}\n"
+              # f"adminMode    = {self.admin_mode}\n"
+              # f"httpType     = {self.http_type}\n"
+              # f"brwsrCache   = {self.brwsr_cache}\n"
+              # f"verbose      = {self.verbose}\n")
 
         requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
@@ -139,8 +158,8 @@ class Login:
             ssl = False
 
         # Start the login process
-        ret = self.start_login_process2(sess_id_ref)
-        return ret
+        ret, ret_msg = self.start_login_process2(sess_id_ref)
+        return ret, ret_msg
 
     def start_login_process2(self, sess_id_ref):
         post_data = {
@@ -152,25 +171,51 @@ class Login:
         if self.admin_mode != 3:
             post_data["adminMode"] = self.admin_mode
 
-        if self.verbose:
-            print(f"Fetching {self.http_type}://{self.ipaddress}/sgmsAuth.xml")
-
         self.session.headers.update({"User-Agent": "SGMS/8.0"})
-        response = self.get_request("sgmsAuth.xml", print_content=False)
+        try:
+            response = self.get_request("sgmsAuth.xml", print_content=False, timeout=15)
+        except requests.exceptions.Timeout as e:
+            print("Timeout error:", e, "\n")
+            return 0, f"Timeout error: {e}"
+        except requests.exceptions.ConnectionError as e:
+            print("Connection error:", e, "\n")
+            return 0, f"Connection error: {e}"
+        except KeyboardInterrupt:
+            print("Stopped!")
+            exit()
+
+        if response.status_code != 200:
+            print("Failed to connect to the firewall. -->", response.status_code, response.reason)
+            return 0, f"Failed to connect to the firewall. --> {response.status_code} {response.reason}"
 
         authSessId = None
         authSessId = re.search(f"<authSessId>(.*)</authSessId>", response.text)
         if authSessId:
             authSessId = authSessId.group(1)
             self.sessIdRef = authSessId
-            print(f"Found authSessId: {authSessId}\n")
         else:
             print("No authSessId found. The rest of this process will fail.\n")
 
-        if self.verbose:
-            print(f"Posting to {self.http_type}://{self.ipaddress}/auth4.cgi\n")
+            return 0, f"No authSessId found."
 
-        response = self.post_request("auth4.cgi", post_data=post_data, print_content=False)
+
+        response = self.post_request("auth4.cgi", post_data=post_data, print_content=False, timeout=15)
+        result_code, restart_needed, err_msg = self.parse_xml_response(response)
+        if result_code == 1:
+            print("Logged in successfully!")
+        elif result_code == 0:
+            print("Error message:", err_msg)
+            return 0, f"Error message: {err_msg}"
+
+        try:
+            op_failed = re.search(r"Operation failed - Error message is unspecified.", response.text)
+            if op_failed:
+                print(response.content.decode("utf-8"))
+                print("Operation failed - Error message is unspecified.")
+                print("2FA may be enabled on the firewall management user.")
+                return 0, f"Operation failed - Error message is unspecified."
+        except Exception as e:
+            pass
 
         # Adds the "Cookie" header to "SessId=<sessIdRef>" and updates the session cookies with the SessId.
         # Subsequent requests will need this.
@@ -178,7 +223,11 @@ class Login:
         self.session.cookies.update({"SessId": self.sessIdRef})
 
         # Gets firewall state info.
-        response = self.get_request("firewallState.xml", print_content=False)
+        response = self.get_request("firewallState.xml", print_content=False, timeout=15)
+        if response.status_code != 200:
+            print(f"{response.status_code}: Failed to get firewall state. A password update may be required.")
+            print(response.content.decode("utf-8"))
+            return 0, f"{response.status_code}: Failed to get firewall state. Admin password change may be required."
 
         # Get firmware version, model, and serial number.
         serial_number = re.search(r"<sn>(.*)</sn>", response.text).group(1)
@@ -202,17 +251,24 @@ class Login:
         self.handle_navigation_view2()
 
         if self.csrf_token:
+            self.get_ha_status()
+
+        if self.csrf_token:
             if self.verbose:
                 print(f"Logged in successfully!\n"
                       f"Serial Number: {serial_number}\n"
                       f"Model: {model}\n"
-                      f"Firmware Version: {firmware_version}\n")
-            return 1
+                      f"Firmware Version: {firmware_version}\n"
+                      f"High Availability Status: {self.ha_status}\n"
+                      f"--Primary State: {self.ha_primary_state}\n"
+                      f"--Secondary State: {self.ha_secondary_state}\n"
+                      f"--HA Uptime: {self.ha_uptime}\n")
+            return 1, f"Logged in successfully!"
         else:
-            return 0
+            return 0, f"Failed to log in."
 
     def handle_navigation_view2(self):
-        nav = self.get_request("navigationView.html", print_content=False)
+        nav = self.get_request("navigationView.html", print_content=False, timeout=15)
 
         # GEN6
         csrf_token_match = re.search(r'csrfToken = "(.*)"', nav.text)
@@ -226,7 +282,7 @@ class Login:
             print()
 
             # GEN5
-            nav = self.get_request("outlookView.html", print_content=False)
+            nav = self.get_request("outlookView.html", print_content=False, timeout=15)
 
             csrf_token_match = re.search(r'csrfToken = "(.*)"', nav.text)
             if csrf_token_match:
@@ -238,10 +294,38 @@ class Login:
                 print("No CSRF token found (2).")
                 print()
 
+    def get_ha_status(self):
+        response = self.get_request("getJsonData.json?dataSet=svrrpHaStatus", print_content=False, timeout=15)
+
+        try:
+            data = response.json()
+            data = data.get("svrrpNodes", [{}])[0]
+        except Exception as e:
+            print("Error converting response to JSON:", e)
+            data = {}
+
+        ha_status = data.get("status", "")
+        ha_primary_state = data.get("priState", "")
+        ha_secondary_state = data.get("secState", "")
+        ha_uptime = data.get("upTime", "")
+
+        if ha_status:
+            self.ha_status = ha_status.upper()
+        if ha_primary_state:
+            self.ha_primary_state = ha_primary_state.upper()
+        if ha_secondary_state:
+            self.ha_secondary_state = ha_secondary_state.upper()
+        if ha_uptime:
+            self.ha_uptime = ha_uptime.upper()
+
     def logout(self):
         print("\nTrying to log out...")
 
-        response = self.get_request("logout.html", print_content=False)
+        try:
+            response = self.get_request("logout.html", print_content=False, timeout=5)
+        except requests.exceptions.Timeout as e:
+            print("Timeout error:", e, "\n")
+            return 0
 
         if response.status_code == 200:
             print("Logged out successfully!")
@@ -292,7 +376,7 @@ class Login:
         # self.session.cookies.update({"SessId": self.sessIdRef})
 
         # Send the POST request to enable SonicOS API
-        response = self.post_request("main.cgi", post_data=post_data, print_content=False)
+        response = self.post_request("main.cgi", post_data=post_data, print_content=False, timeout=15)
 
         # Check if the API was successfully enabled
         if response.status_code == 200:
@@ -319,10 +403,10 @@ class Login:
             print(response.text)
             return 0
 
-    def get_request(self, uri, print_content=False):
+    def get_request(self, uri, print_content=False, timeout=30):
         if self.verbose:
             print(f"Fetching {self.http_type}://{self.ipaddress}/{uri} ...")
-        response = self.session.get(f"{self.http_type}://{self.ipaddress}/{uri}", verify=False)
+        response = self.session.get(f"{self.http_type}://{self.ipaddress}/{uri}", verify=False, timeout=timeout)
 
         # Print the headers
         if print_content:
@@ -331,7 +415,7 @@ class Login:
             print("------------------- END -------------------\n\n")
         return response
 
-    def post_request(self, uri, post_data, file_data=None, print_content=False, timeout=60):
+    def post_request(self, uri, post_data, file_data=None, print_content=False, timeout=30):
         if self.verbose:
             print(f"Posting data to {self.http_type}://{self.ipaddress}/{uri} ...")
         if file_data:
@@ -352,8 +436,77 @@ class Login:
             print("------------------- END -------------------\n\n")
         return response
 
+    def reboot_firewall(self):
+        if self.get_firewall_info().get("ha_status", None):
+            print("\nNot rebooting an HA firewall.")
+        else:
+            print("\nTrying to reboot the firewall...")
+
+        data = {
+            "csrfToken": self.csrf_token,
+            "cgiaction": "reboot"
+        }
+
+        response = self.post_request("main.cgi", post_data=data, print_content=False, timeout=15)
+        if response.status_code == 200:
+            print("Firewall reboot successful!")
+            return True
+        else:
+            print("Failed to reboot the firewall.")
+            return False
+
+    def wait_for_reboot(self, timeout=480):
+        start_time = datetime.now()
+        print("\nWaiting for the firewall to reboot...")
+
+        time.sleep(30)
+
+        while True:
+            try:
+                response = self.get_request("auth.html", print_content=False, timeout=15)
+
+                # If the request is successful, the firewall auth page is reachable and firewall is back up.
+                if response.status_code == 200:
+                    print("Firewall auth page is reachable!")
+
+                    li = False
+                    li_count = 0
+                    while not li:
+                        logged_in, rmsg = self.login2()
+                        if logged_in:
+                            li = True
+                            print("Logged in successfully!")
+                            return True
+                        else:
+                            li_count += 1
+                            time.sleep(30)
+                            if li_count == 10:
+                                print("Still unable to log in after 10 attempts.")
+                                break
+                            time.sleep(30)
+
+                # If the request fails, the reboot is still in progress.
+                else:
+                    print("Firewall auth page is still not reachable.")
+                    time.sleep(30)
+
+            except requests.exceptions.RequestException as e:
+                print("Connection error:", e)
+                time.sleep(30)
+
+            # If the request fails after the timeout, the reboot is likely still not complete.
+            if (datetime.now() - start_time).seconds >= timeout:
+                print("Reboot still in progress after timeout period.")
+                # break
+                return False
+
     def upload_firmware(self, fw_path):
         fm_filename = os.path.split(fw_path)[-1]
+
+        if self.get_firewall_info().get("ha_status", None):
+            timeout = 1000  # was 600
+        else:
+            timeout = 4200  # was 360 then 3600
 
         form_data = {
             "csrfToken": self.csrf_token,
@@ -368,16 +521,18 @@ class Login:
                                      post_data=form_data,
                                      file_data=files,
                                      print_content=False,
-                                     timeout=300)
+                                     timeout=(timeout, 4200))  # was 420
         r_code = 0
         rn_code = 0
+        err_msg = ""
         try:
-            r_code, rn_code = self.parse_xml_response(response)
-            return response, r_code, rn_code
+            r_code, rn_code, err_msg = self.parse_xml_response(response)
+            #print("api2.upload_firmware(): r_code:", r_code, "rn_code:", rn_code, "err_msg:", err_msg)
+            return response, r_code, rn_code, err_msg
         except Exception as e:
             pass
 
-        return response, r_code, rn_code
+        return response, r_code, rn_code, err_msg
 
     def boot_uploaded_firmware(self):
         data = {
@@ -393,26 +548,34 @@ class Login:
             "cbox_ndppMode": ""
         }
 
+        # TODO: Before booting, make sure we're still logged in. Check for an active session/create a new one.
+
         try:
             response = self.post_request("boot.cgi",
                                          post_data=data,
                                          print_content=True,
-                                         timeout=30)
+                                         timeout=240)
             successful = re.search(r"(The SonicWall is restarting)", response.text)
+            non_config_mode = re.search(r"(Not allowed in current mode)", response.text)
         except requests.exceptions.Timeout as e:
             print("Timeout error:", e)
-            print("The boot action likely started. Please check the device status manually in a few minutes.")
+            print("The boot action likely started.\n")
             successful = True
+            non_config_mode = False
         except requests.exceptions.ConnectionError as e:
             print("Connection error:", e)
-            print("The boot action likely started. Please check the device status manually in a few minutes.")
+            print("The boot action likely started.\n")
             successful = True
+            non_config_mode = False
 
         if successful:
             if self.verbose:
-                print("Firmware boot successful!")
-            return True
-        return False
+                print("Firmware boot successful!\n")
+            return True, "SUCCESS"
+        if non_config_mode:
+            print(non_config_mode)
+            return False, "NON_CONFIG_MODE"
+        return False, "FAILED"
 
     def download_tsr(self, filepath):
         print("\nTrying to download TSR...")
@@ -452,6 +615,18 @@ class Login:
             print("Failed to export preferences.")
             return False
 
+    def download_audit_log(self, filepath):
+        print("\nTrying to download audit log...")
+        response = self.get_request("auditRecords.wri?auditPath=MONITOR%20/%20Log%20/%20Auditing%20Records", print_content=False)
+        if response.status_code == 200:
+            with open(filepath, "wb") as f:
+                f.write(response.content)
+            print("Audit log downloaded successfully!")
+            return True
+        else:
+            print("Failed to download audit log.")
+            return False
+
     def enable_ssh_management(self):
         print("\nTrying to enable SSH Management...")
         data = {
@@ -465,6 +640,8 @@ class Login:
         response = self.get_request("botnetFilter.html", print_content=False)
 
         botnet_licensed = re.search(r"(Botnet Filter Not Licensed)", response.text)
+        botnet_licensed2 = re.search(r"(App Visualization Not Licensed)", response.text)
+        botnet_licensed = botnet_licensed or botnet_licensed2
         botnet_enabled = re.search(r'name="botnetBlock" value="(.*)">', response.text)
         botnet_mode = re.search(r'name="botnetBlkMode" value="(.*)" CHECKED>', response.text)
 
@@ -518,7 +695,7 @@ class Login:
             "botnetBlkMode": 0,
         }
         response = self.post_request("main.cgi", post_data=data, print_content=False)
-        rc, rn = self.parse_xml_response(response)
+        rc, rn, ec = self.parse_xml_response(response)
 
         if rc == 1:
             print("Botnet Filtering enabled successfully!")
@@ -532,24 +709,43 @@ class Login:
 
 # Test
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Test the SonicWall API")
+    parser.add_argument("target", type=str, help="Target firewall IP address:port.")
+    parser.add_argument("-u", "--username", type=str, default="admin", help="Username.")
+    parser.add_argument("-p", "--password", type=str, help="Password.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output.")
+    a = parser.parse_args()
+
+    if a.verbose:
+        a.verbose = 1
+    else:
+        a.verbose = 0
+
+    if not a.password:
+        a.password = input("Enter password: ")
+
     login_object = Login(
         # ipaddress="192.168.0.107",  # 6
-        ipaddress="192.168.0.106",  # 5
-        userid="admin",
-        passwd="password",
+        # ipaddress="192.168.0.106",  # 5
+        ipaddress=a.target,
+        userid=a.username,
+        passwd=a.password,
         admin_mode="config",
         http_type="https",
         brwsr_cache=0,
-        verbose=1,
+        verbose=a.verbose,
         sessIdRef=0,
     )
-    result = login_object.login2()
+    result, result_msg = login_object.login2()
 
     if result == 1:
-        print("Login successful! Result:", result)
+        print("Login successful! Result:", result, result_msg)
+        r = login_object.get_firewall_info()
+        print(r)
         print()
     else:
-        print("Login failed! Result:", result)
+        print("Login failed! Result:", result, result_msg)
         print()
 
     # TODO: Do some test functions...

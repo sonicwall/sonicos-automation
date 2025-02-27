@@ -1,15 +1,19 @@
 from os import path
-from common.arguments import a
 from common.utils import generate_timestamp
 
 
-VERSION_STRING = '0.7'
+verbose = False
 
 # Base folder path for the application.
 BASE_PATH = path.dirname(path.dirname(path.abspath(__file__)))
 
 # Run folder (where the output directories will be created).
 RUNS_FOLDER = path.join(BASE_PATH, 'runs')
+
+# The worker number is the folder name.
+WORKER_NUMBER = BASE_PATH.split('/')[-1]
+if "worker" not in WORKER_NUMBER:
+    WORKER_NUMBER = 'mainworker'
 
 # Get the launch timestamp
 START_TIMESTAMP = generate_timestamp()
@@ -42,7 +46,7 @@ AUTOENABLED_SONICOS_API = False
 def set_fw_generation(generation):
     global FIREWALL_GENERATION
     FIREWALL_GENERATION = generation
-    if a.verbose:
+    if verbose:
         print("Setting firewall generation to", generation)
     return FIREWALL_GENERATION
 
@@ -57,7 +61,7 @@ def get_fw_generation():
 def set_fw_model(model):
     global FIREWALL_MODEL
     FIREWALL_MODEL = model
-    if a.verbose:
+    if verbose:
         print("Setting firewall model to", model)
     return FIREWALL_MODEL
 
@@ -72,7 +76,7 @@ def get_fw_model():
 def set_autoenabled_sonicos_api(autoenabled):
     global AUTOENABLED_SONICOS_API
     AUTOENABLED_SONICOS_API = autoenabled
-    if a.verbose:
+    if verbose:
         print("Setting AUTOENABLED_SONICOS_API to", autoenabled)
     return AUTOENABLED_SONICOS_API
 
