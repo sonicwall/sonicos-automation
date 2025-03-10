@@ -29,7 +29,7 @@ It is recommended to restore the qualified login name to userPrincipalName after
 - Exports the existing LDAP server configuration. Saves the configuration to a JSON file.
   - Changes the qualified login name attribute to sAMAccountName to prevent login using the UserPrincipalName.
 - Deletes the existing LDAP servers from SonicOS.
-- Retrieves the list of local users from SonicOS.
+- Retrieves the list of local users from SonicOS. This option is disabled by default as a safety measure. Use the -du argument to enable this feature.
   - Deletes all domain-associated local users from SonicOS.
   - This includes:
     - Imported LDAP users

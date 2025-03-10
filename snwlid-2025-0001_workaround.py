@@ -25,6 +25,7 @@ Please refer to the README for more detailed help."""
 args = get_parser(arg_set="snwlid-2025-0001", description=arg_description, parse=False)
 args.add_argument("-rupn", "--restore_upn", action='store_true', help="If set, restores the qualified login name to userPrincipalName if it isn't already.")
 args.add_argument("-dr", "--dont_reboot", action='store_true', help="If set, the firewall will not be rebooted. We suggest allowing the firewall to reboot. (NOT RECOMMENDED)")
+args.add_argument("-du", "--delete_users", action='store_true', help="If set, deletes domain-associated local users. Disabled by default as a safety feature. We strongly recommend deleting the domain-associated local users. (STRONGLY RECOMMENDED)")
 a = args.parse_args()
 
 
@@ -136,55 +137,56 @@ def routine(fw):
                 else:
                     print(f"{generate_timestamp()}: WARNING: {response_message}")
 
-    if not a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
-        # Delete locally listed LDAP users. (Device > Local Users & Groups > Local Users)
-        user_list = fw.get_request("user/local/users")
-        if user_list:
-            print(f"{generate_timestamp()}: INFO: Local users retrieved successfully.")
-            if a.verbose:
-                print(json.dumps(user_list, indent=4))
-    elif a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
-        print(f"{generate_timestamp()}: INFO: Restoring userPrincipalName in LDAP server configuration. Skipping the deletion of local users.")
-
-    if not a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
-        # This section handles the deletion of domain-associated local users.
-        # Skip these special user entries.
-        skip_users = ['All LDAP Users', 'All RADIUS Users']
-        deleted_count = 0
-        skipped_count = 0
-        for usr in user_list["user"]["local"]["user"]:
-            # Skip special user entries
-            if usr["name"] in skip_users:
-                skipped_count += 1
-                continue
-
-            # Skip non-domain users
-            if usr.get("domain", None) is None:
-                skipped_count += 1
-                continue
-
-            # Delete domain-associated users
-            deleted_user = None
-            if fw.gen == 6:
-                deleted_user = fw.delete_request(f"user/local/user/uuid/{usr['uuid']}")
-            elif fw.gen == 7 or fw.gen == 8:
-                deleted_user = fw.delete_request(f"user/local/users/uuid/{usr['uuid']}")
-            if deleted_user:
-                print(f"{generate_timestamp()}: INFO: User {usr['name']} deleted successfully.")
+    if a.delete_users:
+        if not a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
+            # Delete locally listed LDAP users. (Device > Local Users & Groups > Local Users)
+            user_list = fw.get_request("user/local/users")
+            if user_list:
+                print(f"{generate_timestamp()}: INFO: Local users retrieved successfully.")
                 if a.verbose:
-                    print(json.dumps(deleted_user, indent=4))
-                commit_success, response_message = fw.commit_pending()
-                if commit_success:
-                    print(f"{generate_timestamp()}: INFO: {response_message}")
-                else:
-                    print(f"{generate_timestamp()}: WARNING: {response_message}")
-                deleted_count += 1
+                    print(json.dumps(user_list, indent=4))
+        elif a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
+            print(f"{generate_timestamp()}: INFO: Restoring userPrincipalName in LDAP server configuration. Skipping the deletion of local users.")
 
-        if deleted_count > 0:
-            print(f"{generate_timestamp()}: INFO: All domain-associated local users have been deleted.")
-        print(f"{generate_timestamp()}: INFO: {deleted_count} entries deleted. {skipped_count} entries skipped.")
-    elif a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
-        print(f"{generate_timestamp()}: INFO: Skipped the deletion of local users.")
+        if not a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
+            # This section handles the deletion of domain-associated local users.
+            # Skip these special user entries.
+            skip_users = ['All LDAP Users', 'All RADIUS Users']
+            deleted_count = 0
+            skipped_count = 0
+            for usr in user_list["user"]["local"]["user"]:
+                # Skip special user entries
+                if usr["name"] in skip_users:
+                    skipped_count += 1
+                    continue
+
+                # Skip non-domain users
+                if usr.get("domain", None) is None:
+                    skipped_count += 1
+                    continue
+
+                # Delete domain-associated users
+                deleted_user = None
+                if fw.gen == 6:
+                    deleted_user = fw.delete_request(f"user/local/user/uuid/{usr['uuid']}")
+                elif fw.gen == 7 or fw.gen == 8:
+                    deleted_user = fw.delete_request(f"user/local/users/uuid/{usr['uuid']}")
+                if deleted_user:
+                    print(f"{generate_timestamp()}: INFO: User {usr['name']} deleted successfully.")
+                    if a.verbose:
+                        print(json.dumps(deleted_user, indent=4))
+                    commit_success, response_message = fw.commit_pending()
+                    if commit_success:
+                        print(f"{generate_timestamp()}: INFO: {response_message}")
+                    else:
+                        print(f"{generate_timestamp()}: WARNING: {response_message}")
+                    deleted_count += 1
+
+            if deleted_count > 0:
+                print(f"{generate_timestamp()}: INFO: All domain-associated local users have been deleted.")
+            print(f"{generate_timestamp()}: INFO: {deleted_count} entries deleted. {skipped_count} entries skipped.")
+        elif a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
+            print(f"{generate_timestamp()}: INFO: Skipped the deletion of local users.")
 
 
     if not a.restore_upn and len(ldap_servers_config["user"]["ldap"].get("server", [])) > 0:
@@ -331,8 +333,10 @@ if __name__ == "__main__":
     banner_info = [
         "       --  Temporary workaround/mitigation for SNWLID-2025-0001  --\n",
         "This tool automates the following tasks:",
-        " - Optionally exporting settings (-es argument) and a TSR (-etsr argument) prior to making changes",
-        " - Deleting domain-associated users",
+        " - Optionally exporting settings (-es argument) and a TSR (-etsr argument) prior to making changes.",
+        " - Deleting domain-associated users (use the -du argument to enable this).",
+        "   - This is disabled by default as a safety feature.",
+        "   - We strongly recommend deleting the domain-associated local users as recommended in the PSIRT Advisory.",
         " - Re-creating LDAP server entries with userPrincipalName replaced by sAMAccountName",
         "   - Optionally restoring userPrincipalName if requested with the '-rupn' argument",
         " - Modifying the SSLVPN User Domain (if needed)",
