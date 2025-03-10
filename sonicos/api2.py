@@ -275,10 +275,10 @@ class Login:
         if csrf_token_match:
             csrf_token = csrf_token_match.group(1)
             self.csrf_token = csrf_token
-            print(f"CSRF token found (1): {csrf_token}")
+            # print(f"CSRF token found (1): {csrf_token}")
             print()
         else:
-            print("No CSRF token found (1).")
+            # print("No CSRF token found (1).")
             print()
 
             # GEN5
@@ -288,10 +288,10 @@ class Login:
             if csrf_token_match:
                 csrf_token = csrf_token_match.group(1)
                 self.csrf_token = csrf_token
-                print(f"CSRF token found (2): {csrf_token}")
+                # print(f"CSRF token found (2): {csrf_token}")
                 print()
             else:
-                print("No CSRF token found (2).")
+                # print("No CSRF token found (2).")
                 print()
 
     def get_ha_status(self):

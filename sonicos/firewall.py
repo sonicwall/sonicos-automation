@@ -37,18 +37,22 @@ from sonicos.utils import (
     wait_for_upgrade
 )
 import common.constants as constants
+from sonicos.api2 import Login
 
 
 class Firewall:
     def __init__(self, url, username, password, sshport="22"):
         self.url = url.rstrip("/")
         self.api_base = f"{url}/api/sonicos/"
+        self.host = url.split("//")[-1].split(":")[0]
         if sshport:
             self.ssh_port = str(sshport)
         self.username = username
         self.password = password
         self.session = None
         self.ssh_session = None
+        self.ssh_connection = None
+        self.login_session = None
         self.firmware = None
         self.model = None
         self.serial = None
@@ -81,6 +85,24 @@ class Firewall:
             print(f"{generate_timestamp()}: INFO: Device information retrieved successfully.")
             print(f"{generate_timestamp()}: INFO: Model: {self.model}, Serial: {self.serial}, Firmware: {self.firmware}, Generation: {self.gen}")
             return True
+
+    def login2(self):
+        self.login_session = Login(ipaddress=self.host,
+                                   userid=self.username,
+                                   passwd=self.password,
+                                   admin_mode="config",
+                                   http_type="https",
+                                   brwsr_cache=0,
+                                   verbose=0,
+                                   sessIdRef=0)
+
+        logged_in, rmsg = self.login_session.login2()
+        if logged_in == 1:
+            print(f"{generate_timestamp()}: INFO: Successfully logged in to the firewall.")
+            return True
+        else:
+            print(f"{generate_timestamp()}: ERROR: Unable to log in to the firewall.")
+            return False
 
     def logout(self):
         url = self.api_base.split("/api/sonicos/")[0]
@@ -148,8 +170,18 @@ class Firewall:
         return download_tsr(fw=url, session=self.session, filepath=filepath, firewall_generation=self.gen)
 
     def export_preferences(self, filepath):
-        url = self.api_base.split("/api/sonicos/")[0]
-        return export_preferences(fw=url, session=self.session, filepath=filepath, firewall_generation=self.gen)
+        if self.gen == 5 or self.gen == 6:
+            if self.login_session:
+                return export_preferences(fw=self.host, session=self.login_session, filepath=filepath, firewall_generation=self.gen)
+            else:
+                li = self.login2()
+                if li:
+                    return export_preferences(fw=self.host, session=self.login_session, filepath=filepath, firewall_generation=self.gen)
+                else:
+                    return False
+        elif self.gen == 7 or self.gen == 8:
+            url = self.api_base.split("/api/sonicos/")[0]
+            return export_preferences(fw=url, session=self.session, filepath=filepath, firewall_generation=self.gen)
 
     def wait_for_reboot(self, timeout=480):
         print(f"{generate_timestamp()}: INFO: Waiting for the firewall to come back online.")
@@ -197,3 +229,10 @@ class Firewall:
             if (datetime.now() - start_time).seconds > timeout:
                 print(f"{generate_timestamp()}: ERROR: Timeout reached. Firewall is not back online.")
                 return False
+
+    def get_ssh_session(self):
+        self.ssh_session, self.ssh_connection = get_ssh_session(self.url, self.ssh_port, self.username, self.password)
+        if self.ssh_session:
+            return True
+        else:
+            return False
