@@ -58,7 +58,7 @@ It is recommended to restore the qualified login name to userPrincipalName after
      - `python snwlid-2025-0001_workaround.py https://192.168.168.168:4444 --export_settings --export_tsr --sshport 2222`
    - The script will prompt for the management credentials.
    - You can specify a non-default SSH port using the -s <port> flag.
-   - You can enable verbose mode using the -v flag.
+   - You can enable verbose mode using the `-v` argument.
    - Use the `-h` argument to get more details, including additional CLI arguments.
 
 

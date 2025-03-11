@@ -284,39 +284,32 @@ def routine(fw):
             else:
                 print(f"{generate_timestamp()}: WARNING: {response_message}")
 
-        # Update/re-push the LDAP server config.
-        # TODO: Try to confirm the difference between PUT and POST requests. Both seem to work.
-        # print(f"{generate_timestamp()}: INFO: Updating the LDAP server configuration.")
-        # updated_ldap_servers_config = fw.post_request("user/ldap/servers", ldap_servers_config)
-        # if updated_ldap_servers_config:
-        #     print(f"{generate_timestamp()}: INFO: LDAP server configuration updated successfully.")
-        #     print(json.dumps(updated_ldap_servers_config, indent=4))
-        #     print(f"{generate_timestamp()}: INFO: Committing the changes.")
-        #     commit_success, response_message = fw.commit_pending()
-        #     if commit_success:
-        #         print(f"{generate_timestamp()}: INFO: {response_message}")
-        #     else:
-        #         print(f"{generate_timestamp()}: WARNING: {response_message}")
-
     # If we auto-enabled SonicOS API, disable it.
     if constants.get_autoenabled_sonicos_api():
         print(f"{generate_timestamp()}: INFO: SonicOS API was auto-enabled. Re-disabling SonicOS API.")
-        # disable_sonicos_api_ssh(fw.url, fw.ssh_port, fw.username, fw.password)
+        if fw.gen == 6:
+            sonicos_api_disabled = disable_sonicos_api_ssh(fw.host, fw.ssh_port, fw.username, fw.password)
+            if sonicos_api_disabled:
+                print(f"{generate_timestamp()}: INFO: SonicOS API disabled successfully.")
+            else:
+                print(f"{generate_timestamp()}: WARNING: Unable to disable SonicOS API. Please check the firewall manually.")
+        elif fw.gen == 7:
+            # Retrieves the current SonicOS API configuration.
+            sonicosapi_config = fw.get_request("administration/global/sonicos-api")
+            if sonicosapi_config:
+                print(f"{generate_timestamp()}: INFO: SonicOS API configuration retrieved successfully.")
+                if a.verbose:
+                    print(json.dumps(sonicosapi_config, indent=4))
 
-        # Retrieves the current SonicOS API configuration.
-        sonicosapi_config = fw.get_request("administration/global/sonicos-api")
-        if sonicosapi_config:
-            print(f"{generate_timestamp()}: INFO: SonicOS API configuration retrieved successfully.")
-            # print(json.dumps(sonicosapi_config, indent=4))
-
-        # Disables SonicOS API.
-        sonicosapi_config["administration"]["sonicos_api"]["enable"] = False
-        updated_sonicosapi_config = fw.put_request("administration/global/sonicos-api", sonicosapi_config)
-        if updated_sonicosapi_config:
-            print(f"{generate_timestamp()}: INFO: SonicOS API disabled successfully.")
-            # print(json.dumps(updated_sonicosapi_config, indent=4))
-            fw.commit_pending()
-            fw.logout()
+            # Disables SonicOS API.
+            sonicosapi_config["administration"]["sonicos_api"]["enable"] = False
+            updated_sonicosapi_config = fw.put_request("administration/global/sonicos-api", sonicosapi_config)
+            if updated_sonicosapi_config:
+                print(f"{generate_timestamp()}: INFO: SonicOS API disabled successfully.")
+                if a.verbose:
+                    print(json.dumps(updated_sonicosapi_config, indent=4))
+                fw.commit_pending()
+                fw.logout()
         else:
             print(f"{generate_timestamp()}: WARNING: Unable to disable SonicOS API. Please check the firewall manually.")
 
