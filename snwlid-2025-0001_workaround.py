@@ -161,7 +161,7 @@ def routine(fw):
                     continue
 
                 # Skip non-domain users
-                if usr.get("domain", None) is None:
+                if usr.get("domain", None) is None or usr.get("domain", None) == {}:
                     skipped_count += 1
                     continue
 
