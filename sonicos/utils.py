@@ -1,16 +1,21 @@
 import requests
 from time import sleep
+from datetime import datetime
 from common.utils import generate_timestamp
-from common.arguments import a
 from sonicos.api import (
     create_admin_session,
     create_admin_session_chap,
     hide_certificate_warnings,
     commit_pending,
     upload_firmware,
-    boot_firmware
+    boot_firmware,
+    download_audit_log
 )
 import common.constants as constants
+from sonicos.api2 import Login
+
+
+verbose = False
 
 
 # This function tries to ensure an admin API session is created.
@@ -44,13 +49,42 @@ def ensure_admin_api_session(api_host, api_user=None, api_password=None, sshport
                     admin_password=api_password,
                     sshport=sshport
                 )
+            elif api_session == "E_NOT_SONICWALL":
+                print(f"{generate_timestamp()}: The firewall does not appear to be a SonicWall device.")
+                return False, f"The firewall does not appear to be a SonicWall device."
             elif api_session == "E_GIVE_UP":
                 # raise Exception("Unable to enable SonicOS API via SSH. Giving up. Please enable SonicOS API (with Basic and CHAP authentication) manually.")
                 print(f"{generate_timestamp()}: Unable to enable SonicOS API via SSH. Giving up. Please enable SonicOS API (with Basic and CHAP authentication) manually.")
-                return False
-            elif api_session == "E_GEN5":
-                print(f"{generate_timestamp()}: The firewall appears to be a GEN5 device. This script currently does not support GEN5.")
-                return False
+                return False, f"Unable to enable SonicOS API via SSH."
+            elif api_session == "E_GEN5" or api_session == "TRY_ALTAPI":
+                if api_session == "TRY_ALTAPI":
+                    print(f"{generate_timestamp()}: TRY_ALTAPI. Trying an alternate API method.")
+                else:
+                    print(f"{generate_timestamp()}: The firewall appears to be a GEN5 device.")
+
+                if verbose:
+                    verbose_int = 1
+                else:
+                    verbose_int = 0
+                gsess = Login(
+                    # ipaddress=api_host.strip("http://").strip("https://").split(":")[0],
+                    ipaddress=api_host.strip("http://").strip("https://").strip("/"),
+                    userid=api_user,
+                    passwd=api_password,
+                    admin_mode="config",
+                    http_type="https",
+                    brwsr_cache=0,
+                    verbose=verbose_int,
+                    sessIdRef=0
+                )
+
+                logged_in, rmsg = gsess.login2()
+                if logged_in == 1:
+                    print(f"{generate_timestamp()}: Successfully logged in to the firewall.")
+                    return gsess, f"Successfully logged in to the firewall: {rmsg}"
+                else:
+                    print(f"{generate_timestamp()}: Unable to log in to the firewall.")
+                    return False, f"Unable to log in to the firewall: {rmsg}"
 
         # If the Basic auth session failed, the object will be None or an Exception. Try CHAP auth instead.
         if api_session is None:
@@ -76,23 +110,25 @@ def ensure_admin_api_session(api_host, api_user=None, api_password=None, sshport
         except KeyError:
             pass
 
-        return api_session
+        return api_session, f"Successfully created an admin session using Basic or CHAP MD5 Digest auth."
 
     except KeyboardInterrupt:
         print(f"\n{generate_timestamp()}: Stopped!")
         exit()
     except Exception as e:
         print(f"{generate_timestamp()}: Error creating an API session: {e}")
-        # Disabled this exit to allow contining to the next fw.
-        # exit()
+        return False, f"Error creating an API session: {e}"
 
 
 # Function to handle the upload firmware prompt and associated actions.
-def firmware_upgrade_prompt(fw, session):
+def firmware_upgrade_prompt(fw, session=None, bypass_prompt=None, image_path=None):
     # Users should now be asked if they want to upload and boot a new firmware image now.
     # The user would then be prompted to specify a file path to the firmware image.
-    print(f"\n{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Would you like to upload and boot a new firmware image now? [y/N]: ", end=' ')
-    upgrade = input("")
+    if not bypass_prompt:
+        print(f"\n{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Would you like to upload and boot a new firmware image now? [y/N]: ", end=' ')
+        upgrade = input("")
+    else:
+        upgrade = 'y'
 
     if len(upgrade) == 0:
         upgrade = 'n'
@@ -100,25 +136,46 @@ def firmware_upgrade_prompt(fw, session):
         upgrade = upgrade.lower()
 
     if upgrade == 'y' or upgrade == 'yes':
-        print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Please specify the path to the firmware image.")
-        image_path = input("Firmware image path: ")
+        if image_path is None:
+            print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Please specify the path to the firmware image.")
+            image_path = input("Firmware image path: ")
+        else:
+            print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Firmware image path: {image_path}")
         if len(image_path) == 0:
             print(
                 f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: No firmware image path specified. Skipping the firmware upgrade.")
         else:
             print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Uploading the firmware image...")
-            try:
-                upload_firmware(fw, session, image_path, firewall_generation=constants.get_fw_generation())
-            except Exception as e:
-                print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Error uploading the firmware image: {e}")
-                return False
+            fw_gen = constants.get_fw_generation()
+            if fw_gen == 5 or fw_gen == 6:
+                try:
+                    res = upload_firmware(fw, session, image_path, firewall_generation=constants.get_fw_generation())
+
+                    if not res:
+                        return False
+                except Exception as e:
+                    print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Error uploading the firmware image: {e}")
+                    return False
+            elif fw_gen == 7:
+                try:
+                    upload_firmware(fw, session, image_path, firewall_generation=constants.get_fw_generation())
+                except Exception as e:
+                    print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Error uploading the firmware image: {e}")
+                    return False
             print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Done uploading the firmware image.")
             print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Booting the firmware image...")
-            try:
-                boot_firmware(fw, session, firewall_generation=constants.get_fw_generation())
-            except Exception as e:
-                print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Error booting the firmware image: {e}")
-                return False
+            if fw_gen == 5 or fw_gen == 6:
+                try:
+                    boot_firmware(fw, session, firewall_generation=constants.get_fw_generation())
+                except Exception as e:
+                    print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Error booting the firmware image: {e}")
+                    return False
+            elif fw_gen == 7:
+                try:
+                    boot_firmware(fw, session, firewall_generation=constants.get_fw_generation())
+                except Exception as e:
+                    print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Error booting the firmware image: {e}")
+                    return False
             return True
 
     elif upgrade == 'n' or upgrade == 'no':
@@ -127,3 +184,53 @@ def firmware_upgrade_prompt(fw, session):
     else:
         print(f"{generate_timestamp()}: {constants.get_fw_model()} - {fw}: Invalid input. Skipping the firmware upgrade.")
         return False
+
+
+# Function to handle waiting for the firmware upgrade to complete.
+def wait_for_upgrade(fw, session, timeout=480, action="upgrade"):
+    print(f"{generate_timestamp()}: {session.get_firewall_info()['serial_number']} - {constants.get_fw_model()} - {fw}: Waiting for the {action} to complete...")
+    start_time = datetime.now()
+
+    # This initial sleep should be enough time to write to flash and start the reboot.
+    # sleep(60)
+    sleep(30)
+
+    # Every 30 seconds, check if the firmware upgrade has completed by sending an HTTP GET request to the firewall's auth page.
+    while True:
+        try:
+            res = requests.get(f"{fw}", verify=False)
+
+            # If the request is successful, the firmware upgrade has completed.
+            if res.status_code == 200:
+                print(f"{generate_timestamp()}: {session.get_firewall_info()['serial_number']} - {constants.get_fw_model()} - {fw}: auth.html is reachable.")
+
+                li = False
+                li_count = 0
+                while not li:
+                    logged_in, rmsg = session.login2()
+                    if logged_in == 1:
+                        li = True
+                        print(f"{generate_timestamp()}: {session.get_firewall_info()['serial_number']} - {constants.get_fw_model()} - {fw}: Successfully logged in to the firewall: {rmsg}\n")
+                        return True
+                    else:
+                        li_count += 1
+                        sleep(30)
+                        if li_count == 10:
+                            print(f"{generate_timestamp()}: {session.get_firewall_info()['serial_number']} - {constants.get_fw_model()} - {fw}: Unable to log in to the firewall: {rmsg}\n")
+                            break
+                        sleep(30)
+
+            # If the request fails, the firmware upgrade is still in progress.
+            else:
+                print(f"{generate_timestamp()}: {session.get_firewall_info()['serial_number']} - {constants.get_fw_model()} - {fw}: Firmware {action} still in progress...\n")
+                sleep(30)
+        # If the request fails, the firmware upgrade is still in progress.
+        except requests.exceptions.RequestException as e:
+            print(f"{generate_timestamp()}: {session.get_firewall_info()['serial_number']} - {constants.get_fw_model()} - {fw}: Error checking the firmware {action} status: {e}\n")
+            sleep(30)
+
+        # If the request fails after the timeout, the firmware upgrade has failed.
+        if (datetime.now() - start_time).seconds >= timeout:
+            print(f"{generate_timestamp()}: {session.get_firewall_info()['serial_number']} - {constants.get_fw_model()} - {fw}: {action} may have failed or firewall IP has changed. Timeout reached. Firewall is not accessible.")
+            # break
+            return False

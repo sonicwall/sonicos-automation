@@ -10,9 +10,11 @@ from common.constants import (
     PROMPT_LEVEL
 )
 from common.utils import generate_timestamp, write_to_file
-from common.arguments import a
 from common.exceptions import SSHConnectionError
 from common.config import config
+
+
+verbose = False
 
 
 # Connects and returns the authenticated SSH session.
@@ -30,7 +32,7 @@ def connect_ssh(host, port, soniccore_user="", soniccore_pass="", sonicos_user="
     :return:
     """
     # Verbose log
-    if a.verbose:
+    if verbose:
         print(f"{generate_timestamp()}: DEBUG: Connecting to {host}:{port}...")
     # Set up SSH connection
     c = paramiko.SSHClient()
@@ -48,14 +50,14 @@ def connect_ssh(host, port, soniccore_user="", soniccore_pass="", sonicos_user="
     # Start an interactive shell
     c_channel = c.invoke_shell()
 
-    if a.verbose:
-        print(f"{generate_timestamp()}: DEBUG: Created channel...")
+    # if verbose:
+    #     print(f"{generate_timestamp()}: DEBUG: Created channel...")
 
     # Get login SSH output.
     authentication_output = get_command_results(c_channel)
 
-    if a.verbose:
-        print(f"{generate_timestamp()}: DEBUG: \n->{authentication_output}<-\n")
+    # if verbose:
+    #     print(f"{generate_timestamp()}: DEBUG: \nSTART->{authentication_output}<-END\n")
 
     # Check if there was an authentication failure.
     if 'Password:' in authentication_output[-20:] and '\n' in authentication_output[-1]:
@@ -192,7 +194,7 @@ def get_command_results(channel):
                 rb_cmd = rbuffer.split('\n')[0]
                 rb_prompt = rbuffer.split('\n')[-1]
                 print(f"{generate_timestamp()}: WARNING: Read only --> '{rb_prompt} {rb_cmd}'")
-                if a.verbose:
+                if verbose:
                     print(f"{generate_timestamp()}: DEBUG: See details below. Review the saved SSH session output for more context. Use CTRL+C to quit.")
                     # print(Panel(style_cli_buffer(rbuffer), title="DEBUG: Command Sent and Warning/Error Response"))
                     print("\n-----")
@@ -361,7 +363,7 @@ def get_command_results(channel):
 
         # Handle GEN5 prompts. Checks for a prompt at the end of the buffer.
         if len(rbuffer) > 0 and (rbuffer[-1] == '>'):  # Got a prompt
-            if a.verbose:
+            if verbose:
                 print(f"{generate_timestamp()}: GEN5 '>' prompt[/]")
             break
 
@@ -524,7 +526,7 @@ def get_command_results(channel):
             print(rbuffer.rstrip(":")[-1000:], msg)
             print("------")
 
-            if a.verbose:
+            if verbose:
                 print(f"{generate_timestamp()}: DEBUG: Unmodified buffer:\n{rbuffer}\n")
 
             # print("Trying to recover from the error... (before returning the error)")
@@ -609,9 +611,9 @@ def send_cmd(shell, data, output_file='', silent=False, get_cmd_response=True):
             output_file = None
 
         if output_file:
-            print(f"{generate_timestamp()}: Sending '{data}' --> {output_file}")
+            print(f"{generate_timestamp()}: Sending '{data.strip()}' --> {output_file}")
         else:
-            print(f"{generate_timestamp()}: Sending '{data}'")
+            print(f"{generate_timestamp()}: Sending '{data.strip()}'")
 
     # Send the command
     shell.send(data)
