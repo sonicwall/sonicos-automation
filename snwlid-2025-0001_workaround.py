@@ -19,7 +19,7 @@ import common.constants as constants
 
 
 # Argument parser
-arg_description = """Temporary workaround/mitigation for SNWLID-2025-0001.
+arg_description = """Workaround/mitigation for SNWLID-2025-0001.
 This tool automates the task of deleting domain-associated users, re-creating LDAP server entries, and modifying the SSLVPN User Domain.
 Please refer to the README for more detailed help."""
 args = get_parser(arg_set="snwlid-2025-0001", description=arg_description, parse=False)
@@ -324,7 +324,7 @@ def routine(fw):
 
 if __name__ == "__main__":
     banner_info = [
-        "       --  Temporary workaround/mitigation for SNWLID-2025-0001  --\n",
+        "       --  Workaround/mitigation for SNWLID-2025-0001  --\n",
         "This tool automates the following tasks:",
         " - Optionally exporting settings (-es argument) and a TSR (-etsr argument) prior to making changes.",
         " - Deleting domain-associated users (use the -du argument to enable this).",
@@ -332,6 +332,7 @@ if __name__ == "__main__":
         "   - We strongly recommend deleting the domain-associated local users as recommended in the PSIRT Advisory.",
         " - Re-creating LDAP server entries with userPrincipalName replaced by sAMAccountName",
         "   - Optionally restoring userPrincipalName if requested with the '-rupn' argument",
+        "   - We recommend restoring the qualified login name attribute to 'userPrincipalName' after applying a firmware update with the fix. ",
         " - Modifying the SSLVPN User Domain (if needed)",
         "Refer to the README for more detailed help.",
         "Visit https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2025-0001 for the latest information.",
