@@ -332,14 +332,12 @@ if __name__ == "__main__":
         "   - We strongly recommend deleting the domain-associated local users as recommended in the PSIRT Advisory.",
         " - Re-creating LDAP server entries with userPrincipalName replaced by sAMAccountName",
         "   - Optionally restoring userPrincipalName if requested with the '-rupn' argument",
-        "   - We recommend restoring the qualified login name attribute to 'userPrincipalName' after applying a firmware update with the fix. ",
         " - Modifying the SSLVPN User Domain (if needed)",
         "Refer to the README for more detailed help.",
         "Visit https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2025-0001 for the latest information.",
         "\n\nIMPORTANT NOTES:",
         " - This script will reboot the firewall.",
         " - The only change made to the LDAP server entries is replacing userPrincipalName with sAMAccountName.",
-        "    We recommend undoing that change after upgrading to a firmware version that addresses SNWLID-2025-0001.",
     ]
     print_banner(info=banner_info)
 
