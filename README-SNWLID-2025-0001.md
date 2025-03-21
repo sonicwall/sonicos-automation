@@ -4,7 +4,7 @@
 
 ### Overview
 
-The purpose of this script is to automate the temporary workaround/mitigation for [SNWLID-2025-0001](https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2025-0001).
+The purpose of this script is to automate the workaround/mitigation for [SNWLID-2025-0001](https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2025-0001).
 
 This script can be run against a single target firewall. The script will prompt for the management credentials.
 
@@ -19,15 +19,17 @@ Exported files are saved inside a timestamped directory inside the `runs` direct
 ### Important Note
 This workaround disables login using the UserPrincipalName and may also change the SSLVPN User Domain setting.
 This may be disruptive to NetExtender and Mobile Connect users as they will need to update their connection profiles accordingly.
-This script provides a temporary workaround/mitigation that can be used as a stopgap until you have a new firmware that includes a fix.
+This script provides a workaround/mitigation that can be used as a stopgap until you have a new firmware version that includes a fix.
 Please refer to https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2025-0001 for the latest information.
-It is recommended to restore the qualified login name to userPrincipalName after applying a firmware update that includes the fix.
+
+**We recommended restoring the qualified login name to "userPrincipalName" after applying a firmware update that includes the fix.**
 
 
 ### Features
 - Downloads Tech Support Report (TSR) and exports the preferences (EXP).
 - Exports the existing LDAP server configuration. Saves the configuration to a JSON file.
-  - Changes the qualified login name attribute to sAMAccountName to prevent login using the UserPrincipalName.
+  - Changes the qualified login name attribute to "sAMAccountName" to prevent login using the UserPrincipalName.
+  - We recommend changing the qualified login name attribute back to "userPrincipalName" after applying a firmware update that includes the fix.
 - Deletes the existing LDAP servers from SonicOS.
 - Retrieves the list of local users from SonicOS. This option is disabled by default as a safety measure. Use the -du argument to enable this feature.
   - Deletes all domain-associated local users from SonicOS.
