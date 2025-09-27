@@ -28,6 +28,8 @@ from sonicos.api import (
     download_tsr,
     export_preferences,
     download_audit_log,
+    upload_firmware,
+    boot_firmware,
     get_ssh_session,
     get_users_ssh,
     force_password_change_ssh
@@ -43,7 +45,9 @@ from sonicos.api2 import Login
 class Firewall:
     def __init__(self, url, username, password, sshport="22"):
         self.url = url.rstrip("/")
-        self.api_base = f"{url}/api/sonicos/"
+        if "http://" not in self.url or "https://" not in self.url:
+            self.url = f"https://{self.url}"
+        self.api_base = f"{self.url}/api/sonicos/"
         self.host = url.split("//")[-1].split(":")[0]
         if sshport:
             self.ssh_port = str(sshport)
@@ -182,6 +186,33 @@ class Firewall:
         elif self.gen == 7 or self.gen == 8:
             url = self.api_base.split("/api/sonicos/")[0]
             return export_preferences(fw=url, session=self.session, filepath=filepath, firewall_generation=self.gen)
+
+    def upload_firmware(self, filepath):
+        """
+        Uploads the firmware file to the firewall.
+        :param filepath: Path to the firmware file.
+        :return: True if successful, False otherwise.
+        """
+        url = self.api_base.split("/api/sonicos/")[0]
+        if self.gen == 5 or self.gen == 6:
+            print("Not implemented.")
+            return False
+        elif self.gen == 7 or self.gen == 8:
+            url = self.api_base.split("/api/sonicos/")[0]
+            return upload_firmware(fw=url, session=self.session, filepath=filepath, firewall_generation=self.gen)
+
+    def boot_uploaded_firmware(self):
+        """
+        Boots the uploaded firmware on the firewall.
+        :param uploaded: If True, the firmware has been uploaded and is ready to be booted.
+        :return: True if successful, False otherwise.
+        """
+        url = self.api_base.split("/api/sonicos/")[0]
+        if self.gen == 5 or self.gen == 6:
+            print("Not implemented.")
+            return False
+        elif self.gen == 7 or self.gen == 8:
+            return boot_firmware(fw=url, session=self.session, firewall_generation=self.gen)
 
     def wait_for_reboot(self, timeout=480):
         print(f"{generate_timestamp()}: INFO: Waiting for the firewall to come back online.")

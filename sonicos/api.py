@@ -395,6 +395,7 @@ def get_request(fw, session, api_path):
 		print(f"{generate_timestamp()}: Keyboard interrupt detected. Exiting...")
 		exit()
 	except requests.exceptions.RequestException as e:
+		print(e)
 		return {}
 	print_response_info(resp, start_time=start_time)
 	try:
@@ -736,7 +737,7 @@ def upload_firmware(fw, session, filepath, firewall_generation=None, timeout=180
 		filename = filepath.split("/")[-1]
 
 		# Opens the file, reads it into memory, and uploads it to the firewall.
-		with open(filename, 'rb') as file:
+		with open(filepath, 'rb') as file:
 			endpoint = '/api/sonicos/import/firmware'
 			if firewall_generation == 6:
 				endpoint = '/upload.cgi?safeMode=1'
