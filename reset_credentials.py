@@ -3,21 +3,16 @@ import json
 import csv
 from dataclasses import dataclass
 from typing import Optional, List
-from os import listdir, path, mkdir
+from os import path, mkdir
 from time import sleep
 from getpass import getpass
 from common.banner import print_banner
 from common.utils import (
     generate_timestamp,
-    tprint,
     write_to_file,
 )
-from common.notice import notice_check
 from common.arguments import get_parser
 from sonicos.api import (
-    create_admin_session,
-    create_admin_session_chap,
-    hide_certificate_warnings,
     get_request,
     post_request,
     put_request,
@@ -32,15 +27,12 @@ from sonicos.api import (
     download_tsr,
     download_tracelog,
     export_preferences,
-    download_audit_log,
     get_ssh_session,
     get_users_ssh,
     force_password_change_ssh,
 )
 from sonicos.utils import (
     ensure_admin_api_session,
-    firmware_upgrade_prompt,
-    wait_for_upgrade
 )
 import common.constants as constants
 from sonicos.api2 import Login
@@ -219,17 +211,25 @@ a = get_parser(arg_set="remediation", description=arg_description)
 routine_results = {}
 
 
-# The routine function will get the list of users, update the force password reset flag, and commit the changes.
-def routine(target: FirewallTarget, target_numbers=None, **kwargs):
-    """
-    Main routine.
+# Helper Functions for Routine Breakdown
+# =====================================
 
-    Args:
-        target (FirewallTarget): The firewall target configuration object
-        target_numbers (tuple): Current/total target numbers (default: None)
-        **kwargs: Additional optional parameters that can override target settings
-    """
-    # Extract parameters from the target object, with kwargs as overrides
+def update_routine_results(routine_results: dict, firewall: str, section: str, data: dict):
+    """Centralized function to update routine results dictionary."""
+    if firewall not in routine_results:
+        routine_results[firewall] = {}
+
+    if isinstance(data, dict):
+        routine_results[firewall].update(data)
+    else:
+        routine_results[firewall][section] = data
+
+
+def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, **kwargs):
+    """Print verbose output details if verbose mode is enabled."""
+    if not args.verbose:
+        return
+
     firewall = target.firewall
     username = kwargs.get('username', target.username)
     password = kwargs.get('password', target.password)
@@ -240,89 +240,62 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
     upgrade_firmware = kwargs.get('upgrade_firmware', target.upgrade_firmware)
     unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
 
-    # This resets the auto-enabled SonicOS API flag for each new firewall.
-    if constants.get_autoenabled_sonicos_api() is True:
-        constants.set_autoenabled_sonicos_api(False)
+    api_base = f"https://{firewall}" if "https://" not in firewall else firewall
 
-    if "https://" in firewall:
-        api_base = f"{firewall}"
-    else:
-        api_base = f"https://{firewall}"
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: --- Routine Details ---")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Verbose output enabled.")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Firewall: {firewall}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Administrative username: {username}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Administrative password length: {len(password)}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: API Base URL: {api_base}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: SSH Management Port: {sshport}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enable TOTP on 'SSLVPN Services' group: {enable_totp}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enable Botnet Filtering service: {enable_botnet_filtering}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Temporary Password for users: {temp_password}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Firmware upgrade file: {upgrade_firmware}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbind TOTP from all users: {unbind_totp}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: ----------------------")
 
+
+def initialize_session(target: FirewallTarget, target_numbers: tuple, **kwargs):
+    """Initialize API session with the firewall."""
+    firewall = target.firewall
+    username = kwargs.get('username', target.username)
+    password = kwargs.get('password', target.password)
+    sshport = kwargs.get('sshport', target.sshport)
+
+    api_base = f"https://{firewall}" if "https://" not in firewall else firewall
+
+    # Prompt for credentials if missing
     while username is None or username == "":
         username = input(f"Enter the username for {firewall}: ")
 
     while password is None or password == "":
         password = getpass(f"Enter the password for {username}@{firewall}: ")
 
-    if a.verbose:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: --- Routine Details ---")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Verbose output enabled.")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Firewall: {firewall}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Administrative username: {username}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Administrative password length: {len(password)}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: API Base URL: {api_base}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: SSH Management Port: {sshport}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enable TOTP on 'SSLVPN Services' group: {enable_totp}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enable Botnet Filtering service: {enable_botnet_filtering}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Temporary Password for users: {temp_password}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Firmware upgrade file: {upgrade_firmware}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbind TOTP from all users: {unbind_totp}")
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: ----------------------")
-
-    if sshport == "no":
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: SSH logic is disabled.")
-        routine_results[firewall]['ssh_logic_disabled'] = True
-
-    routine_results[firewall]['api_base'] = api_base
-    routine_results[firewall]['api_session_successful'] = False
-    routine_results[firewall]['firewall_generation'] = None
-    routine_results[firewall]['firmware_version'] = None
-    routine_results[firewall]['device_model'] = None
-    routine_results[firewall]['serial_number'] = None
-    if upgrade_firmware != "":
-        routine_results[firewall]['firmware_upgrade_requested'] = False
-        routine_results[firewall]['firmware_image'] = upgrade_firmware
-
     try:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Running session functions...")
-        api_session = None
-        return_msg = None
         api_session, return_msg = ensure_admin_api_session(api_base, api_user=username, api_password=password, sshport=sshport)
 
         if api_session:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Session established with {api_base}.")
-        elif api_session is None or api_session is False:
+        else:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Could not create session with {api_base}.")
+
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Fetched session: {'yes' if api_session else 'no'} | {return_msg}")
+
+        return api_session, return_msg, api_base, username, password
+
     except KeyboardInterrupt:
         print(f"\nStopped!")
         exit()
     except Exception as e:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error creating admin session: {e}")
-        return False, f"Error creating admin session: {e}"
+        return None, f"Error creating admin session: {e}", api_base, username, password
 
-    if api_session is None or api_session is False:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: Unable to create an admin session. Return message: {return_msg}")
 
-        # Sorting the keys in the results dictionary for consistency and readability.
-        routine_results[firewall] = dict(sorted(routine_results[firewall].items()))
-
-        # Convert the results dictionary/json to string.
-        results_str = json.dumps(routine_results[firewall], indent=4)
-        results_str = "\n" + results_str + "\n"
-
-        # Write the results to a file
-        write_to_file(results_str, filename=f"{constants.START_TIMESTAMP_FOLDER}/{target_numbers[0]}results.txt")
-
-        return False, return_msg
-
-    if isinstance(api_session, Login):
-        routine_results[firewall]['api_session_successful'] = False
-        routine_results[firewall]['alternate_session_successful'] = True
-    else:
-        routine_results[firewall]['api_session_successful'] = True
-
+def gather_firewall_info(api_session, api_base: str, target_numbers: tuple):
+    """Gather firewall information including version, model, serial number, and HA status."""
     firewall_generation = None
     firmware_version = None
     device_model = None
@@ -331,7 +304,8 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
     ha_primary_state = None
     ha_secondary_state = None
     ha_uptime = None
-    # Determine firewall generation.
+
+    # Determine firewall generation and get basic info
     if isinstance(api_session, Login):
         try:
             info = api_session.get_firewall_info()
@@ -351,7 +325,7 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
             exit()
         except Exception as e:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting version information: {e}")
-
+            return None, f"Error getting version information: {e}"
     else:
         try:
             info = get_request(api_base, api_session, '/api/sonicos/version')
@@ -369,15 +343,14 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
                     constants.set_fw_generation(6)
             else:
                 raise Exception("Unable to determine the firmware version.")
-
         except KeyboardInterrupt:
             print(f"\nStopped!")
             exit()
         except Exception as e:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting version information: {e}")
-            # exit()
-            return False, f"Error getting version information: {e}"
+            return None, f"Error getting version information: {e}"
 
+        # Get HA information for non-GEN5 firewalls
         try:
             ha_info = get_request(api_base, api_session, '/api/sonicos/reporting/high-availability')
 
@@ -395,719 +368,667 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
                 ha_secondary_state = ha_secondary_state.upper()
             if ha_uptime:
                 ha_uptime = ha_uptime.upper()
-
         except KeyboardInterrupt:
             print(f"\nStopped!")
             exit()
         except Exception as e:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting HA information: {e}")
-            # exit()
-            return False, f"Error getting HA information: {e}"
+            return None, f"Error getting HA information: {e}"
 
-    routine_results[firewall]['firewall_generation'] = firewall_generation
-    routine_results[firewall]['firmware_version'] = firmware_version
-    routine_results[firewall]['device_model'] = device_model
-    routine_results[firewall]['serial_number'] = serial_number
-    routine_results[firewall]['ha_status'] = ha_status
-    routine_results[firewall]['ha_primary_state'] = ha_primary_state
-    routine_results[firewall]['ha_secondary_state'] = ha_secondary_state
-    routine_results[firewall]['ha_uptime'] = ha_uptime
+    return {
+        'firewall_generation': firewall_generation,
+        'firmware_version': firmware_version,
+        'device_model': device_model,
+        'serial_number': serial_number,
+        'ha_status': ha_status,
+        'ha_primary_state': ha_primary_state,
+        'ha_secondary_state': ha_secondary_state,
+        'ha_uptime': ha_uptime
+    }, None
 
-    # HIGHLIGHT: EXPORT TSR
-    routine_results[firewall]['tsr_downloaded'] = False
-    dm = routine_results[firewall]['device_model'].replace(" ", "")
-    sn = routine_results[firewall]['serial_number']
-    if a.export_tsr:
-        print(f"{generate_timestamp()}: Downloading TSR...")
-        tsr_file_name = f"{dm}-{sn}-tsr.wri"
-        tsr_downloaded = download_tsr(api_base,
-                                      api_session,
-                                      filepath=f"{constants.START_TIMESTAMP_FOLDER}/{tsr_file_name}",
-                                      firewall_generation=firewall_generation)
 
-        if tsr_downloaded:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TSR downloaded to {tsr_file_name}")
-            routine_results[firewall]['tsr_downloaded'] = True
-    else:
+def export_tsr_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict):
+    """Export TSR if enabled in arguments."""
+    result = {'tsr_downloaded': False}
+
+    if not args.export_tsr:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TSR download disabled.")
+        return result
 
-    print()
+    print(f"{generate_timestamp()}: Downloading TSR...")
+    dm = firewall_info['device_model'].replace(" ", "")
+    sn = firewall_info['serial_number']
+    tsr_file_name = f"{dm}-{sn}-tsr.wri"
 
-    # HIGHLIGHT: EXPORT TRACELOGS
-    routine_results[firewall]['trace_logs_downloaded'] = False
-    if a.export_tracelogs:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Downloading trace logs...")
-        tracelog_filename = f"{dm}-{sn}-tracelog-current.txt"
-        trace_logs_downloaded = download_tracelog(api_base,
-                                                  api_session,
-                                                  filepath=f"{constants.START_TIMESTAMP_FOLDER}/{tracelog_filename}",
-                                                  log_selection="current",
-                                                  firewall_generation=firewall_generation)
+    tsr_downloaded = download_tsr(api_base,
+                                  api_session,
+                                  filepath=f"{constants.START_TIMESTAMP_FOLDER}/{tsr_file_name}",
+                                  firewall_generation=firewall_info['firewall_generation'])
 
-        if trace_logs_downloaded:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Trace logs downloaded.")
-            routine_results[firewall]['trace_logs_downloaded'] = True
-    else:
+    if tsr_downloaded:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TSR downloaded to {tsr_file_name}")
+        result['tsr_downloaded'] = True
+
+    return result
+
+
+def export_tracelogs_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict):
+    """Export trace logs if enabled in arguments."""
+    result = {'trace_logs_downloaded': False}
+
+    if not args.export_tracelogs:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Trace log download disabled.")
+        return result
 
-    print()
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Downloading trace logs...")
+    dm = firewall_info['device_model'].replace(" ", "")
+    sn = firewall_info['serial_number']
+    tracelog_filename = f"{dm}-{sn}-tracelog-current.txt"
 
-    # HIGHLIGHT: EXPORT SETTINGS
-    routine_results[firewall]['settings_exported'] = False
-    if a.export_settings:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Exporting settings...")
-        prefs_file_name = f"{dm}-{sn}-prefs.exp"
+    trace_logs_downloaded = download_tracelog(api_base,
+                                              api_session,
+                                              filepath=f"{constants.START_TIMESTAMP_FOLDER}/{tracelog_filename}",
+                                              log_selection="current",
+                                              firewall_generation=firewall_info['firewall_generation'])
 
-        prefs_downloaded = False
-        if firewall_generation == 6:
-            if a.verbose:
-                verbose_int = 1
-            else:
-                verbose_int = 0
+    if trace_logs_downloaded:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Trace logs downloaded.")
+        result['trace_logs_downloaded'] = True
 
-            alternate_session = Login(
-                # ipaddress=firewall,
-                ipaddress=api_base,
-                userid=username,
-                passwd=password,
-                admin_mode="config",
-                http_type="https",
-                brwsr_cache=0,
-                verbose=verbose_int,
-                sessIdRef=0
-            )
+    return result
 
-            logged_in, rmsg = alternate_session.login2()
-            if logged_in == 1:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Successfully logged in to the firewall for settings export.")
-                prefs_downloaded = export_preferences(api_base,
-                                                      alternate_session,
-                                                      filepath=f"{constants.START_TIMESTAMP_FOLDER}/{prefs_file_name}",
-                                                      firewall_generation=firewall_generation)
 
-        # GEN5 will have its session already established. GEN7 will have its session established.
-        else:
+def export_settings_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict, username: str, password: str):
+    """Export settings if enabled in arguments."""
+    result = {'settings_exported': False}
+
+    if not args.export_settings:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Settings export disabled.")
+        return result
+
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Exporting settings...")
+    dm = firewall_info['device_model'].replace(" ", "")
+    sn = firewall_info['serial_number']
+    prefs_file_name = f"{dm}-{sn}-prefs.exp"
+
+    prefs_downloaded = False
+    firewall_generation = firewall_info['firewall_generation']
+
+    if firewall_generation == 6:
+        verbose_int = 1 if args.verbose else 0
+
+        alternate_session = Login(
+            ipaddress=api_base,
+            userid=username,
+            passwd=password,
+            admin_mode="config",
+            http_type="https",
+            brwsr_cache=0,
+            verbose=verbose_int,
+            sessIdRef=0
+        )
+
+        logged_in, rmsg = alternate_session.login2()
+        if logged_in == 1:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Successfully logged in to the firewall for settings export.")
             prefs_downloaded = export_preferences(api_base,
-                                                  api_session,
+                                                  alternate_session,
                                                   filepath=f"{constants.START_TIMESTAMP_FOLDER}/{prefs_file_name}",
                                                   firewall_generation=firewall_generation)
-        if prefs_downloaded:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Settings exported.")
-            routine_results[firewall]['settings_exported'] = True
     else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Settings export disabled.")
+        # GEN5 and GEN7 use existing session
+        prefs_downloaded = export_preferences(api_base,
+                                              api_session,
+                                              filepath=f"{constants.START_TIMESTAMP_FOLDER}/{prefs_file_name}",
+                                              firewall_generation=firewall_generation)
 
-    print()
+    if prefs_downloaded:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Settings exported.")
+        result['settings_exported'] = True
 
-    # HIGHLIGHT: HIGH AVAILABILITY CHECK
-    # ----------------------------------------------------------------------------------
-    # Checks the High Availability status and will only upgrade if the device is the ACTIVE PRIMARY.
+    return result
+
+
+def check_ha_upgrade_eligibility(ha_status: str, ha_primary_state: str, ha_secondary_state: str, ha_uptime: str, target_numbers: tuple):
+    """Check if the firewall is eligible for upgrade operations based on HA status."""
     if not ha_status:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status not available. Skipping upgrade.")
-    if ha_status:
-        # When the secondary shows active or primary shows standby, the upgrade is skipped.
-        if ha_status == "SECONDARY ACTIVE" or ha_status == "PRIMARY STANDBY":
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA Status: {ha_status} | HA Primary State: {ha_primary_state} | HA Secondary State: {ha_secondary_state} | Skipping upgrade.")
-            return "HA_SECONDARY_ACTIVE", f"HA status: {ha_status} | HA Primary State: {ha_primary_state} | HA Secondary State: {ha_secondary_state} | Skipping upgrade."
+        return False, "HA status not available"
 
-        # When HA is disabled, the fw shows Primary Disabled and active uptime will show ha is disabled, so we upgrade.
-        # The device isn't using HA so it is the primary.
-        elif ha_status == "PRIMARY DISABLED" or ha_uptime == "HIGH AVAILABILITY DISABLED":
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status: {ha_status} | HA Primary State: {ha_primary_state} | HA Secondary State: {ha_secondary_state} | Proceeding with upgrade.")
+    # When the secondary shows active or primary shows standby, the upgrade is skipped
+    if ha_status == "SECONDARY ACTIVE" or ha_status == "PRIMARY STANDBY":
+        msg = f"HA Status: {ha_status} | HA Primary State: {ha_primary_state} | HA Secondary State: {ha_secondary_state} | Skipping upgrade."
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {msg}")
+        return False, msg
 
-        # When the primary is active and the secondary is standby, the upgrade is allowed.
-        elif ha_status == "PRIMARY ACTIVE":
-            if ha_primary_state == "ACTIVE" and ha_secondary_state == "STANDBY":
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status: {ha_status} | {ha_primary_state} | {ha_secondary_state}. Proceeding with upgrade.")
+    # When HA is disabled, proceed with upgrade
+    elif ha_status == "PRIMARY DISABLED" or ha_uptime == "HIGH AVAILABILITY DISABLED":
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status: {ha_status} | HA Primary State: {ha_primary_state} | HA Secondary State: {ha_secondary_state} | Proceeding with upgrade.")
+        return True, "HA disabled, proceeding"
 
-            # When the primary is active, but the secondary is not standby, the upgrade is skipped.
-            # This is to avoid upgrading when the secondary may be in a state that could cause issues.
-            # We can expect a proper upgrade only when the pair is in ACTIVE/STANDBY state.
-            else:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status: {ha_primary_state} {ha_secondary_state}. Skipping upgrade.")
-                return "HA_NOT_PRIMARY", f"HA status: {ha_status} | P:{ha_primary_state} | S:{ha_secondary_state}. Skipping upgrade."
-    # ----------------------------------------------------------------------------------
-
-    print()
-
-    # HIGHLIGHT: GET USERS
-    # ----------------------------------------------------------------------------------
-    routine_results[firewall]['got_users'] = False
-
-    users = None
-    if a.force_password_change:
-        try:
-            if firewall_generation == 7:
-                users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
-            elif firewall_generation == 6:
-                users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
-                # TODO: When unable to get users via SSH management, users is None.
-            elif firewall_generation == 5:
-                users = get_users_ssh(firewall, sshport, username, password)
-
-                if users:
-                    print(f"{generate_timestamp()}: Users retrieved from SSH.")
-                else:
-                    print(f"{generate_timestamp()}: Error getting users from SSH.")
-        except KeyboardInterrupt:
-            print(f"\nStopped!")
-            exit()
-        except Exception as e:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users from API: {e}")
-            exit()
-
-        if isinstance(users, bytes):
-            # There may be expired users pulled from a GEN6 firewall. Expired users will have "expired" in the JSON
-            # unquoted and will cause a JSON error.
-            # Replaces b": expired\n" with b": \"expired\"\n" to make the JSON valid.
-            users = users.replace(b': expired', b': "expired"')
-
-            # Converts the bytes to a string and then to a JSON object.
-            users = json.loads(users.decode('utf-8'))
-
-        if isinstance(users, dict):
-            if users.get('user', {}).get('local', {}).get('user', None) is None:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: No local users found.")
-                return "NO_LOCAL_USERS", f"No local users found."
-
-        if isinstance(users, bool):
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: Unable to get users.")
-            return "UNABLE_TO_GET_USERS", f"Unable to get users."
-
-        routine_results[firewall]['got_users'] = True
-        routine_results[firewall]['total_user_count'] = len(users['user']['local']['user'])
-        routine_results[firewall]['users'] = []
-
-        # Update the force password reset flag
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Updating the force password reset flag for all local users...")
-        if temp_password != "":
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Passwords will be reset to '{temp_password}'")
-
-        # Create an SSH session for GEN5 firewalls.
-        ssh_session = None
-        ssh_connection = None
-        if firewall_generation == 5:
-            ssh_session, ssh_connection = get_ssh_session(firewall, sshport, username, password)
-
-            if not ssh_session:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error creating SSH session.")
-                return False, f"Error creating SSH session."
-
-        # TODO: Maybe add a try/except here or use .get() to avoid possible keyerrors.
-        for usr in users['user']['local']['user']:
-            # Skip these users
-            skip_users = ['All LDAP Users', 'All RADIUS Users']
-            if usr['name'] in skip_users:
-                routine_results[firewall]['users'].append({
-                    "name": usr['name'],
-                    "forced_password_change": False,
-                    "skipped": True,
-                    "reason": "Special user entry",
-                    "commit_successful": None
-                })
-                continue
-
-            # Skipping expired users.
-            # GEN6: usr['account_lifetime']['lifetime'] is "expired"
-            # GEN7: usr['account_lifetime']['expired'] is True
-            if (
-                    usr.get('account_lifetime', {}).get('lifetime', "") == "expired" or
-                    usr.get('account_lifetime', {}).get('expired', False) is True
-            ):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping {usr['name']} (expired user)")
-                routine_results[firewall]['users'].append({
-                    "name": usr['name'],
-                    "forced_password_change": False,
-                    "skipped": True,
-                    "reason": "Expired user",
-                    "commit_successful": None
-                })
-                continue
-
-            if firewall_generation == 7:
-                # Domain users have a domain key.
-                # Local users and users associated with any domain do not have a domain key.
-                if usr.get('domain', None) is not None:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: GEN7: Skipping {usr['name']} (domain user)")
-                    routine_results[firewall]['users'].append({
-                        "name": usr['name'],
-                        "forced_password_change": False,
-                        "skipped": True,
-                        "reason": "Domain user",
-                        "domain": usr.get('domain', ''),
-                        "commit_successful": None
-                    })
-                    if a.verbose:
-                        print(usr)
-                    continue
-
-            if firewall_generation == 6:
-                # Skip domain users, imported LDAP users, etc.
-                # Domain users have a domain name.
-                # Users associated with a domain but without a domain component will have a domain name of 'any'.
-                if usr.get('domain', {}).get('name', None) is not None:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: GEN6: Skipping {usr['name']} (domain user)")
-                    routine_results[firewall]['users'].append({
-                        "name": usr['name'],
-                        "forced_password_change": False,
-                        "skipped": True,
-                        "reason": "Domain user",
-                        "domain": usr.get('domain', {}).get('name', ''),
-                        "commit_successful": None
-                    })
-                    if a.verbose:
-                        print(usr)
-                    continue
-
-            # Update the force password reset flag
-            usr['force_password_change'] = True
-
-            # Update the password if a temporary password is set.
-            if temp_password != "":
-                if firewall_generation == 7:
-                    usr['password'] = temp_password
-                elif firewall_generation == 6:
-                    usr['password']["pwd"] = temp_password
-                elif firewall_generation == 5:
-                    usr['password'] = temp_password
-
-            uname = usr['name']
-            uuid = usr['uuid']
-
-            routine_result_temp = {
-                "name": usr['name'],
-                "forced_password_change": True,
-                "skipped": False,
-                "reason": None,
-                "user_update_successful": False,
-                "commit_successful": False
-            }
-
-            if not firewall_generation == 5:
-                print(f"\nUpdating '{uname}'", end='')
-            else:
-                print(f"\nUpdating '{uname}'")
-
-            # Creates the expected JSON structure
-            data_structure = {
-                "user": {
-                    "local": {
-                        "user": [
-                            usr
-                        ]
-                    }
-                }
-            }
-
-            # Update the user
-            update_resp = {'status': {'success': False}}  # Initialize with default
-            if firewall_generation == 7:
-                update_resp = patch_request(api_base,
-                                            api_session,
-                                            api_path=f"/api/sonicos/user/local/users/uuid/{uuid}",
-                                            data=data_structure)
-            elif firewall_generation == 6:
-                update_resp = put_request(api_base,
-                                          api_session,
-                                          api_path=f"/api/sonicos/user/local/user/uuid/{uuid}",
-                                          data=data_structure)
-            elif firewall_generation == 5:
-                update_resp = force_password_change_ssh(ssh_session,
-                                                        ssh_connection,
-                                                        data=usr)
-
-            if update_resp['status']['success'] is False:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error updating user: {uname}")
-                input("Press Enter to continue or CTRL+C to exit.")
-
-            routine_result_temp['user_update_successful'] = True
-
-            # Commit the changes. GEN5 commit was already done. Keep that SSH session open.
-            if not firewall_generation == 5:
-                commit_pending(api_base, api_session)
-            routine_result_temp['commit_successful'] = True
-
-            routine_results[firewall]['users'].append(routine_result_temp)
-            sleep(1)
-            print()
-
-            # End of the user loop
-    else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Force password change logic is disabled. Enable it with -fpc.")
-        routine_results[firewall]['force_password_change_disabled'] = True
-    # ----------------------------------------------------------------------------------
-
-    # HIGHLIGHT: INDEPENDENT TOTP UNBIND
-    # ----------------------------------------------------------------------------------
-    # This section handles TOTP unbinding independently of force password change
-    routine_results[firewall]['totp_unbind_attempted'] = False
-    routine_results[firewall]['totp_unbind_successful_count'] = 0
-    routine_results[firewall]['totp_unbind_failed_count'] = 0
-    routine_results[firewall]['totp_unbind_results'] = []
-
-    if unbind_totp:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Starting TOTP unbind process for all local users...")
-        routine_results[firewall]['totp_unbind_attempted'] = True
-
-        # Skip TOTP unbind for GEN5 firewalls as they don't support TOTP
-        if firewall_generation == 5:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind skipped - GEN5 firewalls do not support TOTP.")
-            routine_results[firewall]['totp_unbind_gen5_skipped'] = True
+    # When the primary is active and the secondary is standby, allow upgrade
+    elif ha_status == "PRIMARY ACTIVE":
+        if ha_primary_state == "ACTIVE" and ha_secondary_state == "STANDBY":
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status: {ha_status} | {ha_primary_state} | {ha_secondary_state}. Proceeding with upgrade.")
+            return True, "Primary active with standby secondary"
         else:
-            # Get users for TOTP unbind if not already retrieved
-            totp_users = users
-            if totp_users is None:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Retrieving users for TOTP unbind...")
-                try:
-                    if firewall_generation == 7:
-                        totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
-                    elif firewall_generation == 6:
-                        totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
-                except KeyboardInterrupt:
-                    print(f"\nStopped!")
-                    exit()
-                except Exception as e:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users for TOTP unbind: {e}")
-                    routine_results[firewall]['totp_unbind_get_users_error'] = str(e)
-                    totp_users = None
+            msg = f"HA status: {ha_status} | P:{ha_primary_state} | S:{ha_secondary_state}. Skipping upgrade."
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {msg}")
+            return False, msg
 
-                # Handle bytes response and JSON parsing
-                if isinstance(totp_users, bytes):
-                    totp_users = totp_users.replace(b': expired', b': "expired"')
-                    totp_users = json.loads(totp_users.decode('utf-8'))
+    return False, f"Unknown HA status: {ha_status}"
 
-            # Process TOTP unbind if we have users
-            if totp_users and isinstance(totp_users, dict):
-                if totp_users.get('user', {}).get('local', {}).get('user', None) is not None:
-                    users_list = totp_users['user']['local']['user']
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {len(users_list)} users for TOTP unbind processing...")
 
-                    for usr in users_list:
-                        # Skip special users
-                        skip_users = ['All LDAP Users', 'All RADIUS Users']
-                        if usr['name'] in skip_users:
-                            routine_results[firewall]['totp_unbind_results'].append({
-                                "name": usr['name'],
-                                "totp_unbound": False,
-                                "skipped": True,
-                                "reason": "Special user entry"
-                            })
-                            continue
+def get_local_users(api_session, api_base: str, firewall_generation: int, firewall: str, sshport: str, username: str, password: str, target_numbers: tuple):
+    """Retrieve local users from the firewall."""
+    users = None
 
-                        # Skip expired users
-                        if (usr.get('account_lifetime', {}).get('lifetime', "") == "expired" or
-                            usr.get('account_lifetime', {}).get('expired', False) is True):
-                            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping TOTP unbind for {usr['name']} (expired user)")
-                            routine_results[firewall]['totp_unbind_results'].append({
-                                "name": usr['name'],
-                                "totp_unbound": False,
-                                "skipped": True,
-                                "reason": "Expired user"
-                            })
-                            continue
+    try:
+        if firewall_generation == 7:
+            users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+        elif firewall_generation == 6:
+            users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+        elif firewall_generation == 5:
+            users = get_users_ssh(firewall, sshport, username, password)
 
-                        # Skip domain users
-                        is_domain_user = False
-                        if firewall_generation == 7:
-                            is_domain_user = usr.get('domain', None) is not None
-                        elif firewall_generation == 6:
-                            is_domain_user = usr.get('domain', {}).get('name', None) is not None
-
-                        if is_domain_user:
-                            domain_name = usr.get('domain', '') if firewall_generation == 7 else usr.get('domain', {}).get('name', '')
-                            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping TOTP unbind for {usr['name']} (domain user: {domain_name})")
-                            routine_results[firewall]['totp_unbind_results'].append({
-                                "name": usr['name'],
-                                "totp_unbound": False,
-                                "skipped": True,
-                                "reason": "Domain user",
-                                "domain": domain_name
-                            })
-                            continue
-
-                        # Perform TOTP unbind for this user
-                        uname = usr['name']
-                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbinding TOTP for user '{uname}'...")
-
-                        totp_unbound = post_request(api_base,
-                                                    api_session,
-                                                    data=None,
-                                                    api_path=f"/api/sonicos/user/local/unbind-totp-key/{uname}")
-
-                        if totp_unbound:
-                            result = totp_unbound.get('status', {}).get('info', [{}])[-1].get('message', 'No message returned.')
-                            success = result.lower() == "changes made."
-                            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind for user '{uname}' -> {result}")
-
-                            routine_results[firewall]['totp_unbind_results'].append({
-                                "name": uname,
-                                "totp_unbound": success,
-                                "skipped": False,
-                                "reason": None,
-                                "api_response": result
-                            })
-
-                            if success:
-                                routine_results[firewall]['totp_unbind_successful_count'] += 1
-                            else:
-                                routine_results[firewall]['totp_unbind_failed_count'] += 1
-                        else:
-                            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error unbinding TOTP for user '{uname}' - no response from API.")
-                            routine_results[firewall]['totp_unbind_results'].append({
-                                "name": uname,
-                                "totp_unbound": False,
-                                "skipped": False,
-                                "reason": "API error - no response",
-                                "api_response": None
-                            })
-                            routine_results[firewall]['totp_unbind_failed_count'] += 1
-
-                    # Commit changes after all TOTP unbinds
-                    if routine_results[firewall]['totp_unbind_successful_count'] > 0:
-                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Committing TOTP unbind changes...")
-                        commit_pending(api_base, api_session)
-
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind complete - {routine_results[firewall]['totp_unbind_successful_count']} successful, {routine_results[firewall]['totp_unbind_failed_count']} failed")
-                else:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No local users found for TOTP unbind.")
-                    routine_results[firewall]['totp_unbind_no_users'] = True
+            if users:
+                print(f"{generate_timestamp()}: Users retrieved from SSH.")
             else:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unable to retrieve users for TOTP unbind.")
-                routine_results[firewall]['totp_unbind_get_users_failed'] = True
-    else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP unbind logic is disabled. Enable it with -ut.")
-        routine_results[firewall]['totp_unbind_disabled'] = True
-    # ----------------------------------------------------------------------------------
+                print(f"{generate_timestamp()}: Error getting users from SSH.")
+    except KeyboardInterrupt:
+        print(f"\nStopped!")
+        exit()
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users from API: {e}")
+        return None
 
-    # The following occurs after the user loop ends.
+    # Handle bytes response and JSON parsing for GEN6
+    if isinstance(users, bytes):
+        users = users.replace(b': expired', b': "expired"')
+        users = json.loads(users.decode('utf-8'))
 
-    # TODO: Things to add.
-    # TODO: Force password change. - need to make sure arguments work as expected.
-    # TODO: Randomize password based on configured temporary password.
-    # TODO: Reset TOTP binding for each user. - done.
-    # TODO: Check LDAP, RADIUS, and TACACS servers. Update the bind password/shared secret.
-    #   New bind password/shared secret is required.
-    # TODO: Check if IPSec VPN is enabled. If so, update the preshared key on all policies.
-    #   New preshared key is required for each policy.
-    # TODO: Get all interfaces. Check for WANs.
-    #   If any are L2TP/PPTP/PPPoE, notify user to update that password.
-    #   If any are WWAN, notify user to update their credentials.
-    # TODO: Check AWS API. If enabled, notify user to update the secret key.
-    # TODO: Check for dynamic DNS services. If enabled, notify user to update the password.
-    # TODO: Check if Clearpass/NAC is enabled. If so, notify user to update the shared secret.
-    # TODO: Check SNMPv3. If enabled, check for users and update the password.
-    # TODO:
-    # TODO:
-    # TODO:
-    # TODO:
-    # TODO:
-    # TODO:
+    # Validate users data
+    if isinstance(users, dict):
+        if users.get('user', {}).get('local', {}).get('user', None) is None:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: No local users found.")
+            return None
+    elif isinstance(users, bool):
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: Unable to get users.")
+        return None
+
+    return users
 
 
-    # HIGHLIGHT: BOTNET FILTERING AND TOTP
-    # ----------------------------------------------------------------------------------
-    # At this point, we will ask the user if they would like to do some extra stuff like enabling botnet filtering or TOTP.
-    routine_results[firewall]['botnet_filtering_licensed'] = None
-    routine_results[firewall]['botnet_filtering_enabled'] = None
+def process_password_changes(users: dict, api_session, api_base: str, temp_password: str, firewall_generation: int,
+                           firewall: str, sshport: str, username: str, password: str, target_numbers: tuple, args):
+    """Process password changes for all eligible local users."""
+    if not users:
+        return []
 
-    routine_results[firewall]['sslvpn_services_totp_enabled'] = None
-    routine_results[firewall]['sslvpn_services_totp_autoenabled'] = None
+    user_results = []
+    users_list = users['user']['local']['user']
 
-    # HIGHLIGHT: BOTNET FILTERING
-    # ----------------------------------------------------------------------------------
-    if enable_botnet_filtering:
-        # Check if Botnet Filtering is licensed and enabled.
-        try:
-            print()
-            botnet_status = check_botnet_status(api_base, api_session, firewall_generation=firewall_generation)
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Updating the force password reset flag for all local users...")
+    if temp_password != "":
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Passwords will be reset to '{temp_password}'")
 
-            if botnet_status["license_status"] == "not_licensed":
-                routine_results[firewall]['botnet_filtering_licensed'] = False
-                routine_results[firewall]['botnet_filtering_autoenabled'] = False
-                msg = botnet_status.get("message", "")
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is not licensed. {msg}")
-                enable_botnet_filtering = False
-            elif botnet_status["license_status"] == "licensed":
-                routine_results[firewall]['botnet_filtering_licensed'] = True
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is licensed.")
+    # Create SSH session for GEN5 firewalls
+    ssh_session = None
+    ssh_connection = None
+    if firewall_generation == 5:
+        ssh_session, ssh_connection = get_ssh_session(firewall, sshport, username, password)
+        if not ssh_session:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error creating SSH session.")
+            return []
 
-            if botnet_status["status"] == "enabled":
-                routine_results[firewall]['botnet_filtering_enabled'] = True
-                routine_results[firewall]['botnet_filtering_autoenabled'] = False
-                enable_botnet_filtering = False
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is enabled.")
-            elif botnet_status["status"] == "disabled":
-                routine_results[firewall]['botnet_filtering_enabled'] = False
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is not enabled.")
+    for usr in users_list:
+        # Skip special users
+        skip_users = ['All LDAP Users', 'All RADIUS Users']
+        if usr['name'] in skip_users:
+            user_results.append({
+                "name": usr['name'],
+                "forced_password_change": False,
+                "skipped": True,
+                "reason": "Special user entry",
+                "commit_successful": None
+            })
+            continue
 
-        except KeyboardInterrupt:
-            print(f"\nStopped!")
-            exit()
-        except Exception as e:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting botnet status (0): {e}")
+        # Skip expired users
+        if (usr.get('account_lifetime', {}).get('lifetime', "") == "expired" or
+            usr.get('account_lifetime', {}).get('expired', False) is True):
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping {usr['name']} (expired user)")
+            user_results.append({
+                "name": usr['name'],
+                "forced_password_change": False,
+                "skipped": True,
+                "reason": "Expired user",
+                "commit_successful": None
+            })
+            continue
 
-        # This is the JSON response from the check_botnet_status function.
-        botnet_status_response = botnet_status['response']
+        # Skip domain users based on generation
+        if firewall_generation == 7 and usr.get('domain', None) is not None:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: GEN7: Skipping {usr['name']} (domain user)")
+            user_results.append({
+                "name": usr['name'],
+                "forced_password_change": False,
+                "skipped": True,
+                "reason": "Domain user",
+                "domain": usr.get('domain', ''),
+                "commit_successful": None
+            })
+            if args.verbose:
+                print(usr)
+            continue
 
-        # The idea is to enable Botnet if configured to do so or if argument is set, but to ask the
-        # user if they want to enable it if licensed but not enabled.
-        if enable_botnet_filtering or (
-                routine_results[firewall]['botnet_filtering_licensed'] and
-                not routine_results[firewall]['botnet_filtering_enabled']
-        ):
-            # If Botnet Filtering is licensed but not enabled, and the argument to enable it is not set.
-            if routine_results[firewall]['botnet_filtering_enabled'] is False:
-                if a.enable_botnet_filtering:
-                    enable_botnet_filtering = True
+        if firewall_generation == 6 and usr.get('domain', {}).get('name', None) is not None:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: GEN6: Skipping {usr['name']} (domain user)")
+            user_results.append({
+                "name": usr['name'],
+                "forced_password_change": False,
+                "skipped": True,
+                "reason": "Domain user",
+                "domain": usr.get('domain', {}).get('name', ''),
+                "commit_successful": None
+            })
+            if args.verbose:
+                print(usr)
+            continue
 
-                # if not enable_botnet_filtering and a.enable_botnet_filtering is False:
-                #     print(f"{generate_timestamp()}: Botnet Filtering is licensed but not enabled. Would you like to enable it?")
-                #     routine_results[firewall]['prompted_to_enable_botnet_filtering'] = True
-                #     enable_botnet = input("Enter 'y' to enable Botnet Filtering or 'n' to skip [y/N]: ")
-                #     if enable_botnet.lower() == 'y' or enable_botnet.lower() == 'yes':
-                #         enable_botnet_filtering = True
+        # Process user password change
+        usr['force_password_change'] = True
 
-            # If Botnet Filtering is licensed but not enabled, and the argument to enable it is set.
-            enable_botnet_resp = {}
-            if (enable_botnet_filtering and routine_results[firewall]['botnet_filtering_enabled'] is False and
-                    routine_results[firewall]['botnet_filtering_licensed'] is True):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enabling Botnet Filtering for all connections.")
-                botnet_status_response['botnet']['logging'] = True
-                try:
-                    if firewall_generation == 7:
-                        # I have not encountered any GEN7 issue with the dynamic list key, so I've left it in.
-                        botnet_status_response['botnet']['block']['connections'] = {'enable': True, 'mode': 'all'}
-                        enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/base',
-                                                         data=botnet_status_response)
-                    elif firewall_generation == 6:
-                        botnet_status_response['botnet']['block']['connections'] = {'all': True}
-                        # print(botnet_status_response)
-
-                        # I noticed some out of bounds errors when including the dynamic_list key in the JSON.
-                        # Since we're enabling Botnet, it is safe to assume the dynamic list was not in use.
-                        botnet_status_response['botnet'].pop('dynamic_list', None)
-                        botnet_status_response['botnet'].pop('exclude', None)
-                        botnet_status_response['botnet'].pop('include', None)
-
-                        enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/global',
-                                                         data=botnet_status_response)
-
-                    elif firewall_generation == 5:
-                        enable_botnet_resp = api_session.enable_botnet_filtering()
-                except KeyboardInterrupt:
-                    print(f"\nStopped!")
-                    exit()
-                except Exception as e:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error enabling Botnet Filtering: {e}")
-
-                if enable_botnet_resp.get('status', {}).get('success', False) is False:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error enabling Botnet Filtering.")
-
-                # Commit the changes.
-                if not firewall_generation == 5:
-                    commit_pending(api_base, api_session)
-                routine_results[firewall]['botnet_filtering_autoenabled'] = True
-            else:
-                routine_results[firewall]['botnet_filtering_autoenabled'] = False
-    else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Botnet Filtering logic is disabled. Enable it with -eb.")
-        routine_results[firewall]['botnet_filtering_disabled'] = True
-    # ----------------------------------------------------------------------------------
-
-    # HIGHLIGHT: TOTP
-    # ----------------------------------------------------------------------------------
-    if enable_totp:
-        # Check if MFA is enabled on the SSLVPN Services group.
-        try:
-            print()
-            # Check the status of TOTP on the SSLVPN Services group on GEN6 and GEN7 firewalls.
-            if firewall_generation != 5:
-                totp_status = check_totp_status(api_base,
-                                                api_session,
-                                                group_name="SSLVPN Services",
-                                                enable_totp=enable_totp,
-                                                firewall_generation=firewall_generation
-                                                )
-            # GEN5 does not support TOTP--only Email-based OTP.
-            # For OTP to work, users' email addresses must be configured for each user.
-            # Because of this, we will not enable OTP on GEN5 even if configured to via CSV or by CLI argument.
+        # Update password if temporary password is set
+        if temp_password != "":
+            if firewall_generation == 7:
+                usr['password'] = temp_password
+            elif firewall_generation == 6:
+                usr['password']["pwd"] = temp_password
             elif firewall_generation == 5:
-                totp_status = {
-                    "status": "disabled",
-                    "mode": "",
-                    "autoenabled": False,
-                    "message": "GEN5 firewalls do not support TOTP. Consider enabling Email-based OTP manually.",
-                    "try_ssh": False
+                usr['password'] = temp_password
+
+        uname = usr['name']
+        uuid = usr['uuid']
+
+        routine_result_temp = {
+            "name": usr['name'],
+            "forced_password_change": True,
+            "skipped": False,
+            "reason": None,
+            "user_update_successful": False,
+            "commit_successful": False
+        }
+
+        if firewall_generation != 5:
+            print(f"\nUpdating '{uname}'", end='')
+        else:
+            print(f"\nUpdating '{uname}'")
+
+        # Create expected JSON structure
+        data_structure = {
+            "user": {
+                "local": {
+                    "user": [usr]
                 }
-                if enable_totp:
-                    print("TOTP is not available on GEN5 firewalls. Only Email-based OTP, which requires an email address configured for each user.")
-                    print("Please consider enabling Email-based OTP manually after configuring an email address for each user.")
+            }
+        }
+
+        # Update the user based on generation
+        update_resp = {'status': {'success': False}}
+        if firewall_generation == 7:
+            update_resp = patch_request(api_base, api_session,
+                                      api_path=f"/api/sonicos/user/local/users/uuid/{uuid}",
+                                      data=data_structure)
+        elif firewall_generation == 6:
+            update_resp = put_request(api_base, api_session,
+                                    api_path=f"/api/sonicos/user/local/user/uuid/{uuid}",
+                                    data=data_structure)
+        elif firewall_generation == 5:
+            update_resp = force_password_change_ssh(ssh_session, ssh_connection, data=usr)
+
+        if update_resp['status']['success'] is False:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error updating user: {uname}")
+            input("Press Enter to continue or CTRL+C to exit.")
+
+        routine_result_temp['user_update_successful'] = True
+
+        # Commit changes (GEN5 already committed via SSH)
+        if firewall_generation != 5:
+            commit_pending(api_base, api_session)
+        routine_result_temp['commit_successful'] = True
+
+        user_results.append(routine_result_temp)
+        sleep(1)
+        print()
+
+    return user_results
 
 
-            if totp_status["status"] == "enabled":
-                routine_results[firewall]['sslvpn_services_totp_enabled'] = True
-                routine_results[firewall]['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
-                routine_results[firewall]['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {totp_status.get('mode', '')} is enabled on the SSLVPN Services group.")
-            elif totp_status["status"] == "disabled":
-                routine_results[firewall]['sslvpn_services_totp_enabled'] = False
-                routine_results[firewall]['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
-                routine_results[firewall]['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
-                routine_results[firewall]['sslvpn_services_totp_error_msg'] = totp_status.get("message", "")
-                if firewall_generation == 5:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {totp_status.get('message', '')}")
-                else:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP/OTP is not enabled on the SSLVPN Services group.")
-                if totp_status.get("try_ssh", None):
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unable to enable TOTP via API. Trying SSH instead. ({totp_status.get('message', '')})\n")
-                    enable_totp_ssh(firewall, sshport, username, password, "SSLVPN Services")
+def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int, users: dict, target_numbers: tuple):
+    """Unbind TOTP from all eligible local users."""
+    result = {
+        'totp_unbind_attempted': True,
+        'totp_unbind_successful_count': 0,
+        'totp_unbind_failed_count': 0,
+        'totp_unbind_results': []
+    }
 
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Starting TOTP unbind process for all local users...")
+
+    # Skip TOTP unbind for GEN5 firewalls
+    if firewall_generation == 5:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind skipped - GEN5 firewalls do not support TOTP.")
+        result['totp_unbind_gen5_skipped'] = True
+        return result
+
+    # Get users for TOTP unbind if not already available
+    totp_users = users
+    if totp_users is None:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Retrieving users for TOTP unbind...")
+        try:
+            if firewall_generation == 7:
+                totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+            elif firewall_generation == 6:
+                totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
         except KeyboardInterrupt:
             print(f"\nStopped!")
             exit()
         except Exception as e:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting MFA status or setting new MFA configuration (0): {e}")
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users for TOTP unbind: {e}")
+            result['totp_unbind_get_users_error'] = str(e)
+            return result
 
-        # Stats (such as users that were/were not updated).
-        try:
-            routine_results[firewall]['total_users_forced_to_update_password'] = len([u for u in routine_results[firewall]['users'] if u['commit_successful'] is True])
-        except KeyError:
-            routine_results[firewall]['total_users_forced_to_update_password'] = 0
-        try:
-            routine_results[firewall]['commit_possibly_failed_count'] = len([u for u in routine_results[firewall]['users'] if u['commit_successful'] is False])
-        except KeyError:
-            routine_results[firewall]['commit_possibly_failed_count'] = 0
-        try:
-            routine_results[firewall]['skipped_user_count'] = len([u for u in routine_results[firewall]['users'] if u['skipped'] is True])
-        except KeyError:
-            routine_results[firewall]['skipped_user_count'] = 0
-        try:
-            routine_results[firewall]['total_postprocess_user_count'] = len(routine_results[firewall]['users'])
-        except KeyError:
-            routine_results[firewall]['total_postprocess_user_count'] = 0
-        routine_results[firewall]['completed_routine_successfully'] = True
+        # Handle bytes response
+        if isinstance(totp_users, bytes):
+            totp_users = totp_users.replace(b': expired', b': "expired"')
+            totp_users = json.loads(totp_users.decode('utf-8'))
+
+    # Process TOTP unbind if we have users
+    if totp_users and isinstance(totp_users, dict):
+        if totp_users.get('user', {}).get('local', {}).get('user', None) is not None:
+            users_list = totp_users['user']['local']['user']
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {len(users_list)} users for TOTP unbind processing...")
+
+            for usr in users_list:
+                # Skip special users
+                skip_users = ['All LDAP Users', 'All RADIUS Users']
+                if usr['name'] in skip_users:
+                    result['totp_unbind_results'].append({
+                        "name": usr['name'],
+                        "totp_unbound": False,
+                        "skipped": True,
+                        "reason": "Special user entry"
+                    })
+                    continue
+
+                # Skip expired users
+                if (usr.get('account_lifetime', {}).get('lifetime', "") == "expired" or
+                    usr.get('account_lifetime', {}).get('expired', False) is True):
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping TOTP unbind for {usr['name']} (expired user)")
+                    result['totp_unbind_results'].append({
+                        "name": usr['name'],
+                        "totp_unbound": False,
+                        "skipped": True,
+                        "reason": "Expired user"
+                    })
+                    continue
+
+                # Skip domain users
+                is_domain_user = False
+                domain_name = ""
+                if firewall_generation == 7:
+                    is_domain_user = usr.get('domain', None) is not None
+                    domain_name = usr.get('domain', '') if is_domain_user else ""
+                elif firewall_generation == 6:
+                    is_domain_user = usr.get('domain', {}).get('name', None) is not None
+                    domain_name = usr.get('domain', {}).get('name', '') if is_domain_user else ""
+
+                if is_domain_user:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping TOTP unbind for {usr['name']} (domain user: {domain_name})")
+                    result['totp_unbind_results'].append({
+                        "name": usr['name'],
+                        "totp_unbound": False,
+                        "skipped": True,
+                        "reason": "Domain user",
+                        "domain": domain_name
+                    })
+                    continue
+
+                # Perform TOTP unbind for this user
+                uname = usr['name']
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbinding TOTP for user '{uname}'...")
+
+                totp_unbound = post_request(api_base, api_session, data=None,
+                                          api_path=f"/api/sonicos/user/local/unbind-totp-key/{uname}")
+
+                if totp_unbound:
+                    api_result = totp_unbound.get('status', {}).get('info', [{}])[-1].get('message', 'No message returned.')
+                    success = api_result.lower() == "changes made."
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind for user '{uname}' -> {api_result}")
+
+                    result['totp_unbind_results'].append({
+                        "name": uname,
+                        "totp_unbound": success,
+                        "skipped": False,
+                        "reason": None,
+                        "api_response": api_result
+                    })
+
+                    if success:
+                        result['totp_unbind_successful_count'] += 1
+                    else:
+                        result['totp_unbind_failed_count'] += 1
+                else:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error unbinding TOTP for user '{uname}' - no response from API.")
+                    result['totp_unbind_results'].append({
+                        "name": uname,
+                        "totp_unbound": False,
+                        "skipped": False,
+                        "reason": "API error - no response",
+                        "api_response": None
+                    })
+                    result['totp_unbind_failed_count'] += 1
+
+            # Commit changes after all TOTP unbinds
+            if result['totp_unbind_successful_count'] > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Committing TOTP unbind changes...")
+                commit_pending(api_base, api_session)
+
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind complete - {result['totp_unbind_successful_count']} successful, {result['totp_unbind_failed_count']} failed")
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No local users found for TOTP unbind.")
+            result['totp_unbind_no_users'] = True
     else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP logic is disabled. Enable it with -et.")
-        routine_results[firewall]['totp_disabled'] = True
-    # ----------------------------------------------------------------------------------
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unable to retrieve users for TOTP unbind.")
+        result['totp_unbind_get_users_failed'] = True
 
-    # HIGHLIGHT: Ending the routine
-    # ----------------------------------------------------------------------------------
-    # Sorting the keys in the results dictionary for consistency and readability.
+    return result
+
+
+def manage_botnet_filtering(api_session, api_base: str, enable_botnet_filtering: bool, firewall_generation: int, target_numbers: tuple, args):
+    """Check and manage botnet filtering configuration."""
+    result = {
+        'botnet_filtering_licensed': None,
+        'botnet_filtering_enabled': None,
+        'botnet_filtering_autoenabled': False
+    }
+
+    if not enable_botnet_filtering:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Botnet Filtering logic is disabled. Enable it with -eb.")
+        result['botnet_filtering_disabled'] = True
+        return result
+
+    try:
+        print()
+        botnet_status = check_botnet_status(api_base, api_session, firewall_generation=firewall_generation)
+
+        if botnet_status["license_status"] == "not_licensed":
+            result['botnet_filtering_licensed'] = False
+            msg = botnet_status.get("message", "")
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is not licensed. {msg}")
+            return result
+        elif botnet_status["license_status"] == "licensed":
+            result['botnet_filtering_licensed'] = True
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is licensed.")
+
+        if botnet_status["status"] == "enabled":
+            result['botnet_filtering_enabled'] = True
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is enabled.")
+            return result
+        elif botnet_status["status"] == "disabled":
+            result['botnet_filtering_enabled'] = False
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is not enabled.")
+
+        # Enable botnet filtering if licensed but not enabled
+        if (result['botnet_filtering_licensed'] and not result['botnet_filtering_enabled'] and
+            (enable_botnet_filtering or args.enable_botnet_filtering)):
+
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enabling Botnet Filtering for all connections.")
+            botnet_status_response = botnet_status['response']
+            botnet_status_response['botnet']['logging'] = True
+
+            enable_botnet_resp = {}
+            if firewall_generation == 7:
+                botnet_status_response['botnet']['block']['connections'] = {'enable': True, 'mode': 'all'}
+                enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/base', data=botnet_status_response)
+            elif firewall_generation == 6:
+                botnet_status_response['botnet']['block']['connections'] = {'all': True}
+                # Remove problematic keys that can cause out of bounds errors
+                botnet_status_response['botnet'].pop('dynamic_list', None)
+                botnet_status_response['botnet'].pop('exclude', None)
+                botnet_status_response['botnet'].pop('include', None)
+                enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/global', data=botnet_status_response)
+            elif firewall_generation == 5:
+                enable_botnet_resp = api_session.enable_botnet_filtering()
+
+            if enable_botnet_resp.get('status', {}).get('success', False) is False:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error enabling Botnet Filtering.")
+            else:
+                result['botnet_filtering_autoenabled'] = True
+
+            # Commit changes
+            if firewall_generation != 5:
+                commit_pending(api_base, api_session)
+
+    except KeyboardInterrupt:
+        print(f"\nStopped!")
+        exit()
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error managing botnet filtering: {e}")
+        result['botnet_filtering_error'] = str(e)
+
+    return result
+
+
+def enable_totp_on_sslvpn_group(api_session, api_base: str, enable_totp: bool, firewall_generation: int,
+                               firewall: str, sshport: str, username: str, password: str, target_numbers: tuple):
+    """Check and enable TOTP on SSLVPN Services group."""
+    result = {
+        'sslvpn_services_totp_enabled': None,
+        'sslvpn_services_totp_autoenabled': None
+    }
+
+    if not enable_totp:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP logic is disabled. Enable it with -et.")
+        result['totp_disabled'] = True
+        return result
+
+    try:
+        print()
+
+        # Check TOTP status based on firewall generation
+        if firewall_generation != 5:
+            totp_status = check_totp_status(api_base, api_session, group_name="SSLVPN Services",
+                                          enable_totp=enable_totp, firewall_generation=firewall_generation)
+        else:
+            # GEN5 does not support TOTP
+            totp_status = {
+                "status": "disabled",
+                "mode": "",
+                "autoenabled": False,
+                "message": "GEN5 firewalls do not support TOTP. Consider enabling Email-based OTP manually.",
+                "try_ssh": False
+            }
+            if enable_totp:
+                print("TOTP is not available on GEN5 firewalls. Only Email-based OTP, which requires an email address configured for each user.")
+                print("Please consider enabling Email-based OTP manually after configuring an email address for each user.")
+
+        # Update results based on TOTP status
+        if totp_status["status"] == "enabled":
+            result['sslvpn_services_totp_enabled'] = True
+            result['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
+            result['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {totp_status.get('mode', '')} is enabled on the SSLVPN Services group.")
+        elif totp_status["status"] == "disabled":
+            result['sslvpn_services_totp_enabled'] = False
+            result['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
+            result['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
+            result['sslvpn_services_totp_error_msg'] = totp_status.get("message", "")
+
+            if firewall_generation == 5:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {totp_status.get('message', '')}")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP/OTP is not enabled on the SSLVPN Services group.")
+
+            if totp_status.get("try_ssh", None):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unable to enable TOTP via API. Trying SSH instead. ({totp_status.get('message', '')})\n")
+                enable_totp_ssh(firewall, sshport, username, password, "SSLVPN Services")
+
+    except KeyboardInterrupt:
+        print(f"\nStopped!")
+        exit()
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error managing TOTP: {e}")
+        result['totp_error'] = str(e)
+
+    return result
+
+
+def calculate_routine_statistics(routine_results: dict, firewall: str):
+    """Calculate and update routine statistics."""
+    try:
+        routine_results[firewall]['total_users_forced_to_update_password'] = len([u for u in routine_results[firewall].get('users', []) if u.get('commit_successful') is True])
+    except (KeyError, TypeError):
+        routine_results[firewall]['total_users_forced_to_update_password'] = 0
+
+    try:
+        routine_results[firewall]['commit_possibly_failed_count'] = len([u for u in routine_results[firewall].get('users', []) if u.get('commit_successful') is False])
+    except (KeyError, TypeError):
+        routine_results[firewall]['commit_possibly_failed_count'] = 0
+
+    try:
+        routine_results[firewall]['skipped_user_count'] = len([u for u in routine_results[firewall].get('users', []) if u.get('skipped') is True])
+    except (KeyError, TypeError):
+        routine_results[firewall]['skipped_user_count'] = 0
+
+    try:
+        routine_results[firewall]['total_postprocess_user_count'] = len(routine_results[firewall].get('users', []))
+    except (KeyError, TypeError):
+        routine_results[firewall]['total_postprocess_user_count'] = 0
+
+    routine_results[firewall]['completed_routine_successfully'] = True
+
+
+def finalize_routine(api_session, api_base: str, firewall: str, firewall_generation: int,
+                    sshport: str, username: str, password: str, target_numbers: tuple, firewall_info: dict):
+    """Finalize routine by cleaning up, writing results, and logging out."""
+    # Sort results for consistency
     routine_results[firewall] = dict(sorted(routine_results[firewall].items()))
 
-    # Convert the results dictionary/json to string.
+    # Write results to file
     results_str = json.dumps(routine_results[firewall], indent=4)
     results_str = "\n" + results_str + "\n"
 
-    # Write the results to a file
+    dm = firewall_info['device_model'].replace(" ", "")
+    sn = firewall_info['serial_number']
     write_to_file(results_str, filename=f"{constants.START_TIMESTAMP_FOLDER}/{dm}-{sn}-results.txt")
 
-    # At this point, the routine is complete. If the script auto-enabled SonicOS API, we need to disable it.
+    # Disable auto-enabled SonicOS API if needed
     if constants.get_autoenabled_sonicos_api():
         disable_sonicos_api_ssh(firewall, sshport, username, password)
 
-    # Done with the routine.
+    # Logout from session
     try:
         logout(api_base, api_session, firewall_generation=firewall_generation)
     except KeyboardInterrupt:
@@ -1115,8 +1036,168 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
         exit()
     except Exception as e:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error logging out: {e}")
-    return "ROUTINE_COMPLETE", f"Routine completed successfully."
-    # ----------------------------------------------------------------------------------
+
+
+# The routine function will get the list of users, update the force password reset flag, and commit the changes.
+def routine(target: FirewallTarget, target_numbers=None, **kwargs):
+    """
+    Main routine - now refactored into smaller, focused functions.
+
+    Args:
+        target (FirewallTarget): The firewall target configuration object
+        target_numbers (tuple): Current/total target numbers (default: None)
+        **kwargs: Additional optional parameters that can override target settings
+    """
+    # Extract parameters from the target object, with kwargs as overrides
+    firewall = target.firewall
+    username = kwargs.get('username', target.username)
+    password = kwargs.get('password', target.password)
+    sshport = kwargs.get('sshport', target.sshport)
+    enable_totp = kwargs.get('enable_totp', target.enable_totp)
+    enable_botnet_filtering = kwargs.get('enable_botnet_filtering', target.enable_botnet_filtering)
+    temp_password = kwargs.get('temp_password', target.temp_password)
+    upgrade_firmware = kwargs.get('upgrade_firmware', target.upgrade_firmware)
+    unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
+
+    # Reset auto-enabled SonicOS API flag for each new firewall
+    if constants.get_autoenabled_sonicos_api() is True:
+        constants.set_autoenabled_sonicos_api(False)
+
+    # Initialize routine results
+    routine_results[firewall] = {
+        'api_base': f"https://{firewall}" if "https://" not in firewall else firewall,
+        'api_session_successful': False,
+        'firewall_generation': None,
+        'firmware_version': None,
+        'device_model': None,
+        'serial_number': None
+    }
+
+    if sshport == "no":
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: SSH logic is disabled.")
+        routine_results[firewall]['ssh_logic_disabled'] = True
+
+    if upgrade_firmware != "":
+        routine_results[firewall]['firmware_upgrade_requested'] = False
+        routine_results[firewall]['firmware_image'] = upgrade_firmware
+
+    # Step 1: Print verbose details if enabled
+    print_verbose_details(target, target_numbers, a, username=username, password=password,
+                         sshport=sshport, enable_totp=enable_totp,
+                         enable_botnet_filtering=enable_botnet_filtering,
+                         temp_password=temp_password, upgrade_firmware=upgrade_firmware,
+                         unbind_totp=unbind_totp)
+
+    # Step 2: Initialize session with the firewall
+    api_session, return_msg, api_base, username, password = initialize_session(
+        target, target_numbers, username=username, password=password, sshport=sshport)
+
+    if api_session is None or api_session is False:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: Unable to create an admin session. Return message: {return_msg}")
+
+        # Write error results and return
+        routine_results[firewall] = dict(sorted(routine_results[firewall].items()))
+        results_str = json.dumps(routine_results[firewall], indent=4)
+        write_to_file(f"\n{results_str}\n", filename=f"{constants.START_TIMESTAMP_FOLDER}/{target_numbers[0]}results.txt")
+        return False, return_msg
+
+    # Update session status
+    if isinstance(api_session, Login):
+        routine_results[firewall]['api_session_successful'] = False
+        routine_results[firewall]['alternate_session_successful'] = True
+    else:
+        routine_results[firewall]['api_session_successful'] = True
+
+    # Step 3: Gather firewall information
+    firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers)
+    if firewall_info is None:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error gathering firewall information: {error_msg}")
+        return False, f"Error gathering firewall information: {error_msg}"
+
+    # Update routine results with firewall information
+    update_routine_results(routine_results, firewall, 'firewall_info', firewall_info)
+
+    # Step 4: Export operations (if enabled)
+    tsr_result = export_tsr_if_enabled(api_session, api_base, a, target_numbers, firewall_info)
+    update_routine_results(routine_results, firewall, 'tsr_result', tsr_result)
+    print()
+
+    tracelog_result = export_tracelogs_if_enabled(api_session, api_base, a, target_numbers, firewall_info)
+    update_routine_results(routine_results, firewall, 'tracelog_result', tracelog_result)
+    print()
+
+    settings_result = export_settings_if_enabled(api_session, api_base, a, target_numbers,
+                                                firewall_info, username, password)
+    update_routine_results(routine_results, firewall, 'settings_result', settings_result)
+    print()
+
+    # Step 5: Check HA eligibility for upgrade operations
+    ha_status = firewall_info['ha_status']
+    ha_primary_state = firewall_info['ha_primary_state']
+    ha_secondary_state = firewall_info['ha_secondary_state']
+    ha_uptime = firewall_info['ha_uptime']
+
+    upgrade_eligible, upgrade_msg = check_ha_upgrade_eligibility(
+        ha_status, ha_primary_state, ha_secondary_state, ha_uptime, target_numbers)
+
+    if not upgrade_eligible:
+        return "HA_NOT_PRIMARY", upgrade_msg
+
+    print()
+
+    # Step 6: Process user operations (if enabled)
+    users = None
+    if a.force_password_change:
+        # Get local users
+        users = get_local_users(api_session, api_base, firewall_info['firewall_generation'],
+                               firewall, sshport, username, password, target_numbers)
+
+        if users is None:
+            return "UNABLE_TO_GET_USERS", "Unable to get users"
+
+        routine_results[firewall]['got_users'] = True
+        routine_results[firewall]['total_user_count'] = len(users['user']['local']['user'])
+
+        # Process password changes
+        user_results = process_password_changes(
+            users, api_session, api_base, temp_password, firewall_info['firewall_generation'],
+            firewall, sshport, username, password, target_numbers, a)
+
+        routine_results[firewall]['users'] = user_results
+    else:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Force password change logic is disabled. Enable it with -fpc.")
+        routine_results[firewall]['force_password_change_disabled'] = True
+
+    # Step 7: Handle TOTP unbind operations (if enabled)
+    if unbind_totp:
+        totp_result = unbind_totp_from_users(api_session, api_base, firewall_info['firewall_generation'],
+                                           users, target_numbers)
+        update_routine_results(routine_results, firewall, 'totp_unbind', totp_result)
+    else:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP unbind logic is disabled. Enable it with -ut.")
+        routine_results[firewall]['totp_unbind_disabled'] = True
+
+    print()
+
+    # Step 8: Manage botnet filtering (if enabled)
+    botnet_result = manage_botnet_filtering(api_session, api_base, enable_botnet_filtering,
+                                          firewall_info['firewall_generation'], target_numbers, a)
+    update_routine_results(routine_results, firewall, 'botnet_filtering', botnet_result)
+
+    # Step 9: Enable TOTP on SSLVPN Services group (if enabled)
+    totp_sslvpn_result = enable_totp_on_sslvpn_group(api_session, api_base, enable_totp,
+                                                    firewall_info['firewall_generation'],
+                                                    firewall, sshport, username, password, target_numbers)
+    update_routine_results(routine_results, firewall, 'totp_sslvpn', totp_sslvpn_result)
+
+    # Step 10: Calculate routine statistics
+    calculate_routine_statistics(routine_results, firewall)
+
+    # Step 11: Finalize routine (cleanup, write results, logout)
+    finalize_routine(api_session, api_base, firewall, firewall_info['firewall_generation'],
+                    sshport, username, password, target_numbers, firewall_info)
+
+    return "ROUTINE_COMPLETE", "Routine completed successfully."
 
 
 # Main function
@@ -1167,4 +1248,3 @@ if __name__ == "__main__":
         print(f"({target_index+1}/{len(targets)}) {generate_timestamp()}: Target {target_index+1}/{len(targets)} - {fw}: Done.\n{'='*60}\n\n")
 
     print(f"{generate_timestamp()}: ALL DONE")
-
