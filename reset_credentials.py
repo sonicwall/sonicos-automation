@@ -50,6 +50,7 @@ class FirewallTarget:
     temp_password: str = ""
     upgrade_firmware: str = ""
     unbind_totp: bool = False
+    force_password_change: bool = False
 
 
 def normalize_boolean(value: str) -> bool:
@@ -145,6 +146,7 @@ def _parse_csv_row_dict(row: dict, row_num: int) -> Optional[FirewallTarget]:
         temp_password=normalize_temp_password(row.get('temporary_password', '')),
         upgrade_firmware=normalize_firmware_path(row.get('upgrade_to_firmware_image', '')),
         unbind_totp=normalize_boolean(row.get('unbind_totp', '')),
+        force_password_change=normalize_boolean(row.get('force_password_change', ''))
     )
 
 
@@ -179,7 +181,8 @@ def _parse_csv_row_list(row: List[str], row_num: int) -> Optional[FirewallTarget
         enable_botnet_filtering=normalize_boolean(row[5]),
         temp_password=normalize_temp_password(row[6]),
         upgrade_firmware=normalize_firmware_path(row[7]),
-        unbind_totp=normalize_boolean(row[8]) if len(row) > 8 else False
+        unbind_totp=normalize_boolean(row[8]) if len(row) > 8 else False,
+        force_password_change=normalize_boolean(row[9]) if len(row) > 9 else False
     )
 
 
@@ -197,6 +200,7 @@ def load_targets(target_input: str) -> List[FirewallTarget]:
             temp_password=normalize_temp_password(a.temp_password),
             upgrade_firmware=normalize_firmware_path(a.upgrade_firmware),
             unbind_totp=normalize_boolean(a.unbind_totp),
+            force_password_change=normalize_boolean(a.force_password_change)
         )]
 
 
@@ -239,6 +243,7 @@ def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, *
     temp_password = kwargs.get('temp_password', target.temp_password)
     upgrade_firmware = kwargs.get('upgrade_firmware', target.upgrade_firmware)
     unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
+    force_password_change = kwargs.get('force_password_change', target.force_password_change)
 
     api_base = f"https://{firewall}" if "https://" not in firewall else firewall
 
@@ -254,6 +259,7 @@ def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, *
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Temporary Password for users: {temp_password}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Firmware upgrade file: {upgrade_firmware}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbind TOTP from all users: {unbind_totp}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Force password change for all local users: {force_password_change}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: ----------------------")
 
 
@@ -1058,6 +1064,7 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
     temp_password = kwargs.get('temp_password', target.temp_password)
     upgrade_firmware = kwargs.get('upgrade_firmware', target.upgrade_firmware)
     unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
+    force_password_change = kwargs.get('force_password_change', target.force_password_change)
 
     # Reset auto-enabled SonicOS API flag for each new firewall
     if constants.get_autoenabled_sonicos_api() is True:
@@ -1147,7 +1154,7 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     # Step 6: Process user operations (if enabled)
     users = None
-    if a.force_password_change:
+    if force_password_change or a.force_password_change:
         # Get local users
         users = get_local_users(api_session, api_base, firewall_info['firewall_generation'],
                                firewall, sshport, username, password, target_numbers)
@@ -1169,7 +1176,7 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
         routine_results[firewall]['force_password_change_disabled'] = True
 
     # Step 7: Handle TOTP unbind operations (if enabled)
-    if unbind_totp:
+    if unbind_totp or a.unbind_totp:
         totp_result = unbind_totp_from_users(api_session, api_base, firewall_info['firewall_generation'],
                                            users, target_numbers)
         update_routine_results(routine_results, firewall, 'totp_unbind', totp_result)
@@ -1178,6 +1185,21 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
         routine_results[firewall]['totp_unbind_disabled'] = True
 
     print()
+
+    # TODO: Things to add.
+    #   Force password change. - need to make sure arguments work as expected.
+    #   Randomize password based on configured temporary password. Will have to provide a list of user/pass combos.
+    #   Check LDAP, RADIUS, and TACACS servers. Update the bind password/shared secret.
+    #       New bind password/shared secret is required.
+    #   Check if IPSec VPN is enabled. If so, update the preshared key on all policies.
+    #       New preshared key is required for each policy.
+    #   Get all interfaces. Check for WANs.
+    #       If any are L2TP/PPTP/PPPoE, notify user to update that password.
+    #       If any are WWAN, notify user to update their credentials.
+    #   Check AWS API. If enabled, notify user to update the secret key.
+    #   Check for dynamic DNS services. If enabled, notify user to update the password.
+    #   Check if Clearpass/NAC is enabled. If so, notify user to update the shared secret.
+    #   Check SNMPv3. If enabled, check for users and update the password.
 
     # Step 8: Manage botnet filtering (if enabled)
     botnet_result = manage_botnet_filtering(api_session, api_base, enable_botnet_filtering,
