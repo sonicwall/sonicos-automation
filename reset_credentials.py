@@ -1889,11 +1889,10 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
     # SSO Agents
     try:
         sso_agents = get_request(api_base, api_session, '/api/sonicos/user/sso/agents')
-        print(sso_agents)
         if sso_agents:
             sso_agent_count = 0
             try:
-                sso_agent_key = sso_agents.get('sso', {}).get('agent', {})
+                sso_agent_key = sso_agents.get('user', {}).get('sso', {}).get('agent', {})
                 if isinstance(sso_agent_key, list):
                     sso_agent_count = len(sso_agent_key)
                 elif isinstance(sso_agent_key, dict) and sso_agent_key == {}:
@@ -1906,14 +1905,13 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
             if sso_agent_count > 0:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {sso_agent_count} SSO agents configured.")
                 print("SSO Agents:")
-                for agent in sso_agents.get('sso', {}).get('agent', []):
-                    agent_name = agent.get('name', '')
-                    agent_ip = agent.get('ip_address', '')
-                    agent_shared_secret = agent.get('shared_secret', None)
+                for agent in sso_agents.get('user', {}).get('sso', {}).get('agent', []):
+                    agent_status = agent.get('enable', '')
+                    agent_host = agent.get('host', '')
+                    agent_port = agent.get('port', '')
+                    agent_shared_secret = agent.get('shared_key', None)
                     if agent_shared_secret:
-                        print(f"  - {agent_name} ({agent_ip}): Shared secret is set. Please update the shared secret.")
-                    else:
-                        print(f"  - {agent_name} ({agent_ip}): No shared secret set.")
+                        print(f"  - {agent_host}, port {agent_port} ({'enabled' if agent_status else 'disabled'}): Please update the shared secret.")
             else:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO agents found.")
 
@@ -1927,9 +1925,47 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     print()
 
+    # Terminal Server Agent (TSA)
+    try:
+        ts_agents = get_request(api_base, api_session, '/api/sonicos/user/sso/terminal-services-agents')
+        if ts_agents:
+            ts_agent_count = 0
+            try:
+                ts_agent_key = ts_agents.get('user', {}).get('sso', {}).get('terminal_services_agent', {})
+                if isinstance(ts_agent_key, list):
+                    ts_agent_count = len(ts_agent_key)
+                elif isinstance(ts_agent_key, dict) and ts_agent_key == {}:
+                    ts_agent_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TS Agent count.")
+                print(ts_agents)
+                print(type(ts_agents))
+
+            if ts_agent_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {ts_agent_count} TS Agents configured.")
+                print("Terminal Services Agents:")
+                for agent in ts_agents.get('user', {}).get('sso', {}).get('terminal_services_agent', []):
+                    agent_status = agent.get('enable', '')
+                    agent_host = agent.get('host', '')
+                    agent_port = agent.get('port', '')
+                    agent_shared_secret = agent.get('shared_key', None)
+                    if agent_shared_secret:
+                        print(f"  - {agent_host}, port {agent_port} ({'enabled' if agent_status else 'disabled'}): Please update the shared secret.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No TS agents found.")
+
+            update_routine_results(routine_results, firewall, 'tsa_agents', ts_agents)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No TS agents found")
+            print(ts_agents)
+            print(type(ts_agents))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TSA agents: {e}")
+
+    print()
+
     # TODO:
     #  cellular WWAN
-    #  SSO Agent shared secret
     #  TSA shared secret
     #  sso accounting clients
     #  3rd part sso
