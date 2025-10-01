@@ -1903,7 +1903,7 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
                 print(type(sso_agents))
 
             if sso_agent_count > 0:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {sso_agent_count} SSO agents configured.")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {sso_agent_count} SSO Agent(s) configured.")
                 print("SSO Agents:")
                 for agent in sso_agents.get('user', {}).get('sso', {}).get('agent', []):
                     agent_status = agent.get('enable', '')
@@ -1917,11 +1917,11 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
             update_routine_results(routine_results, firewall, 'sso_agents', sso_agents)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO agents found")
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO Agents found")
             print(sso_agents)
             print(type(sso_agents))
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO agents: {e}")
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO Agents: {e}")
 
     print()
 
@@ -1942,7 +1942,7 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
                 print(type(ts_agents))
 
             if ts_agent_count > 0:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {ts_agent_count} TS Agents configured.")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {ts_agent_count} TS Agent(s) configured.")
                 print("Terminal Services Agents:")
                 for agent in ts_agents.get('user', {}).get('sso', {}).get('terminal_services_agent', []):
                     agent_status = agent.get('enable', '')
@@ -1964,11 +1964,91 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     print()
 
+    # SSO RADIUS Accounting Clients
+    try:
+        sso_radius_clients = get_request(api_base, api_session, '/api/sonicos/user/sso/radius-accounting-clients')
+        if sso_radius_clients:
+            sso_radius_client_count = 0
+            try:
+                sso_radius_client_key = sso_radius_clients.get('user', {}).get('sso', {}).get('radius_accounting_client', {})
+                if isinstance(sso_radius_client_key, list):
+                    sso_radius_client_count = len(sso_radius_client_key)
+                elif isinstance(sso_radius_client_key, dict) and sso_radius_client_key == {}:
+                    sso_radius_client_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO RADIUS client count.")
+                print(sso_radius_clients)
+                print(type(sso_radius_clients))
+
+            if sso_radius_client_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {sso_radius_client_count} SSO RADIUS Client(s) configured.")
+                print("SSO RADIUS Clients:")
+                for client in sso_radius_clients.get('user', {}).get('sso', {}).get('radius_accounting_client', []):
+                    client_host = client.get('host', '')
+                    client_shared_secret = client.get('shared_secret', None)
+                    if client_shared_secret:
+                        print(f"  - {client_host}: Please update the shared secret.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO RADIUS clients found.")
+
+            update_routine_results(routine_results, firewall, 'sso_radius_clients', sso_radius_clients)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO RADIUS clients found")
+            print(sso_radius_clients)
+            print(type(sso_radius_clients))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO RADIUS clients: {e}")
+
+    print()
+
+    # 3rd Party SSO API Clients
+    try:
+        sso_api_clients = get_request(api_base, api_session, '/api/sonicos/user/sso/third-party-api/clients')
+        if sso_api_clients:
+            sso_api_client_count = 0
+            try:
+                sso_api_client_key = sso_api_clients.get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', {})
+                if isinstance(sso_api_client_key, list):
+                    sso_api_client_count = len(sso_api_client_key)
+                elif isinstance(sso_api_client_key, dict) and sso_api_client_key == {}:
+                    sso_api_client_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO API client count.")
+                print(sso_api_clients)
+                print(type(sso_api_clients))
+
+            if sso_api_client_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {sso_api_client_count} SSO API Client(s) configured.")
+                print("SSO API Clients:")
+                for client in sso_api_clients.get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []):
+                    client_host = client.get('host', '')
+                    client_shared_secret = client.get('shared_secret', None)
+                    if client_host and not client_shared_secret:
+                        print(f"  - {client_host}: Please consider setting a shared secret.")
+                    elif client_shared_secret:
+                        print(f"  - {client_host}: Please update the shared secret.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO API clients found.")
+
+            update_routine_results(routine_results, firewall, 'sso_api_clients', sso_api_clients)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO API clients found")
+            print(sso_api_clients)
+            print(type(sso_api_clients))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO API clients: {e}")
+
+    print()
+
+
     # TODO:
     #  cellular WWAN
-    #  TSA shared secret
-    #  sso accounting clients
-    #  3rd part sso
+    #  radius accounting servers
+    #  appflow sfr reporting
+    #  ntp custom servers w/ passwords
+    #  security services signature proxy password
+    #  gms ipsec management tunnel
+    #  advanced routing passwords for rip/ospfv2/bgp
     #  wireless access points
     #  sonicpoint/sonicwave
         # L3 SSLVPN management
