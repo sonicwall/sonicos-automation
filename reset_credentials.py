@@ -2040,12 +2040,155 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     print()
 
+    # RADIUS Accounting Servers (Users > Settings > Accounting > RADIUS Accounting)
+    try:
+        acct_servers = get_request(api_base, api_session, '/api/sonicos/user/radius/accounting/servers')
+        if acct_servers:
+            acct_server_count = 0
+            try:
+                acct_server_key = acct_servers.get('user', {}).get('radius', {}).get('accounting', {}).get('server', {})
+                if isinstance(acct_server_key, list):
+                    acct_server_count = len(acct_server_key)
+                elif isinstance(acct_server_key, dict) and acct_server_key == {}:
+                    acct_server_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining RADIUS accounting server count.")
+                print(acct_servers)
+                print(type(acct_servers))
+
+            if acct_server_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {acct_server_count} RADIUS Accounting Server(s) configured.")
+                print("RADIUS Accounting Servers:")
+                for server in acct_servers.get('user', {}).get('radius', {}).get('accounting', {}).get('server', []):
+                    server_host = server.get('host', '')
+                    server_port = server.get('port', 0)
+                    server_status = server.get('enable', False)
+                    server_shared_secret = server.get('shared_secret', None)
+                    if server_shared_secret:
+                        print(f"  - {server_host}, port {server_port} ({'enabled' if server_status else 'disabled'}): Please update the shared secret.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No RADIUS accounting servers found.")
+
+            update_routine_results(routine_results, firewall, 'radius_accounting_servers', acct_servers)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No RADIUS accounting servers found")
+            print(acct_servers)
+            print(type(acct_servers))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving RADIUS accounting servers: {e}")
+
+    print()
+
+    # TACACS+ Servers (Users > Settings > Accounting > TACACS+)
+    try:
+        tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/accounting/servers')
+        if tacacs_servers:
+            tacacs_server_count = 0
+            try:
+                tacacs_server_key = tacacs_servers.get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', {})
+                if isinstance(tacacs_server_key, list):
+                    tacacs_server_count = len(tacacs_server_key)
+                elif isinstance(tacacs_server_key, dict) and tacacs_server_key == {}:
+                    tacacs_server_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TACACS+ server count.")
+                print(tacacs_servers)
+                print(type(tacacs_servers))
+
+            if tacacs_server_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {tacacs_server_count} TACACS+ Server(s) configured.")
+                print("TACACS+ Servers:")
+                for server in tacacs_servers.get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []):
+                    server_host = server.get('host', '')
+                    server_port = server.get('port', '')
+                    server_status = server.get('enable', '')
+                    server_shared_secret = server.get('shared_secret', None)
+                    if server_shared_secret:
+                        print(f"  - {server_host}, port {server_port} ({'enabled' if server_status else 'disabled'}): Please update the shared secret.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No TACACS+ servers found.")
+
+            update_routine_results(routine_results, firewall, 'tacacs_accounting_servers', tacacs_servers)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No TACACS+ servers found")
+            print(tacacs_servers)
+            print(type(tacacs_servers))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TACACS+ servers: {e}")
+
+    print()
+
+    # AppFlow SFR Reporting
+    try:
+        sfr = get_request(api_base, api_session, '/api/sonicos/appflow/sfr-mailing/base')
+        if sfr:
+            sfr_reporting_enabled = sfr.get('appflow', {}).get('sfr_mailing', {}).get('send_email', False)
+            sfr_smtp_auth = sfr.get('appflow', {}).get('sfr_mailing', {}).get('smtp_auth', False)
+            sfr_pop_auth = sfr.get('appflow', {}).get('sfr_mailing', {}).get('pop_before_smtp', False)
+            sfr_server = sfr.get('appflow', {}).get('sfr_mailing', {}).get('smtp_server_host', None)
+            sfr_server_pop = sfr.get('appflow', {}).get('sfr_mailing', {}).get('pop_server_address', None)
+            sfr_username = sfr.get('appflow', {}).get('sfr_mailing', {}).get('smtp_user', None)
+            sfr_password = sfr.get('appflow', {}).get('sfr_mailing', {}).get('smtp_pass', None)
+            sfr_username_pop = sfr.get('appflow', {}).get('sfr_mailing', {}).get('pop_username', None)
+            sfr_password_pop = sfr.get('appflow', {}).get('sfr_mailing', {}).get('pop_pass', None)
+
+            if sfr_server != "" and sfr_server is not None and sfr_password:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: AppFlow SFR Mailing SMTP server is configured to use {sfr_username}@{sfr_server}. Please update the account's password, then update it in SonicOS.")
+
+            if sfr_server_pop != "" and sfr_server_pop is not None and sfr_password_pop:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: AppFlow SFR Mailing POP server is configured to use {sfr_username_pop}@{sfr_server_pop}. Please update the account's password, then update it in SonicOS.")
+            update_routine_results(routine_results, firewall, 'sfr_reporting', sfr)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No AppFlow SFR reporting information found")
+            print(sfr)
+            print(type(sfr))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving AppFlow SFR reporting information: {e}")
+
+    print()
+
+    # Custom NTP Servers
+    try:
+        ntp_servers = get_request(api_base, api_session, '/api/sonicos/time/ntp-servers')
+        print(ntp_servers)
+        if ntp_servers:
+            ntp_server_count = 0
+            try:
+                ntp_server_key = ntp_servers.get('time', {}).get('ntp_server', {})
+                if isinstance(ntp_server_key, list):
+                    ntp_server_count = len([x for x in ntp_server_key if x.get('no_auth', False) is False])
+                elif isinstance(ntp_server_key, dict) and ntp_server_key == {}:
+                    ntp_server_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining NTP server count.")
+                print(ntp_servers)
+                print(type(ntp_servers))
+
+            if ntp_server_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {ntp_server_count} NTP Server(s) with authentication configured.")
+                print("NTP Servers with authentication:")
+                for server in ntp_servers.get('time', {}).get('ntp_server', {}):
+                    server_host = server.get('name', '')
+                    server_auth = server.get('no_auth', False)
+                    if server_host and server_auth is False:
+                        print(f"  - {server_host} ({'auth disabled' if server_auth else 'auth enabled'}): Please update the password at the server, then update it in SonicOS.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No NTP servers found.")
+
+            update_routine_results(routine_results, firewall, 'ntp_servers', ntp_servers)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No NTP servers found")
+            print(ntp_servers)
+            print(type(ntp_servers))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving NTP servers: {e}")
+
+    print()
+
+
 
     # TODO:
     #  cellular WWAN
-    #  radius accounting servers
-    #  appflow sfr reporting
-    #  ntp custom servers w/ passwords
     #  security services signature proxy password
     #  gms ipsec management tunnel
     #  advanced routing passwords for rip/ospfv2/bgp
@@ -2058,6 +2201,7 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
     #
 
 
+    print("\n" * 10)
     exit()
 
     # Step 6: Process user operations (if enabled)
