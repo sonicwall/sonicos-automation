@@ -2150,7 +2150,6 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
     # Custom NTP Servers
     try:
         ntp_servers = get_request(api_base, api_session, '/api/sonicos/time/ntp-servers')
-        print(ntp_servers)
         if ntp_servers:
             ntp_server_count = 0
             try:
@@ -2185,11 +2184,52 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     print()
 
+    # Security Services Signature Proxy
+    try:
+        security_services = get_request(api_base, api_session, '/api/sonicos/security-services/base')
+        if security_services:
+            sig_proxy_enabled = security_services.get('security_services', {}).get('proxy_server', {}).get('enable', False)
+            sig_proxy_auth = security_services.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
+            sig_proxy_host = security_services.get('security_services', {}).get('proxy_server', {}).get('host', '')
+            sig_proxy_username = security_services.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', '')
+            sig_proxy_password = security_services.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('password', None)
+
+            if sig_proxy_auth or sig_proxy_username:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Security Services Signature Proxy authentication is configured with user '{sig_proxy_username}', host '{sig_proxy_host}'. Please update the account's password, then update it in SonicOS.")
+
+            update_routine_results(routine_results, firewall, 'security_services_signature_proxy', security_services)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Security Services Signature Proxy information found")
+            print(security_services)
+            print(type(security_services))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Security Services Signature Proxy information: {e}")
+
+    print()
+
+    # GMS IPsec Management Tunnel
+    try:
+        gms_config = get_request(api_base, api_session, '/api/sonicos/administration/global')
+        gms_config = gms_config.get('administration', {}).get('gms_management', {})
+        if gms_config:
+            ipsec_management = gms_config.get('ipsec_tunnel', False)
+            if ipsec_management:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: GMS Management:")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: - GMS IPSec Management Tunnel is configured. Please ensure the encryption/authentication keys are updated.")
+            update_routine_results(routine_results, firewall, 'gms_ipsec_management_tunnel', gms_config)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No GMS IPsec Management Tunnel information found")
+            print(gms_config)
+            print(type(gms_config))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving GMS IPsec Management Tunnel information: {e}")
+
+    print()
+
 
 
     # TODO:
     #  cellular WWAN
-    #  security services signature proxy password
     #  gms ipsec management tunnel
     #  advanced routing passwords for rip/ospfv2/bgp
     #  wireless access points
