@@ -1009,6 +1009,7 @@ def enable_totp_on_sslvpn_group(api_session, api_base: str, enable_totp: bool, f
     return result
 
 
+# Helper function for the summary
 def calculate_routine_statistics(routine_results: dict, firewall: str):
     """Calculate and update routine statistics."""
     try:
@@ -1040,8 +1041,8 @@ def generate_summary_table(results: dict):
         console = Console()
 
         # Main summary table
-        table = Table(title="Security Configuration Summary", show_header=True, header_style="bold magenta")
-        table.add_column("Check Category", style="cyan", no_wrap=True)
+        table = Table(title="Remediation Playbook Summary", show_header=True, header_style="bold magenta")
+        table.add_column("Category/Service", style="cyan", no_wrap=True)
         table.add_column("Status", style="white")
         table.add_column("Count", justify="right", style="yellow")
         table.add_column("Action Required", style="white")
@@ -1568,14 +1569,14 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         routine_results[firewall]['firmware_upgrade_requested'] = False
         routine_results[firewall]['firmware_image'] = upgrade_firmware
 
-    # Step 1: Print verbose details if enabled
+    # Print verbose details if enabled
     print_verbose_details(target, target_numbers, a, username=username, password=password,
                          sshport=sshport, enable_totp=enable_totp,
                          enable_botnet_filtering=enable_botnet_filtering,
                          temp_password=temp_password, upgrade_firmware=upgrade_firmware,
                          unbind_totp=unbind_totp)
 
-    # Step 2: Initialize session with the firewall
+    # Initialize session with the firewall
     api_session, return_msg, api_base, username, password = initialize_session(
         target, target_numbers, username=username, password=password, sshport=sshport)
 
@@ -1595,7 +1596,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     else:
         routine_results[firewall]['api_session_successful'] = True
 
-    # Step 3: Gather firewall information
+    # Gather firewall information
     firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=silent)
     if firewall_info is None:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error gathering firewall information: {error_msg}")
@@ -1604,7 +1605,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # Update routine results with firewall information
     update_routine_results(routine_results, firewall, 'firewall_info', firewall_info)
 
-    # Step 4: Export operations (if enabled)
+    # Export operations (if enabled)
     tsr_result = export_tsr_if_enabled(api_session, api_base, a, target_numbers, firewall_info, silent=silent)
     update_routine_results(routine_results, firewall, 'tsr_result', tsr_result)
     if not silent:
@@ -1621,7 +1622,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     if not silent:
         print()
 
-    # Step 5: Check HA eligibility for upgrade operations
+    # Check HA eligibility for upgrade operations
     # ha_status = firewall_info['ha_status']
     # ha_primary_state = firewall_info['ha_primary_state']
     # ha_secondary_state = firewall_info['ha_secondary_state']
@@ -1634,7 +1635,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     #     return "HA_NOT_PRIMARY", upgrade_msg
     # print()
 
-    # Step 6: Remediation Playbook -- Checks the items in this KB article:
+    # Remediation Playbook -- Checks the items in this KB article:
     # https://www.sonicwall.com/support/knowledge-base/remediation-playbook/250916130050523
     if not silent:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Starting Remediation Playbook checks...")
@@ -3299,9 +3300,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     except Exception as e:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Objects: {e}")
 
-    if not silent:
-        print()
-
     # REMEDIATION CHECKS END
 
     # TODO: The checks above need to be compiled into functions to reduce the size of this routine function.
@@ -3312,7 +3310,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # TODO: Clean up requirements for input CSV.
     # TODO: Clean up printed output.
 
-    # Step 6: Process user operations (if enabled)
+    # Process user operations (if enabled)
+    print()
     users = None
     if force_password_change or a.force_password_change:
         # Get local users
@@ -3332,562 +3331,41 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
         routine_results[firewall]['users'] = user_results
     else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Force password change logic is disabled. Enable it with -fpc.")
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Force password change logic is disabled. Enable it with -fpc or in the input CSV.")
         routine_results[firewall]['force_password_change_disabled'] = True
 
-    # Step 7: Handle TOTP unbind operations (if enabled)
+    # Handle TOTP unbind operations (if enabled)
     if unbind_totp or a.unbind_totp:
         totp_result = unbind_totp_from_users(api_session, api_base, firewall_info['firewall_generation'],
                                            users, target_numbers)
         update_routine_results(routine_results, firewall, 'totp_unbind', totp_result)
     else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP unbind logic is disabled. Enable it with -ut.")
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP unbind logic is disabled. Enable it with -ut or in the input CSV.")
         routine_results[firewall]['totp_unbind_disabled'] = True
-
-    print()
 
     # TODO: Things to add.
     #   Force password change. - need to make sure arguments work as expected.
     #   Randomize password based on configured temporary password. Will have to provide a list of user/pass combos.
 
-    # Step 8: Manage botnet filtering (if enabled)
-    botnet_result = manage_botnet_filtering(api_session, api_base, enable_botnet_filtering,
-                                          firewall_info['firewall_generation'], target_numbers, a)
-    update_routine_results(routine_results, firewall, 'botnet_filtering', botnet_result)
+    # Manage botnet filtering (if enabled)
+    # botnet_result = manage_botnet_filtering(api_session, api_base, enable_botnet_filtering,
+    #                                       firewall_info['firewall_generation'], target_numbers, a)
+    # update_routine_results(routine_results, firewall, 'botnet_filtering', botnet_result)
 
-    # Step 9: Enable TOTP on SSLVPN Services group (if enabled)
-    totp_sslvpn_result = enable_totp_on_sslvpn_group(api_session, api_base, enable_totp,
-                                                    firewall_info['firewall_generation'],
-                                                    firewall, sshport, username, password, target_numbers)
-    update_routine_results(routine_results, firewall, 'totp_sslvpn', totp_sslvpn_result)
+    # Enable TOTP on SSLVPN Services group (if enabled)
+    # totp_sslvpn_result = enable_totp_on_sslvpn_group(api_session, api_base, enable_totp,
+    #                                                 firewall_info['firewall_generation'],
+    #                                                 firewall, sshport, username, password, target_numbers)
+    # update_routine_results(routine_results, firewall, 'totp_sslvpn', totp_sslvpn_result)
 
-    # Step 10: Calculate routine statistics
+    # Calculate routine statistics
     calculate_routine_statistics(routine_results, firewall)
 
-    # Step 11: Finalize routine (cleanup, write results, logout)
+    # Finalize routine (cleanup, write results, logout)
     finalize_routine(api_session, api_base, firewall, firewall_info['firewall_generation'],
                     sshport, username, password, target_numbers, firewall_info)
 
     return "ROUTINE_COMPLETE", "Routine completed successfully."
-
-
-# Helper Functions for Summary Reporting
-def calculate_routine_statistics(routine_results: dict, firewall: str):
-    """Calculate and update routine statistics."""
-    try:
-        routine_results[firewall]['total_users_forced_to_update_password'] = len([u for u in routine_results[firewall].get('users', []) if u.get('commit_successful') is True])
-    except (KeyError, TypeError):
-        routine_results[firewall]['total_users_forced_to_update_password'] = 0
-
-    try:
-        routine_results[firewall]['commit_possibly_failed_count'] = len([u for u in routine_results[firewall].get('users', []) if u.get('commit_successful') is False])
-    except (KeyError, TypeError):
-        routine_results[firewall]['commit_possibly_failed_count'] = 0
-
-    try:
-        routine_results[firewall]['skipped_user_count'] = len([u for u in routine_results[firewall].get('users', []) if u.get('skipped') is True])
-    except (KeyError, TypeError):
-        routine_results[firewall]['skipped_user_count'] = 0
-
-    try:
-        routine_results[firewall]['total_postprocess_user_count'] = len(routine_results[firewall].get('users', []))
-    except (KeyError, TypeError):
-        routine_results[firewall]['total_postprocess_user_count'] = 0
-
-    routine_results[firewall]['completed_routine_successfully'] = True
-
-
-def generate_summary_table(results: dict):
-    """Generate a rich table summarizing all security checks and their findings."""
-    try:
-        console = Console()
-
-        # Main summary table
-        table = Table(title="Security Configuration Summary", show_header=True, header_style="bold magenta")
-        table.add_column("Check Category", style="cyan", no_wrap=True)
-        table.add_column("Status", style="white")
-        table.add_column("Count", justify="right", style="yellow")
-        table.add_column("Action Required", style="white")
-
-        # Helper function to determine count and status
-        def get_count(data):
-            if isinstance(data, dict):
-                if 'server' in data or 'user' in data:
-                    # Try to extract list
-                    for key in data.keys():
-                        if isinstance(data[key], dict):
-                            for subkey in data[key].keys():
-                                val = data[key][subkey]
-                                if isinstance(val, list):
-                                    return len(val)
-                                elif isinstance(val, dict) and 'server' in val:
-                                    s = val.get('server', [])
-                                    return len(s) if isinstance(s, list) else 1
-            elif isinstance(data, list):
-                return len(data)
-            return 0
-
-        # Authentication Servers
-        ldap_count = get_count(results.get('ldap_servers', {}))
-        if ldap_count > 0:
-            table.add_row("LDAP Servers", "[green]Found[/green]", str(ldap_count), "[red]Update passwords[/red]")
-        else:
-            table.add_row("LDAP Servers", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        radius_count = get_count(results.get('radius_servers', {}))
-        if radius_count > 0:
-            table.add_row("RADIUS Servers", "[green]Found[/green]", str(radius_count), "[red]Update shared secrets[/red]")
-        else:
-            table.add_row("RADIUS Servers", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        tacacs_count = get_count(results.get('tacacs_servers', {}))
-        if tacacs_count > 0:
-            table.add_row("TACACS Servers", "[green]Found[/green]", str(tacacs_count), "[red]Update shared secrets[/red]")
-        else:
-            table.add_row("TACACS Servers", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        # VPN
-        vpn_count = get_count(results.get('vpn_policies', {}))
-        if vpn_count > 0:
-            table.add_row("VPN Policies", "[green]Found[/green]", str(vpn_count), "[yellow]Review PSKs/certs[/yellow]")
-        else:
-            table.add_row("VPN Policies", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        # Network Services
-        ddns_v4 = get_count(results.get('ddns_services_v4', []))
-        ddns_v6 = get_count(results.get('ddns_services_v6', []))
-        total_ddns = ddns_v4 + ddns_v6
-        if total_ddns > 0:
-            table.add_row("Dynamic DNS", "[green]Found[/green]", str(total_ddns), "[red]Update credentials[/red]")
-        else:
-            table.add_row("Dynamic DNS", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        # AWS API
-        aws_enabled = results.get('aws_api', {}).get('log', {}).get('aws', {}).get('enable', False)
-        if aws_enabled:
-            table.add_row("AWS API Logging", "[green]Enabled[/green]", "1", "[red]Update secret key[/red]")
-        else:
-            table.add_row("AWS API Logging", "[dim]Not Enabled[/dim]", "0", "[dim]None[/dim]")
-
-        # Cloud Secure Edge
-        cse_enabled = results.get('cse_info', {}).get('cloud_secure_edge', {}).get('created', False)
-        if cse_enabled:
-            table.add_row("Cloud Secure Edge", "[green]Enabled[/green]", "1", "[red]Reset auth key[/red]")
-        else:
-            table.add_row("Cloud Secure Edge", "[dim]Not Enabled[/dim]", "0", "[dim]None[/dim]")
-
-        # SNMP
-        snmp_count = get_count(results.get('snmp_users', {}))
-        if snmp_count > 0:
-            table.add_row("SNMPv3 Users", "[green]Found[/green]", str(snmp_count), "[red]Update auth/priv keys[/red]")
-        else:
-            table.add_row("SNMPv3 Users", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        # Wireless
-        vap_count = get_count(results.get('virtual_access_points', {}))
-        if vap_count > 0:
-            table.add_row("Virtual Access Points", "[green]Found[/green]", str(vap_count), "[red]Update PSKs/RADIUS[/red]")
-        else:
-            table.add_row("Virtual Access Points", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        # Extended Switches
-        switch_count = get_count(results.get('extended_switches', {}))
-        if switch_count > 0:
-            table.add_row("Extended Switches", "[green]Found[/green]", str(switch_count), "[yellow]Review config[/yellow]")
-        else:
-            table.add_row("Extended Switches", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        switch_user_count = get_count(results.get('extended_switch_users', {}))
-        if switch_user_count > 0:
-            table.add_row("Switch Users", "[green]Found[/green]", str(switch_user_count), "[red]Update passwords[/red]")
-        else:
-            table.add_row("Switch Users", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        # Local Users
-        total_users = results.get('total_user_count', 0)
-        users_updated = results.get('total_users_forced_to_update_password', 0)
-        users_skipped = results.get('skipped_user_count', 0)
-        if total_users > 0:
-            table.add_row("Local Users", "[green]Found[/green]", str(total_users),
-                         f"[green]{users_updated} updated[/green], [yellow]{users_skipped} skipped[/yellow]")
-        else:
-            table.add_row("Local Users", "[dim]Not Checked[/dim]", "0", "[dim]None[/dim]")
-
-        # TOTP Unbind
-        totp_unbind = results.get('totp_unbind', {})
-        if totp_unbind.get('totp_unbind_attempted'):
-            success = totp_unbind.get('totp_unbind_successful_count', 0)
-            failed = totp_unbind.get('totp_unbind_failed_count', 0)
-            if success > 0 or failed > 0:
-                table.add_row("TOTP Unbind", "[green]Processed[/green]", f"{success}/{success+failed}",
-                             "[green]Complete[/green]" if failed == 0 else f"[yellow]{failed} failed[/yellow]")
-        else:
-            table.add_row("TOTP Unbind", "[dim]Not Performed[/dim]", "0", "[dim]None[/dim]")
-
-        # Botnet Filtering
-        botnet = results.get('botnet_filtering', {})
-        if botnet.get('botnet_filtering_licensed'):
-            status = "[green]Enabled[/green]" if botnet.get('botnet_filtering_enabled') else "[yellow]Licensed but Disabled[/yellow]"
-            action = "[green]None[/green]" if botnet.get('botnet_filtering_enabled') else "[yellow]Consider enabling[/yellow]"
-            table.add_row("Botnet Filtering", status, "N/A", action)
-        else:
-            table.add_row("Botnet Filtering", "[dim]Not Licensed[/dim]", "N/A", "[dim]None[/dim]")
-
-        # TOTP on SSLVPN
-        totp_sslvpn = results.get('totp_sslvpn', {})
-        if totp_sslvpn.get('sslvpn_services_totp_enabled'):
-            table.add_row("SSLVPN TOTP/OTP", "[green]Enabled[/green]", "N/A", "[green]None[/green]")
-        elif not totp_sslvpn.get('totp_disabled'):
-            table.add_row("SSLVPN TOTP/OTP", "[yellow]Not Enabled[/yellow]", "N/A", "[yellow]Consider enabling[/yellow]")
-        else:
-            table.add_row("SSLVPN TOTP/OTP", "[dim]Not Checked[/dim]", "N/A", "[dim]None[/dim]")
-
-        # SSO Agents
-        sso_count = get_count(results.get('sso_agents', {}))
-        if sso_count > 0:
-            table.add_row("SSO Agents", "[green]Found[/green]", str(sso_count), "[red]Update shared secrets[/red]")
-        else:
-            table.add_row("SSO Agents", "[dim]Not Found[/dim]", "0", "[dim]None[/dim]")
-
-        console.print("\n")
-        console.print(table)
-        console.print("\n")
-
-        return table
-    except Exception as e:
-        print(f"Error generating summary table: {e}")
-        return None
-
-
-def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict):
-    """Generate a markdown summary report of all checks and findings."""
-    md_lines = []
-
-    # Header
-    md_lines.append(f"# Security Configuration Summary Report")
-    md_lines.append(f"")
-    md_lines.append(f"**Firewall:** {firewall}")
-    md_lines.append(f"**Device Model:** {firewall_info.get('device_model', 'Unknown')}")
-    md_lines.append(f"**Serial Number:** {firewall_info.get('serial_number', 'Unknown')}")
-    md_lines.append(f"**Firmware Version:** {firewall_info.get('firmware_version', 'Unknown')}")
-    md_lines.append(f"**Generation:** GEN{firewall_info.get('firewall_generation', 'Unknown')}")
-    md_lines.append(f"**Report Generated:** {generate_timestamp()}")
-    md_lines.append(f"")
-    md_lines.append(f"---")
-    md_lines.append(f"")
-
-    # Executive Summary
-    md_lines.append(f"## Executive Summary")
-    md_lines.append(f"")
-
-    action_items = []
-    review_items = []
-    completed_items = []
-
-    # Count items requiring action
-    # Count items requiring action
-    def get_count(data):
-        if isinstance(data, dict):
-            for key in data.keys():
-                if isinstance(data[key], dict):
-                    for subkey in data[key].keys():
-                        val = data[key][subkey]
-                        if isinstance(val, list):
-                            return len(val)
-                        elif isinstance(val, dict) and 'server' in val:
-                            s = val.get('server', [])
-                            return len(s) if isinstance(s, list) else 1
-        elif isinstance(data, list):
-            return len(data)
-        return 0
-
-    if get_count(results.get('ldap_servers', {})) > 0:
-        action_items.append(f"- **{get_count(results.get('ldap_servers', {}))} LDAP server(s)** require password updates")
-
-    if get_count(results.get('radius_servers', {})) > 0:
-        action_items.append(f"- **{get_count(results.get('radius_servers', {}))} RADIUS server(s)** require shared secret updates")
-
-    if get_count(results.get('tacacs_servers', {})) > 0:
-        action_items.append(f"- **{get_count(results.get('tacacs_servers', {}))} TACACS server(s)** require shared secret updates")
-
-    if get_count(results.get('vpn_policies', {})) > 0:
-        review_items.append(f"- **{get_count(results.get('vpn_policies', {}))} VPN policies** should be reviewed for PSK/certificate updates")
-
-    ddns_v4 = get_count(results.get('ddns_services_v4', []))
-    ddns_v6 = get_count(results.get('ddns_services_v6', []))
-    if ddns_v4 + ddns_v6 > 0:
-        action_items.append(f"- **{ddns_v4 + ddns_v6} Dynamic DNS service(s)** require credential updates")
-
-    if results.get('aws_api', {}).get('log', {}).get('aws', {}).get('enable', False):
-        action_items.append(f"- **AWS API logging** is enabled - update secret key")
-
-    if results.get('cse_info', {}).get('cloud_secure_edge', {}).get('created', False):
-        action_items.append(f"- **Cloud Secure Edge** is enabled - reset authentication key")
-
-    if get_count(results.get('snmp_users', {})) > 0:
-        action_items.append(f"- **{get_count(results.get('snmp_users', {}))} SNMPv3 user(s)** require auth/priv key updates")
-
-    if get_count(results.get('sso_agents', {})) > 0:
-        action_items.append(f"- **{get_count(results.get('sso_agents', {}))} SSO agent(s)** require shared secret updates")
-
-    users_updated = results.get('total_users_forced_to_update_password', 0)
-    if users_updated > 0:
-        completed_items.append(f"- **{users_updated} local user(s)** forced to change password on next login")
-
-    totp_unbind = results.get('totp_unbind', {})
-    if totp_unbind.get('totp_unbind_successful_count', 0) > 0:
-        completed_items.append(f"- **{totp_unbind.get('totp_unbind_successful_count', 0)} user(s)** had TOTP unbound successfully")
-
-    if action_items:
-        md_lines.append(f"### ⚠️ Action Items ({len(action_items)})")
-        md_lines.append(f"")
-        for item in action_items:
-            md_lines.append(item)
-        md_lines.append(f"")
-
-    if review_items:
-        md_lines.append(f"### 📋 Review Items ({len(review_items)})")
-        md_lines.append(f"")
-        for item in review_items:
-            md_lines.append(item)
-        md_lines.append(f"")
-
-    if completed_items:
-        md_lines.append(f"### ✅ Completed Actions ({len(completed_items)})")
-        md_lines.append(f"")
-        for item in completed_items:
-            md_lines.append(item)
-        md_lines.append(f"")
-
-    md_lines.append(f"---")
-    md_lines.append(f"")
-
-    # Detailed Findings
-    md_lines.append(f"## Detailed Findings")
-    md_lines.append(f"")
-
-    # Authentication Servers
-    md_lines.append(f"### Authentication Servers")
-    md_lines.append(f"")
-
-    ldap_count = get_count(results.get('ldap_servers', {}))
-    md_lines.append(f"- **LDAP Servers:** {ldap_count}")
-    if ldap_count > 0:
-        md_lines.append(f"  - Action: Update bind DN passwords on LDAP servers, then update in SonicOS")
-
-    radius_count = get_count(results.get('radius_servers', {}))
-    md_lines.append(f"- **RADIUS Servers:** {radius_count}")
-    if radius_count > 0:
-        md_lines.append(f"  - Action: Update RADIUS shared secrets")
-
-    tacacs_count = get_count(results.get('tacacs_servers', {}))
-    md_lines.append(f"- **TACACS Servers:** {tacacs_count}")
-    if tacacs_count > 0:
-        md_lines.append(f"  - Action: Update TACACS+ shared secrets")
-
-    md_lines.append(f"")
-
-    # VPN Configuration
-    md_lines.append(f"### VPN Configuration")
-    md_lines.append(f"")
-    vpn_count = get_count(results.get('vpn_policies', {}))
-    md_lines.append(f"- **VPN Policies:** {vpn_count}")
-    if vpn_count > 0:
-        md_lines.append(f"  - Action: Review and update pre-shared keys or regenerate certificates")
-    md_lines.append(f"")
-
-    # Network Services
-    md_lines.append(f"### Network Services")
-    md_lines.append(f"")
-    md_lines.append(f"- **Dynamic DNS (IPv4):** {ddns_v4}")
-    md_lines.append(f"- **Dynamic DNS (IPv6):** {ddns_v6}")
-    if ddns_v4 + ddns_v6 > 0:
-        md_lines.append(f"  - Action: Update DDNS provider credentials")
-
-    aws_enabled = results.get('aws_api', {}).get('log', {}).get('aws', {}).get('enable', False)
-    md_lines.append(f"- **AWS API Logging:** {'Enabled' if aws_enabled else 'Not Enabled'}")
-    if aws_enabled:
-        md_lines.append(f"  - Action: Update AWS secret key")
-
-    cse_enabled = results.get('cse_info', {}).get('cloud_secure_edge', {}).get('created', False)
-    md_lines.append(f"- **Cloud Secure Edge:** {'Enabled' if cse_enabled else 'Not Enabled'}")
-    if cse_enabled:
-        md_lines.append(f"  - Action: Reset Cloud Secure Edge connector authentication key")
-
-    md_lines.append(f"")
-
-    # Local Users
-    md_lines.append(f"### Local User Management")
-    md_lines.append(f"")
-    total_users = results.get('total_user_count', 0)
-    users_updated = results.get('total_users_forced_to_update_password', 0)
-    users_skipped = results.get('skipped_user_count', 0)
-
-    md_lines.append(f"- **Total Local Users:** {total_users}")
-    md_lines.append(f"- **Users Updated:** {users_updated}")
-    md_lines.append(f"- **Users Skipped:** {users_skipped}")
-
-    if results.get('users'):
-        md_lines.append(f"")
-        md_lines.append(f"#### User Details")
-        md_lines.append(f"")
-        md_lines.append(f"| Username | Updated | Skipped | Reason |")
-        md_lines.append(f"|----------|---------|---------|--------|")
-        for user in results.get('users', []):
-            updated = "✅" if user.get('commit_successful') else "❌"
-            skipped = "Yes" if user.get('skipped') else "No"
-            reason = user.get('reason', '-')
-            md_lines.append(f"| {user.get('name', 'Unknown')} | {updated} | {skipped} | {reason} |")
-
-    md_lines.append(f"")
-
-    # TOTP
-    md_lines.append(f"### Multi-Factor Authentication")
-    md_lines.append(f"")
-
-    totp_unbind = results.get('totp_unbind', {})
-    if totp_unbind.get('totp_unbind_attempted'):
-        success = totp_unbind.get('totp_unbind_successful_count', 0)
-        failed = totp_unbind.get('totp_unbind_failed_count', 0)
-        md_lines.append(f"- **TOTP Unbind:** {success} successful, {failed} failed")
-    else:
-        md_lines.append(f"- **TOTP Unbind:** Not performed")
-
-    totp_sslvpn = results.get('totp_sslvpn', {})
-    if totp_sslvpn.get('sslvpn_services_totp_enabled'):
-        md_lines.append(f"- **SSLVPN Services TOTP:** Enabled ({totp_sslvpn.get('sslvpn_services_totp_mode', 'Unknown')})")
-    else:
-        md_lines.append(f"- **SSLVPN Services TOTP:** Not enabled")
-
-    md_lines.append(f"")
-
-    # Wireless
-    md_lines.append(f"### Wireless Configuration")
-    md_lines.append(f"")
-    vap_count = get_count(results.get('virtual_access_points', {}))
-    md_lines.append(f"- **Virtual Access Points:** {vap_count}")
-    if vap_count > 0:
-        md_lines.append(f"  - Action: Update pre-shared keys and RADIUS shared secrets")
-    md_lines.append(f"")
-
-    # Extended Infrastructure
-    md_lines.append(f"### Extended Infrastructure")
-    md_lines.append(f"")
-    switch_count = get_count(results.get('extended_switches', {}))
-    switch_user_count = get_count(results.get('extended_switch_users', {}))
-    md_lines.append(f"- **Extended Switches:** {switch_count}")
-    md_lines.append(f"- **Switch Users:** {switch_user_count}")
-    if switch_user_count > 0:
-        md_lines.append(f"  - Action: Update switch user passwords")
-    md_lines.append(f"")
-
-    # Security Services
-    md_lines.append(f"### Security Services")
-    md_lines.append(f"")
-
-    botnet = results.get('botnet_filtering', {})
-    if botnet.get('botnet_filtering_licensed'):
-        enabled = botnet.get('botnet_filtering_enabled', False)
-        md_lines.append(f"- **Botnet Filtering:** Licensed and {'Enabled' if enabled else 'Disabled'}")
-        if botnet.get('botnet_filtering_autoenabled'):
-            md_lines.append(f"  - ✅ Auto-enabled by script")
-    else:
-        md_lines.append(f"- **Botnet Filtering:** Not licensed")
-
-    md_lines.append(f"")
-
-    # Monitoring & Management
-    md_lines.append(f"### Monitoring & Management")
-    md_lines.append(f"")
-
-    snmp_count = get_count(results.get('snmp_users', {}))
-    md_lines.append(f"- **SNMPv3 Users:** {snmp_count}")
-    if snmp_count > 0:
-        md_lines.append(f"  - Action: Update authentication and privacy passwords")
-
-    sso_count = get_count(results.get('sso_agents', {}))
-    md_lines.append(f"- **SSO Agents:** {sso_count}")
-    if sso_count > 0:
-        md_lines.append(f"  - Action: Update shared secrets")
-
-    md_lines.append(f"")
-
-    # Exports
-    md_lines.append(f"### Configuration Exports")
-    md_lines.append(f"")
-    md_lines.append(f"- **TSR Downloaded:** {'Yes' if results.get('tsr_downloaded') else 'No'}")
-    md_lines.append(f"- **Trace Logs Downloaded:** {'Yes' if results.get('trace_logs_downloaded') else 'No'}")
-    md_lines.append(f"- **Settings Exported:** {'Yes' if results.get('settings_exported') else 'No'}")
-    md_lines.append(f"")
-
-    md_lines.append(f"---")
-    md_lines.append(f"")
-    md_lines.append(f"## Recommendations")
-    md_lines.append(f"")
-    md_lines.append(f"1. **Immediately** update all credentials identified in the Action Items section")
-    md_lines.append(f"2. **Review** all VPN policies and update pre-shared keys or regenerate certificates")
-    md_lines.append(f"3. **Verify** that forced password changes were successful for all local users")
-    md_lines.append(f"4. **Document** all credential changes in your organization's password management system")
-    md_lines.append(f"5. **Test** critical services after credential updates to ensure continued operation")
-    md_lines.append(f"6. **Schedule** regular credential rotation going forward")
-    md_lines.append(f"")
-    md_lines.append(f"---")
-    md_lines.append(f"")
-    md_lines.append(f"*Report generated by SonicWall Remediation Automation Script*")
-
-    return "\n".join(md_lines)
-
-
-def print_and_save_summary(results: dict, firewall: str, firewall_info: dict, output_folder: str):
-    """Print summary table to console and save markdown report to file."""
-    try:
-        # Print rich table to console
-        generate_summary_table(results)
-
-        # Generate and save markdown report
-        md_content = generate_markdown_summary(results, firewall, firewall_info)
-
-        dm = firewall_info['device_model'].replace(" ", "")
-        sn = firewall_info['serial_number']
-        md_filename = f"{output_folder}/{dm}-{sn}-summary.md"
-
-        write_to_file(md_content, filename=md_filename)
-
-        print(f"\n{generate_timestamp()}: Summary report saved to {md_filename}\n")
-
-    except Exception as e:
-        print(f"Error generating summary: {e}")
-
-
-def finalize_routine(api_session, api_base: str, firewall: str, firewall_generation: int,
-                    sshport: str, username: str, password: str, target_numbers: tuple, firewall_info: dict):
-    """Finalize routine by cleaning up, writing results, and logging out."""
-    # Sort results for consistency
-    routine_results[firewall] = dict(sorted(routine_results[firewall].items()))
-
-    # Generate and print summary
-    print_and_save_summary(routine_results[firewall], firewall, firewall_info, constants.START_TIMESTAMP_FOLDER)
-
-    # Write results to file
-    results_str = json.dumps(routine_results[firewall], indent=4)
-    results_str = "\n" + results_str + "\n"
-
-    dm = firewall_info['device_model'].replace(" ", "")
-    sn = firewall_info['serial_number']
-    write_to_file(results_str, filename=f"{constants.START_TIMESTAMP_FOLDER}/{dm}-{sn}-results.txt")
-
-    # Disable auto-enabled SonicOS API if needed
-    if constants.get_autoenabled_sonicos_api():
-        disable_sonicos_api_ssh(firewall, sshport, username, password)
-
-    # Logout from session
-    try:
-        logout(api_base, api_session, firewall_generation=firewall_generation)
-    except KeyboardInterrupt:
-        print(f"\nStopped!")
-        exit()
-    except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error logging out: {e}")
 
 
 # Main function
