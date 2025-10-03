@@ -62,6 +62,8 @@ def get_parser(arg_set="all", description="", parse=True):
     if arg_set == "remediation":
         ap.add_argument("-ut", "--unbind_totp", action='store_true',
                         help="If set, the script will unbind TOTP for all users.")
+        ap.add_argument("--silent", action='store_true',
+                        help="If set, the script will run in silent mode, suppressing non-essential output)")
 
     ap.add_argument("-v", "--verbose", action='store_true',
                     help="Enable verbose output. This will print additional information to the console.")

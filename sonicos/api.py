@@ -396,9 +396,11 @@ def get_request(fw, session, api_path, silent=False):
         print(f"{generate_timestamp()}: Keyboard interrupt detected. Exiting...")
         exit()
     except requests.exceptions.RequestException as e:
-        print(e)
+        if not silent:
+            print(e)
         return {}
-    print_response_info(resp, start_time=start_time)
+    if not silent:
+        print_response_info(resp, start_time=start_time)
     try:
         return resp.json()
     except json.JSONDecodeError:
@@ -406,54 +408,60 @@ def get_request(fw, session, api_path, silent=False):
 
 
 # Generic POST request
-def post_request(fw, session, api_path, data, timeout=30):
+def post_request(fw, session, api_path, data, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     resp = session.post(fw + api_path, headers=sonicos_api_headers, verify=False, json=data, timeout=timeout)
-    print_response_info(resp, start_time=start_time)
+    if not silent:
+        print_response_info(resp, start_time=start_time)
     return resp.json()
 
 
 # Generic PUT request
-def put_request(fw, session, api_path, data, timeout=30):
+def put_request(fw, session, api_path, data, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     resp = session.put(fw + api_path, headers=sonicos_api_headers, verify=False, json=data, timeout=timeout)
-    print_response_info(resp, start_time=start_time)
+    if not silent:
+        print_response_info(resp, start_time=start_time)
     return resp.json()
 
 
 # Generic PATCH request
-def patch_request(fw, session, api_path, data, timeout=30):
+def patch_request(fw, session, api_path, data, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     resp = session.patch(fw + api_path, headers=sonicos_api_headers, verify=False, json=data, timeout=timeout)
-    print_response_info(resp, start_time=start_time)
+    if not silent:
+        print_response_info(resp, start_time=start_time)
     return resp.json()
 
 
 # Generic DELETE request
-def delete_request(fw, session, api_path, timeout=30):
+def delete_request(fw, session, api_path, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     resp = session.delete(fw + api_path, headers=sonicos_api_headers, verify=False, timeout=timeout)
-    print_response_info(resp, start_time=start_time)
+    if not silent:
+        print_response_info(resp, start_time=start_time)
     return resp.json()
 
 
 # Commit pending changes to the firewall via SonicOS API.
-def commit_pending(fw, session, timeout=30):
+def commit_pending(fw, session, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     resp = session.post(fw + '/api/sonicos/config/pending',
                         headers=sonicos_api_headers,
                         verify=False,
                         timeout=timeout)
-    # print_response_info(resp, start_time=start_time)
+    # if not silent:
+    #     print_response_info(resp, start_time=start_time)
 
     # If the commit succeeds, return the response JSON.
     if resp.status_code == requests.codes.ok:
-        print(f"{generate_timestamp()}: Commit action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}\n")
+        if not silent:
+            print(f"{generate_timestamp()}: Commit action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}\n")
         return resp.json()
 
 
 # Restart the firewall
-def restart_sonicos(fw, session, timeout=30):
+def restart_sonicos(fw, session, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     resp = session.post(fw + '/api/sonicos/restart',
                         headers=sonicos_api_headers,
@@ -463,12 +471,13 @@ def restart_sonicos(fw, session, timeout=30):
 
     # If the restart succeeds, return the response JSON.
     if resp.status_code == requests.codes.ok:
-        print(f"{generate_timestamp()}: Restart action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}\n")
+        if not silent:
+            print(f"{generate_timestamp()}: Restart action successful! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}\n")
         return resp.json()
 
 
 # Log out of the API session.
-def logout(fw, session, firewall_generation=None, timeout=10):
+def logout(fw, session, firewall_generation=None, timeout=10, silent=False):
     start_time = generate_timestamp(split=False)
 
     if firewall_generation == 5:
@@ -485,13 +494,14 @@ def logout(fw, session, firewall_generation=None, timeout=10):
 
         # If the logout succeeds, return the response JSON.
         if resp.status_code == requests.codes.ok:
-            print(f"{generate_timestamp()}: Logged out successfully! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+            if not silent:
+                print(f"{generate_timestamp()}: Logged out successfully! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
             return resp.json()
 
 
 # Downloads the tech support report (TSR) from the firewall.
 # For GEN7, there is an endpoint to download it. For GEN6 we need to use the /direct/cli endpoint.
-def download_tsr(fw, session, filepath, firewall_generation=None, timeout=30):
+def download_tsr(fw, session, filepath, firewall_generation=None, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     endpoint = '/api/sonicos/direct/cli'
     if firewall_generation == 6:
@@ -504,10 +514,12 @@ def download_tsr(fw, session, filepath, firewall_generation=None, timeout=30):
         if firewall_generation == 5:
             got_tsr = session.download_tsr(filepath)
             if got_tsr:
-                print(f"{generate_timestamp()}: TSR download successful!")
+                if not silent:
+                    print(f"{generate_timestamp()}: TSR download successful!")
                 return True
             else:
-                print(f"{generate_timestamp()}: Error downloading TSR.")
+                if not silent:
+                    print(f"{generate_timestamp()}: Error downloading TSR.")
                 return False
         elif firewall_generation == 6:
             # Update the Content-Type request header to plain/text.
@@ -538,16 +550,18 @@ def download_tsr(fw, session, filepath, firewall_generation=None, timeout=30):
                 print(f"{generate_timestamp()}: Error writing TSR to file: {e}")
                 return False
 
-            print(f"{generate_timestamp()}: TSR download successful!")
+            if not silent:
+                print(f"{generate_timestamp()}: TSR download successful!")
             return True
         else:
-            print(f"{generate_timestamp()}: Error downloading TSR: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+            if not silent:
+                print(f"{generate_timestamp()}: Error downloading TSR: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
             return False
 
 
 # Downloads the trace logs from the firewall.
 # For GEN7, there is an endpoint to download it. For GEN6 we need to use the /direct/cli endpoint.
-def download_tracelog(fw, session, filepath, log_selection="current", firewall_generation=None, timeout=30):
+def download_tracelog(fw, session, filepath, log_selection="current", firewall_generation=None, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     endpoint = '/api/sonicos/direct/cli'
 
@@ -564,10 +578,12 @@ def download_tracelog(fw, session, filepath, log_selection="current", firewall_g
         if firewall_generation == 5:
             got_tracelog = session.download_tracelog(filepath)
             if got_tracelog:
-                print(f"{generate_timestamp()}: Trace log download successful!")
+                if not silent:
+                    print(f"{generate_timestamp()}: Trace log download successful!")
                 return True
             else:
-                print(f"{generate_timestamp()}: Error downloading trace log.")
+                if not silent:
+                    print(f"{generate_timestamp()}: Error downloading trace log.")
                 return False
         elif firewall_generation == 6:
             # Update the Content-Type request header to plain/text.
@@ -587,7 +603,8 @@ def download_tracelog(fw, session, filepath, log_selection="current", firewall_g
             resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False, timeout=timeout)
             # print_response_info(resp, start_time=start_time)
     except Exception as e:
-        print(f"{generate_timestamp()}: Error downloading trace log: {e}")
+        if not silent:
+            print(f"{generate_timestamp()}: Error downloading trace log: {e}")
         return False
 
     if resp:
@@ -596,18 +613,21 @@ def download_tracelog(fw, session, filepath, log_selection="current", firewall_g
                 with open(filepath, 'wb') as file:
                     file.write(resp.content)
             except Exception as e:
-                print(f"{generate_timestamp()}: Error writing trace log to file: {e}")
+                if not silent:
+                    print(f"{generate_timestamp()}: Error writing trace log to file: {e}")
                 return False
 
-            print(f"{generate_timestamp()}: Trace log download successful!")
+            if not silent:
+                print(f"{generate_timestamp()}: Trace log download successful!")
             return True
         else:
-            print(f"{generate_timestamp()}: Error downloading trace log: HTTP {resp.status_code} -  {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+            if not silent:
+                print(f"{generate_timestamp()}: Error downloading trace log: HTTP {resp.status_code} -  {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
             return False
 
 
 # Export settings from the firewall.
-def export_preferences(fw, session, filepath, firewall_generation=None, timeout=30):
+def export_preferences(fw, session, filepath, firewall_generation=None, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     endpoint = '/api/sonicos/export/current-config/exp'
 
@@ -618,10 +638,12 @@ def export_preferences(fw, session, filepath, firewall_generation=None, timeout=
             # https://192.168.0.107/sonicwall.exp
             got_preferences = session.export_preferences(filepath)
             if got_preferences:
-                print(f"{generate_timestamp()}: Preferences export successful!")
+                if not silent:
+                    print(f"{generate_timestamp()}: Preferences export successful!")
                 return True
             else:
-                print(f"{generate_timestamp()}: Error exporting preferences.")
+                if not silent:
+                    print(f"{generate_timestamp()}: Error exporting preferences.")
                 return False
         elif firewall_generation == 7:
             resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False, timeout=timeout)
@@ -632,21 +654,25 @@ def export_preferences(fw, session, filepath, firewall_generation=None, timeout=
                     with open(filepath, 'wb') as file:
                         file.write(resp.content)
                 except Exception as e:
-                    print(f"{generate_timestamp()}: Error writing preferences to file: {e}")
+                    if not silent:
+                        print(f"{generate_timestamp()}: Error writing preferences to file: {e}")
                     return False
 
-                print(f"{generate_timestamp()}: Preferences export successful!")
+                if not silent:
+                    print(f"{generate_timestamp()}: Preferences export successful!")
                 return True
             else:
-                print(f"{generate_timestamp()}: Error exporting preferences: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+                if not silent:
+                    print(f"{generate_timestamp()}: Error exporting preferences: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
                 return False
     except Exception as e:
-        print(f"{generate_timestamp()}: Error exporting preferences: {e}")
+        if not silent:
+            print(f"{generate_timestamp()}: Error exporting preferences: {e}")
         return False
 
 
 # Downloads the Audit Logs from the firewall.
-def download_audit_log(fw, session, filepath, firewall_generation=None, timeout=30):
+def download_audit_log(fw, session, filepath, firewall_generation=None, timeout=30, silent=False):
     start_time = generate_timestamp(split=False)
     endpoint = '/api/sonicos/export/audit/csv'
 
@@ -654,10 +680,12 @@ def download_audit_log(fw, session, filepath, firewall_generation=None, timeout=
         if firewall_generation == 5 or firewall_generation == 6:
             got_audit_log = session.download_audit_log(filepath)
             if got_audit_log:
-                print(f"{generate_timestamp()}: Audit log download successful!")
+                if not silent:
+                    print(f"{generate_timestamp()}: Audit log download successful!")
                 return True
             else:
-                print(f"{generate_timestamp()}: Error downloading audit log.")
+                if not silent:
+                    print(f"{generate_timestamp()}: Error downloading audit log.")
                 return False
         elif firewall_generation == 7:
             resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False, timeout=timeout)
@@ -668,16 +696,20 @@ def download_audit_log(fw, session, filepath, firewall_generation=None, timeout=
                     with open(filepath, 'wb') as file:
                         file.write(resp.content)
                 except Exception as e:
-                    print(f"{generate_timestamp()}: Error writing audit log to file: {e}")
+                    if not silent:
+                        print(f"{generate_timestamp()}: Error writing audit log to file: {e}")
                     return False
 
-                print(f"{generate_timestamp()}: Audit log download successful!")
+                if not silent:
+                    print(f"{generate_timestamp()}: Audit log download successful!")
                 return True
             else:
-                print(f"{generate_timestamp()}: Error downloading audit log: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
+                if not silent:
+                    print(f"{generate_timestamp()}: Error downloading audit log: {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
                 return False
     except Exception as e:
-        print(f"{generate_timestamp()}: Error downloading audit log: {e}")
+        if not silent:
+            print(f"{generate_timestamp()}: Error downloading audit log: {e}")
         return False
 
 
@@ -807,7 +839,7 @@ def boot_firmware(fw, session, firewall_generation=None, timeout=480):
 
 
 # Get the current state of Botnet Filtering.
-def check_botnet_status(fw, session, firewall_generation=None):
+def check_botnet_status(fw, session, firewall_generation=None, silent=False):
     start_time = generate_timestamp(split=False)
     endpoint = '/api/sonicos/botnet/base'
     if firewall_generation == 6:
@@ -820,7 +852,8 @@ def check_botnet_status(fw, session, firewall_generation=None):
         if isinstance(session, Login):
             sess, rmsg = session.login2()
             if sess == 1:
-                print(f"{generate_timestamp()}: Logged in.")
+                if not silent:
+                    print(f"{generate_timestamp()}: Logged in.")
                 r = session.get_botnet_status()
 
     else:
@@ -828,14 +861,16 @@ def check_botnet_status(fw, session, firewall_generation=None):
             resp = session.get(fw + endpoint, headers=sonicos_api_headers, verify=False)
             r = resp.json()
         except Exception as e:
-            print(f"{generate_timestamp()}: Error checking Botnet status (1): {e}")
+            if not silent:
+                print(f"{generate_timestamp()}: Error checking Botnet status (1): {e}")
             return {"status": "error", "license_status": "unknown", "message": e}
 
     for kv in r.get("status", {}).get("info", []):
         for key, value in kv.items():
             if "Licensing must be activated" in value:
                 botnet_message = value
-                print(f"{generate_timestamp()}: Botnet Filtering is not licensed. {botnet_message}")
+                if not silent:
+                    print(f"{generate_timestamp()}: Botnet Filtering is not licensed. {botnet_message}")
                 return {"status": "error", "license_status": "not_licensed", "message": botnet_message, "response": r}
 
     if firewall_generation == 6:
