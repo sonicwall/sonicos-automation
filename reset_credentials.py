@@ -2226,23 +2226,287 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     print()
 
+    # Advanced Routing Protocols (RIP, OSPFv2, BGP)
+    routing_adv_data = get_request(api_base, api_session, '/api/sonicos/dynamic-file/getAdvancedRoutingData.json')
+    if routing_adv_data:
+        try:
+            adv_routing_enabled = routing_adv_data.get('data', {}).get('ipv4', {}).get('advancedRoutingEnabled', False)
+            bgp_enabled = routing_adv_data.get('data', {}).get('ipv4', {}).get('isBGPEnabled', False)
+            routing_interfaces = routing_adv_data.get('data', {}).get('ipv4', {}).get('interfaces', [])
+            for intf in routing_interfaces:
+                intf_name = intf.get('name', '')
+                intf_zone = intf.get('zone', '')
+                intf_rip = intf.get('RIP', {}).get('status', '')
+                intf_rip_password = intf.get('RIP', {}).get('password', '')
+                intf_ospfv2 = intf.get('OSPFv2', {}).get('status', False)
+                intf_ospfv2_authentication = intf.get('OSPFv2', {}).get('authentication', False)
+                intf_ospfv2_password = intf.get('OSPFv2', {}).get('password', '')
 
+                if intf_rip == 'disabled':
+                    intf_rip = False
+                else:
+                    intf_rip = True
 
-    # TODO:
-    #  cellular WWAN
-    #  gms ipsec management tunnel
-    #  advanced routing passwords for rip/ospfv2/bgp
-    #  wireless access points
-    #  sonicpoint/sonicwave
-        # L3 SSLVPN management
-        # SP/SW admin password
-        # shared secret for radius remote mac access control
+                if intf_ospfv2 == 'disabled':
+                    intf_ospfv2 = False
+                else:
+                    intf_ospfv2 = True
 
-    #
+                if intf_ospfv2_authentication == 'disabled':
+                    intf_ospfv2_authentication = False
+                else:
+                    intf_ospfv2_authentication = True
 
+                if intf_rip or intf_rip_password != '':
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Routing - RIP is enabled or password is set on interface {intf_name}. Please ensure any RIP passwords are updated.")
+                if intf_ospfv2 or intf_ospfv2_authentication or intf_ospfv2_password != '':
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Routing - OSPFv2 is enabled or password is set on interface {intf_name}. Please ensure any OSPFv2 passwords are updated.")
+                if bgp_enabled:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Routing - BGP is enabled on interface {intf_name}. Please ensure any BGP passwords are updated.")
+            update_routine_results(routine_results, firewall, 'advanced_routing_protocols', routing_adv_data)
+        except (KeyError, TypeError) as e:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Advanced Routing Protocols configuration.")
+            print(routing_adv_data)
+            print(type(routing_adv_data))
+    else:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Advanced Routing Protocols information found")
+        print(routing_adv_data)
+        print(type(routing_adv_data))
 
-    print("\n" * 10)
-    exit()
+    print()
+
+    # Cellular WWAN
+    cellular = get_request(api_base, api_session, '/api/sonicos/reporting/wwan')
+    if isinstance(cellular, list) and len(cellular) > 0:
+        try:
+            for wwan in cellular:
+                wwan_attached = wwan.get('modem_attached', 0)
+                wwan_name = wwan.get('vendor_name', None)
+
+                if wwan_attached != 0 or wwan_name is not None:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: WWAN modem attached: {wwan_attached}/'{wwan_name}'. Please update the account's password, then update it in SonicOS.")
+            update_routine_results(routine_results, firewall, 'cellular_wwan', cellular)
+        except (KeyError, TypeError) as e:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving WWAN modem configuration.")
+            print(cellular)
+            print(type(cellular))
+
+    # Wireless SonicPoint/SonicWave/Virtual Access Points. Preshared keys, RADIUS shared secrets, etc.
+    # Virtual Access Points and Virtual Access Point Profiles
+    try:
+        vaps = get_request(api_base, api_session, '/api/sonicos/wireless/virtual-access-point/objects')
+        if vaps.get('status', {}).get('info', None):
+            msg = vaps.get('status', {}).get('info', None)[0]['message']
+            code = vaps.get('status', {}).get('info', None)[0]['code']
+            if code == "E_NOT_FOUND":
+                vaps = get_request(api_base, api_session, '/api/sonicos/sonicpoint/virtual-access-point/objects')
+
+        if vaps:
+            vap_count = 0
+            try:
+                vap_key = vaps.get('wireless', {}).get('virtual_access_point', {}).get('object', {}) or vaps.get('sonicpoint', {}).get('virtual_access_point', {}).get('object', {})
+                if isinstance(vap_key, list):
+                    vap_count = len(vap_key)
+                elif isinstance(vap_key, dict) and vap_key == {}:
+                    vap_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VAP count.")
+                print(vaps)
+                print(type(vaps))
+
+            if vap_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {vap_count} Virtual Access Point(s) configured.")
+                print("Virtual Access Points:")
+                all_vaps = vaps.get('wireless', {}).get('virtual_access_point', {}).get('object', []) or vaps.get('sonicpoint', {}).get('virtual_access_point', {}).get('object', [])
+                for vap in all_vaps:
+                    vap_name = vap.get('name', '')
+                    vap_ssid = vap.get('ssid', '')
+                    vap_vlan = vap.get('vlan', '')
+                    vap_status = vap.get('enable', '')
+                    vap_security = vap.get('authentication_type', {})
+                    vap_radius = vap.get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+                    vap_accounting = vap.get('radius', {}).get('accounting', {}).get('server1', {}).get('ip', None) or vap.get('radius', {}).get('accouting', {}).get('server1', {}).get('ip', None)
+                    if vap_name:
+                        print(f"  - {vap_name}, SSID: {vap_ssid}, VLAN: {vap_vlan} ({'enabled' if vap_status else 'disabled'}): Please update the pre-shared key.")
+                        if vap_radius:
+                            print(f"    - RADIUS is configured on the VAP. Please ensure the RADIUS server shared secret is updated.")
+                        if vap_accounting:
+                            print(f"    - RADIUS Accounting is configured on the VAP. Please ensure the RADIUS Accounting server shared secret is updated.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Points found.")
+
+            update_routine_results(routine_results, firewall, 'virtual_access_points', vaps)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Points found")
+            print(vaps)
+            print(type(vaps))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Virtual Access Points: {e}")
+
+    print()
+
+    # Virtual Access Point Profiles
+    try:
+        vap_profiles = get_request(api_base, api_session, '/api/sonicos/wireless/virtual-access-point/profiles')
+        if vap_profiles.get('status', {}).get('info', None):
+            msg = vap_profiles.get('status', {}).get('info', None)[0]['message']
+            code = vap_profiles.get('status', {}).get('info', None)[0]['code']
+            if code == "E_NOT_FOUND":
+                vap_profiles = get_request(api_base, api_session, '/api/sonicos/sonicpoint/virtual-access-point/profiles')
+
+        if vap_profiles:
+            vap_profile_count = 0
+            try:
+                vap_profile_key = vap_profiles.get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', {})
+                if isinstance(vap_profile_key, list):
+                    vap_profile_count = len(vap_profile_key)
+                elif isinstance(vap_profile_key, dict) and vap_profile_key == {}:
+                    vap_profile_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VAP profile count.")
+                print(vap_profiles)
+                print(type(vap_profiles))
+
+            if vap_profile_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {vap_profile_count} Virtual Access Point Profile(s) configured.")
+                print("Virtual Access Point Profiles:")
+                all_vap_profiles = vap_profiles.get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', [])
+                for profile in all_vap_profiles:
+                    profile_name = profile.get('name', '')
+                    profile_security = profile.get('authentication_type', {})
+                    profile_radius = profile.get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+                    profile_accounting = profile.get('radius', {}).get('accounting', {}).get('server1', {}).get('ip', None) or profile.get('radius', {}).get('accouting', {}).get('server1', {}).get('ip', None)
+                    if profile_name:
+                        print(f"  - {profile_name}: Please update the pre-shared key.")
+                        if profile_radius:
+                            print(f"    - RADIUS is configured on the VAP Profile. Please ensure the RADIUS server shared secret is updated.")
+                        if profile_accounting:
+                            print(f"    - RADIUS Accounting is configured on the VAP Profile. Please ensure the RADIUS Accounting server shared secret is updated.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Point Profiles found.")
+            update_routine_results(routine_results, firewall, 'virtual_access_point_profiles', vap_profiles)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Point Profiles found")
+            print(vap_profiles)
+            print(type(vap_profiles))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Virtual Access Point Profiles: {e}")
+
+    print()
+
+    # Wireless Access Points (SonicPoint/SonicWave Profiles and Objects
+    # SonicPoint/SonicWave Profiles
+    try:
+        sp_profiles = get_request(api_base, api_session, '/api/sonicos/sonicpoint/profiles')
+        if sp_profiles:
+            sp_profile_count = 0
+            try:
+                sp_profile_key = sp_profiles.get('sonicpoint', {}).get('profile', {})
+                if isinstance(sp_profile_key, list):
+                    sp_profile_count = len(sp_profile_key)
+                elif isinstance(sp_profile_key, dict) and sp_profile_key == {}:
+                    sp_profile_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SonicPoint/SonicWave profile count.")
+                print(sp_profiles)
+                print(type(sp_profiles))
+
+            if sp_profile_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {sp_profile_count} SonicPoint/SonicWave Profile(s) configured.")
+                print("SonicPoint/SonicWave Profiles:")
+                all_sp_profiles = sp_profiles.get('sonicpoint', {}).get('profile', [])
+                for profile in all_sp_profiles:
+                    profile_name = (profile.get('waveax', {}).get('name_prefix', None) or
+                                    profile.get('n', {}).get('name_prefix', None) or
+                                    profile.get('ndr', {}).get('name_prefix', None) or
+                                    profile.get('ac', {}).get('name_prefix', None) or
+                                    profile.get('wave2', {}).get('name_prefix', None)
+                                    )
+                    profile_radius = profile.get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+                    profile_accounting = profile.get('radius', {}).get('accounting', {}).get('server1', {}).get('ip', None) or profile.get('radius', {}).get('accouting', {}).get('server1', {}).get('ip', None)
+                    profile_administrator = profile.get('administrator', {}).get('name', None)
+                    profile_sslvpn_server = profile.get('sslvpn', {}).get('server', False)
+                    profile_sslvpn_user = profile.get('sslvpn', {}).get('user_name', False)
+                    if profile_name:
+                        print(f"  - {profile_name}: Please update the pre-shared key.")
+                        if profile_radius and (profile_radius != '' and profile_radius != '0.0.0.0'):
+                            print(f"    - RADIUS is configured on the SonicPoint/SonicWave Profile. Please ensure the RADIUS server shared secret is updated.")
+                        if profile_accounting and (profile_accounting != '' and profile_accounting != '0.0.0.0'):
+                            print(f"    - RADIUS Accounting is configured on the SonicPoint/SonicWave Profile. Please ensure the RADIUS Accounting server shared secret is updated.")
+                        if profile_administrator:
+                            print(f"    - Administrator account '{profile_administrator}' is set on the SonicPoint/SonicWave Profile. Please ensure the administrator account password is updated.")
+                        if profile_sslvpn_server or profile_sslvpn_user:
+                            print(f"    - L3 SSLVPN Management is configured on the SonicPoint/SonicWave Profile ({profile_sslvpn_user}@{profile_sslvpn_server}). Please ensure the SSLVPN server and user account password is updated.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Profiles found.")
+
+            update_routine_results(routine_results, firewall, 'sonicpoint_sonicwave_profiles', sp_profiles)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Profiles found")
+            print(sp_profiles)
+            print(type(sp_profiles))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Profiles: {e}")
+
+    print()
+
+    # SonicPoint/SonicWave Objects
+    try:
+        sp_objects = get_request(api_base, api_session, '/api/sonicos/sonicpoint/sonicpoints')
+        if sp_objects:
+            sp_object_count = 0
+            try:
+                sp_object_key = sp_objects.get('sonicpoint', {}).get('sonicpoint', {})
+                if isinstance(sp_object_key, list):
+                    sp_object_count = len(sp_object_key)
+                elif isinstance(sp_object_key, dict) and sp_object_key == {}:
+                    sp_object_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SonicPoint/SonicWave object count.")
+                print(sp_objects)
+                print(type(sp_objects))
+
+            if sp_object_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {sp_object_count} SonicPoint/SonicWave Object(s) configured.")
+                print("SonicPoint/SonicWave Objects:")
+                all_sp_objects = sp_objects.get('sonicpoint', {}).get('sonicpoint', [])
+                for obj in all_sp_objects:
+                    obj_name = (obj.get('waveax', {}).get('name', None) or
+                                    obj.get('n', {}).get('name', None) or
+                                    obj.get('ndr', {}).get('name', None) or
+                                    obj.get('ac', {}).get('name', None) or
+                                    obj.get('wave2', {}).get('name', None)
+                                    )
+                    obj_radius = obj.get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+                    obj_accounting = obj.get('radius', {}).get('accounting', {}).get('server1', {}).get('ip', None) or obj.get('radius', {}).get('accouting', {}).get('server1', {}).get('ip', None)
+                    obj_administrator = obj.get('administrator', {}).get('name', None)
+                    obj_sslvpn_server = obj.get('sslvpn', {}).get('server', False)
+                    obj_sslvpn_user = obj.get('sslvpn', {}).get('user_name', False)
+                    if obj:
+                        print(f"  - {obj}: Please update the pre-shared key.")
+                        if obj_radius and (obj_radius != '' and obj_radius != '0.0.0.0'):
+                            print(f"    - RADIUS is configured on the SonicPoint/SonicWave Object. Please ensure the RADIUS server shared secret is updated.")
+                        if obj_accounting and (obj_accounting != '' and obj_accounting != '0.0.0.0'):
+                            print(f"    - RADIUS Accounting is configured on the SonicPoint/SonicWave Object. Please ensure the RADIUS Accounting server shared secret is updated.")
+                        if obj_administrator:
+                            print(f"    - Administrator account '{obj_administrator}' is set on the SonicPoint/SonicWave Object. Please ensure the administrator account password is updated.")
+                        if obj_sslvpn_server or obj_sslvpn_user:
+                            print(f"    - L3 SSLVPN Management is configured on the SonicPoint/SonicWave Object ({obj_sslvpn_user}@{obj_sslvpn_server}). Please ensure the SSLVPN server and user account password is updated.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Objects found.")
+
+            update_routine_results(routine_results, firewall, 'sonicpoint_sonicwave_objects', sp_objects)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Objects found")
+            print(sp_objects)
+            print(type(sp_objects))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Objects: {e}")
+
+    print()
+
+    # TODO: The checks above need to be compiled into functions to reduce the size of this routine function.
+    # TODO: The checks need a summary/report in a friendly table.
 
     # Step 6: Process user operations (if enabled)
     users = None
