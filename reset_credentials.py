@@ -2291,33 +2291,60 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
             print(cellular)
             print(type(cellular))
 
-    # Wireless SonicPoint/SonicWave/Virtual Access Points. Preshared keys, RADIUS shared secrets, etc.
-    # Virtual Access Points and Virtual Access Point Profiles
+    print()
+
+    # Internal Wireless Radio (preshared key and/or RADIUS)
+    try:
+        radios = get_request(api_base, api_session, '/api/sonicos/wireless/radio')
+        print(radios)
+        if radios:
+            # The only confirmed radio role is access_point_mesh. Changing the setting does not trigger an API change when in read only.
+            # TODO: Confirm the other radio role values.
+            radio_role = (
+                    radios.get('wireless', {}).get('radio_role', {}).get('access_point_mesh', None) or
+                    radios.get('wireless', {}).get('radio_role', {}).get('access_point_station', None) or
+                    radios.get('wireless', {}).get('radio_role', {}).get('station', None) or
+                    radios.get('wireless', {}).get('radio_role', {}).get('access_point', None)
+            )
+            radio_auth_type = radios.get('wireless', {}).get('authentication_type', {})
+            radio_radius = radios.get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+            radio_psk = radios.get('wireless', {}).get('wpa', {}).get('passphrase', None)
+
+            if radio_psk:
+                print(f"  - The internal wireless radio is configured with a pre-shared key. Please update the pre-shared key.")
+            if radio_radius:
+                print(f"  - RADIUS is configured on the internal wireless radio. Please ensure the RADIUS server shared secret is updated.")
+
+            update_routine_results(routine_results, firewall, 'internal_wlan_radios', radios)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Radios found")
+            print(radios)
+            print(type(radios))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Radios: {e}")
+
+    print()
+
+    # Internal Wireless Virtual Access Points
     try:
         vaps = get_request(api_base, api_session, '/api/sonicos/wireless/virtual-access-point/objects')
-        if vaps.get('status', {}).get('info', None):
-            msg = vaps.get('status', {}).get('info', None)[0]['message']
-            code = vaps.get('status', {}).get('info', None)[0]['code']
-            if code == "E_NOT_FOUND":
-                vaps = get_request(api_base, api_session, '/api/sonicos/sonicpoint/virtual-access-point/objects')
-
         if vaps:
             vap_count = 0
             try:
-                vap_key = vaps.get('wireless', {}).get('virtual_access_point', {}).get('object', {}) or vaps.get('sonicpoint', {}).get('virtual_access_point', {}).get('object', {})
+                vap_key = vaps.get('wireless', {}).get('virtual_access_point', {}).get('object', {})
                 if isinstance(vap_key, list):
                     vap_count = len(vap_key)
                 elif isinstance(vap_key, dict) and vap_key == {}:
                     vap_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VAP count.")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining Internal Wireless VAP count.")
                 print(vaps)
                 print(type(vaps))
 
             if vap_count > 0:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {vap_count} Virtual Access Point(s) configured.")
-                print("Virtual Access Points:")
-                all_vaps = vaps.get('wireless', {}).get('virtual_access_point', {}).get('object', []) or vaps.get('sonicpoint', {}).get('virtual_access_point', {}).get('object', [])
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {vap_count} Internal Wireless Virtual Access Point(s) configured.")
+                print("Internal Wireless Virtual Access Points:")
+                all_vaps = vaps.get('wireless', {}).get('virtual_access_point', {}).get('object', [])
                 for vap in all_vaps:
                     vap_name = vap.get('name', '')
                     vap_ssid = vap.get('ssid', '')
@@ -2333,7 +2360,100 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
                         if vap_accounting:
                             print(f"    - RADIUS Accounting is configured on the VAP. Please ensure the RADIUS Accounting server shared secret is updated.")
             else:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Points found.")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Virtual Access Points found.")
+
+            update_routine_results(routine_results, firewall, 'virtual_access_points', vaps)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Virtual Access Points found")
+            print(vaps)
+            print(type(vaps))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Points: {e}")
+
+    print()
+
+    # Internal Wireless Virtual Access Point Profiles
+    try:
+        vap_profiles = get_request(api_base, api_session, '/api/sonicos/wireless/virtual-access-point/profiles')
+
+        if vap_profiles:
+            vap_profile_count = 0
+            try:
+                vap_profile_key = vap_profiles.get('wireless', {}).get('virtual_access_point', {}).get('profile', {})
+                if isinstance(vap_profile_key, list):
+                    vap_profile_count = len(vap_profile_key)
+                elif isinstance(vap_profile_key, dict) and vap_profile_key == {}:
+                    vap_profile_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining Internal Wireless VAP profile count.")
+                print(vap_profiles)
+                print(type(vap_profiles))
+
+            if vap_profile_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {vap_profile_count} Internal Wireless Virtual Access Point Profile(s) configured.")
+                print("Internal Wireless Virtual Access Point Profiles:")
+                all_vap_profiles = vap_profiles.get('wireless', {}).get('virtual_access_point', {}).get('profile', [])
+                for profile in all_vap_profiles:
+                    profile_name = profile.get('name', '')
+                    profile_security = profile.get('authentication_type', {})
+                    profile_radius = profile.get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+                    profile_accounting = profile.get('radius', {}).get('accounting', {}).get('server1', {}).get('ip', None) or profile.get('radius', {}).get('accouting', {}).get('server1', {}).get('ip', None)
+                    if profile_name:
+                        print(f"  - {profile_name}: Please update the pre-shared key.")
+                        if profile_radius:
+                            print(f"    - RADIUS is configured on the VAP Profile. Please ensure the RADIUS server shared secret is updated.")
+                        if profile_accounting:
+                            print(f"    - RADIUS Accounting is configured on the VAP Profile. Please ensure the RADIUS Accounting server shared secret is updated.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Virtual Access Point Profiles found.")
+            update_routine_results(routine_results, firewall, 'internal_wlan_virtual_access_point_profiles', vap_profiles)
+        else:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Virtual Access Point Profiles found")
+            print(vap_profiles)
+            print(type(vap_profiles))
+    except Exception as e:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Point Profiles: {e}")
+
+    print()
+
+    # Wireless SonicPoint/SonicWave/Virtual Access Points. Preshared keys, RADIUS shared secrets, etc.
+    # Virtual Access Points and Virtual Access Point Profiles
+    try:
+        vaps = get_request(api_base, api_session, '/api/sonicos/sonicpoint/virtual-access-point/objects')
+
+        if vaps:
+            vap_count = 0
+            try:
+                vap_key = vaps.get('sonicpoint', {}).get('virtual_access_point', {}).get('object', {})
+                if isinstance(vap_key, list):
+                    vap_count = len(vap_key)
+                elif isinstance(vap_key, dict) and vap_key == {}:
+                    vap_count = 0
+            except (KeyError, TypeError):
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VAP count.")
+                print(vaps)
+                print(type(vaps))
+
+            if vap_count > 0:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found SonicPoint/SonicWave {vap_count} Virtual Access Point(s) configured.")
+                print("SonicPoint/SonicWave Virtual Access Points:")
+                all_vaps = vaps.get('sonicpoint', {}).get('virtual_access_point', {}).get('object', [])
+                for vap in all_vaps:
+                    vap_name = vap.get('name', '')
+                    vap_ssid = vap.get('ssid', '')
+                    vap_vlan = vap.get('vlan', '')
+                    vap_status = vap.get('enable', '')
+                    vap_security = vap.get('authentication_type', {})
+                    vap_radius = vap.get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+                    vap_accounting = vap.get('radius', {}).get('accounting', {}).get('server1', {}).get('ip', None) or vap.get('radius', {}).get('accouting', {}).get('server1', {}).get('ip', None)
+                    if vap_name:
+                        print(f"  - {vap_name}, SSID: {vap_ssid}, VLAN: {vap_vlan} ({'enabled' if vap_status else 'disabled'}): Please update the pre-shared key.")
+                        if vap_radius:
+                            print(f"    - RADIUS is configured on the VAP. Please ensure the RADIUS server shared secret is updated.")
+                        if vap_accounting:
+                            print(f"    - RADIUS Accounting is configured on the VAP. Please ensure the RADIUS Accounting server shared secret is updated.")
+            else:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Virtual Access Points found.")
 
             update_routine_results(routine_results, firewall, 'virtual_access_points', vaps)
         else:
@@ -2345,14 +2465,9 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     print()
 
-    # Virtual Access Point Profiles
+    # SonicPoint/SonicWave Virtual Access Point Profiles
     try:
-        vap_profiles = get_request(api_base, api_session, '/api/sonicos/wireless/virtual-access-point/profiles')
-        if vap_profiles.get('status', {}).get('info', None):
-            msg = vap_profiles.get('status', {}).get('info', None)[0]['message']
-            code = vap_profiles.get('status', {}).get('info', None)[0]['code']
-            if code == "E_NOT_FOUND":
-                vap_profiles = get_request(api_base, api_session, '/api/sonicos/sonicpoint/virtual-access-point/profiles')
+        vap_profiles = get_request(api_base, api_session, '/api/sonicos/sonicpoint/virtual-access-point/profiles')
 
         if vap_profiles:
             vap_profile_count = 0
@@ -2363,13 +2478,13 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
                 elif isinstance(vap_profile_key, dict) and vap_profile_key == {}:
                     vap_profile_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VAP profile count.")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SonicPoint/SonicWave VAP profile count.")
                 print(vap_profiles)
                 print(type(vap_profiles))
 
             if vap_profile_count > 0:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {vap_profile_count} Virtual Access Point Profile(s) configured.")
-                print("Virtual Access Point Profiles:")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {vap_profile_count} SonicPoint/SonicWave Virtual Access Point Profile(s) configured.")
+                print("SonicPoint/SonicWave Virtual Access Point Profiles:")
                 all_vap_profiles = vap_profiles.get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', [])
                 for profile in all_vap_profiles:
                     profile_name = profile.get('name', '')
@@ -2383,14 +2498,14 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
                         if profile_accounting:
                             print(f"    - RADIUS Accounting is configured on the VAP Profile. Please ensure the RADIUS Accounting server shared secret is updated.")
             else:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Point Profiles found.")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Virtual Access Point Profiles found.")
             update_routine_results(routine_results, firewall, 'virtual_access_point_profiles', vap_profiles)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Point Profiles found")
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Virtual Access Point Profiles found")
             print(vap_profiles)
             print(type(vap_profiles))
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Virtual Access Point Profiles: {e}")
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Virtual Access Point Profiles: {e}")
 
     print()
 
@@ -2507,6 +2622,11 @@ def routine(target: FirewallTarget, target_numbers=None, **kwargs):
 
     # TODO: The checks above need to be compiled into functions to reduce the size of this routine function.
     # TODO: The checks need a summary/report in a friendly table.
+    # TODO: User passwords should be randomized on the provided temporary password base.
+    #       - This will require a list of user/password combos to be provided in a CSV or similar file.
+    #       - Or a pattern to generate passwords from the provided temporary password base.
+    # TODO: Clean up requirements for input CSV.
+    # TODO: Clean up printed output.
 
     # Step 6: Process user operations (if enabled)
     users = None
