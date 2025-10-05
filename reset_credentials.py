@@ -1172,7 +1172,7 @@ def generate_summary_table(results: dict):
             ):
                 table.add_row("Monitoring", "Email Logging", "Checks for Log Automation config", "Medium",
                               "[green]Configured[/green]", "", "[red]Update the email credentials on the server and in SonicOS.[/red]",
-                              link_text("Fix this link", ""))
+                              link_text("Click here", "https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038"))
             if email_logging_data.get('pop3_flag', False):
                 table.add_row("", "", "", "", "", "", "[red] - POP3: Update the email credentials on the server and in SonicOS.[/red]", "")
             if email_logging_data.get('smtp_flag', False):
@@ -1227,7 +1227,7 @@ def generate_summary_table(results: dict):
         if clearpass_enabled or clearpass_count > 0:
             table.add_row("Network Services", "Clearpass/Network Access Control", "Finds configured servers", "High",
                           f"[green]{'Servers Found' if clearpass_count > 0 else 'Enabled'}[/green]", str(clearpass_count), "[red]Update the shared secret on the server and in SonicOS.[/red]",
-                          link_text("Fix this link", ""))
+                          link_text("Click here", "https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440"))
             if clearpass_count == 0:
                 table.add_row("", "", "", "", "", "", "[red] - Feature is enabled but no servers are configured.[/red]", "")
         else:
