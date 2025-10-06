@@ -1038,9 +1038,9 @@ def calculate_routine_statistics(routine_results: dict, firewall: str):
 
 def link_text(label: str, url: str) -> Text:
     """Creates a clickable link in rich text."""
-    text = Text(label, style="blue underline")
-    text.stylize(f"link {url}", 0, len(label))
-    return text
+    # return Text(label, style=f"blue underline link {url}")
+    # TODO: This does not work. Need to pivot to putting the URL in the markdown instead of a clickable link.
+    return
 
 
 def generate_summary_table(results: dict):
@@ -1049,7 +1049,13 @@ def generate_summary_table(results: dict):
         console = Console()
 
         # Main summary table
-        table = Table(title="Remediation Playbook Summary", show_header=True, header_style="bold magenta")
+        table = Table(title="Remediation Playbook Summary",
+                      show_lines=False,
+                      show_header=True,
+                      header_style="bold magenta",
+                      caption_style="bold magenta",
+                      caption=f"Refer to ./{constants.START_TIMESTAMP_FOLDER}/{results['device_model']}-{results['serial_number']}-summary.md for resources to address each of the findings above."
+                      )
         table.add_column("Category", style="cyan", no_wrap=True)
         table.add_column("Configuration Area", style="cyan", no_wrap=True)
         table.add_column("Description", style="cyan", no_wrap=False, max_width=40)
@@ -1057,7 +1063,7 @@ def generate_summary_table(results: dict):
         table.add_column("Status", style="white")
         table.add_column("Count", justify="right", style="yellow")
         table.add_column("Action Required", style="white")
-        table.add_column("Resource", style="white")
+        # table.add_column("Resource", style="white")
 
         # Helper function to determine count and status
         def get_count(data):
@@ -1136,7 +1142,7 @@ def generate_summary_table(results: dict):
             table.add_row("Network Services", "WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
                           "[green]Interfaces Found[/green]", str(len(interesting_wans)),
                           "[red]Update the credentials with your ISP, then in SonicOS.[/red]",
-                          link_text("Click here", "https://www.sonicwall.com/support/knowledge-base/how-to-configure-a-pppoe-interface-on-sonicos/170504323594835"))
+                          link_text("Click here", "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP_PPPoE_PPTP_password_s__a"))
             table.add_row("", "", "", "", "", "", "[red] - Interface(s): " + ", ".join(interesting_wans) + "[/red]", "")
         else:
             table.add_row("Network Services", "WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
@@ -3543,6 +3549,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                     vap_radius = vap.get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
                     vap_accounting = vap.get('radius', {}).get('accounting', {}).get('server1', {}).get('ip', None) or vap.get('radius', {}).get('accouting', {}).get('server1', {}).get('ip', None)
                     vap_data_entry = {'name': vap_name, 'ssid': vap_ssid, 'vlan': vap_vlan, 'status': vap_status, 'radius': vap_radius, 'accounting': vap_accounting}
+                    vap_data.append(vap_data_entry)
                     if vap_name:
                         if not silent:
                             print(f"  - {vap_name}, SSID: {vap_ssid}, VLAN: {vap_vlan} ({'enabled' if vap_status else 'disabled'}): Please update the pre-shared key.")
