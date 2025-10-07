@@ -1421,7 +1421,7 @@ def generate_summary_table(results: dict):
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switch Users
-        switch_user_count = get_count(results.get('extended_switch_users', {}))
+        switch_user_count = get_count(results.get('extended_switch_users', []))
         if switch_user_count > 0:
             table.add_row("Infrastructure", "External Switch Users", "Looks for users in switch config", "Low",
                           "[green]Users Found[/green]", str(switch_user_count), "[red]Update each user's password in the switch configuration.[/red]")
@@ -1960,7 +1960,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         print(f"Error checking TOTP unbind count: {e}")
 
     if action_items:
-        md_lines.append(f"### Action Items ({len(action_items)})")
+        md_lines.append(f"### Action Items ({len(action_items)}) for {firewall_info.get('device_model', 'Unknown')} ({firewall_info.get('serial_number', 'Unknown')})")
         md_lines.append(f"The following items were identified during the execution of the remediation playbook. Please review and take action as necessary.")
         md_lines.append(f"")
         md_lines.append("| Priority | Finding | Action Item | Resources |")
@@ -1971,6 +1971,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     if review_items:
         md_lines.append(f"### Review Items ({len(review_items)})")
+        md_lines.append(f"The following items may require your attention.")
         md_lines.append(f"")
         for item in review_items:
             md_lines.append(item)
@@ -1978,6 +1979,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     if completed_items:
         md_lines.append(f"### Completed Actions ({len(completed_items)})")
+        md_lines.append(f"The following actions were completed, as requested via CLI argument or CSV input file.")
         md_lines.append(f"")
         for item in completed_items:
             md_lines.append(item)
@@ -1989,118 +1991,57 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     # Detailed Findings
     md_lines.append(f"## Detailed Findings")
+    md_lines.append(f"The following sections provide detailed information on the findings and actions taken during the remediation playbook execution.")
     md_lines.append(f"")
 
-    # Authentication Servers
-    md_lines.append(f"### Authentication Servers")
+    # Authentication
+    md_lines.append(f"### Authentication")
     md_lines.append(f"")
 
+    # LDAP Servers
     try:
         ldap_count = get_count(results.get('ldap_servers', {}))
         md_lines.append(f"- **LDAP Servers:** {ldap_count}")
         if ldap_count > 0:
-            md_lines.append(f"  - Action: Update bind password on the LDAP server(s), then update in SonicOS")
+            md_lines.append(f"  - **Action:** Update bind password on the LDAP server(s), then update in SonicOS")
+            md_lines.append(f"  - **Priority:** Critical")
+            md_lines.append(f"  - **Reference:** [LDAP Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_LDAP_Authentication)")
     except Exception as e:
         print(f"Error processing LDAP servers: {e}")
         md_lines.append(f"- **LDAP Servers:** Error retrieving count")
 
+    # RADIUS Servers
     try:
         radius_count = get_count(results.get('radius_servers', {}))
         md_lines.append(f"- **RADIUS Servers:** {radius_count}")
         if radius_count > 0:
-            md_lines.append(f"  - Action: Update RADIUS shared secrets")
+            md_lines.append(f"  - **Action:** Update RADIUS shared secrets on the RADIUS server(s), then update in SonicOS")
+            md_lines.append(f"  - **Priority:** Critical")
+            md_lines.append(f"  - **Reference:** [RADIUS Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Authentication)")
     except Exception as e:
         print(f"Error processing RADIUS servers: {e}")
         md_lines.append(f"- **RADIUS Servers:** Error retrieving count")
 
+    # TACACS Servers
     try:
         tacacs_count = get_count(results.get('tacacs_servers', {}))
         md_lines.append(f"- **TACACS Servers:** {tacacs_count}")
         if tacacs_count > 0:
-            md_lines.append(f"  - Action: Update TACACS+ shared secrets")
+            md_lines.append(f"  - **Action:** Update TACACS+ shared secrets")
+            md_lines.append(f"  - **Priority:** Critical")
+            md_lines.append(f"  - **Reference:** [TACACS+ Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication)")
     except Exception as e:
         print(f"Error processing TACACS servers: {e}")
         md_lines.append(f"- **TACACS Servers:** Error retrieving count")
-
-    md_lines.append(f"")
-
-    # VPN Configuration
-    md_lines.append(f"### VPN Configuration")
-    md_lines.append(f"")
-    try:
-        vpn_count = get_count(results.get('vpn', {}))
-        md_lines.append(f"- **VPN Policies:** {vpn_count}")
-        if vpn_count > 0:
-            md_lines.append(f"  - Action: Review and update pre-shared keys or regenerate certificates")
-    except Exception as e:
-        print(f"Error processing VPN policies: {e}")
-        md_lines.append(f"- **VPN Policies:** Error retrieving count")
-    md_lines.append(f"")
-
-    # Network Services
-    md_lines.append(f"### Network Services")
-    md_lines.append(f"")
-    md_lines.append(f"- **Dynamic DNS (IPv4):** {ddns_v4}")
-    md_lines.append(f"- **Dynamic DNS (IPv6):** {ddns_v6}")
-    if ddns_v4 + ddns_v6 > 0:
-        md_lines.append(f"  - Action: Update DDNS provider credentials")
-
-    try:
-        aws_enabled = results.get('aws_api', {}).get('log', {}).get('aws', {}).get('enable', False)
-        md_lines.append(f"- **AWS API Logging:** {'Enabled' if aws_enabled else 'Not Enabled'}")
-        if aws_enabled:
-            md_lines.append(f"  - Action: Update AWS secret key")
-    except Exception as e:
-        print(f"Error processing AWS API logging: {e}")
-        md_lines.append(f"- **AWS API Logging:** Error retrieving information")
-
-    try:
-        cse_enabled = results.get('cse_info', {}).get('cloud_secure_edge', {}).get('created', False)
-        md_lines.append(f"- **Cloud Secure Edge:** {'Enabled' if cse_enabled else 'Not Enabled'}")
-        if cse_enabled:
-            md_lines.append(f"  - Action: Reset Cloud Secure Edge connector authentication key")
-    except Exception as e:
-        print(f"Error processing Cloud Secure Edge: {e}")
-        md_lines.append(f"- **Cloud Secure Edge:** Error retrieving information")
-
-    md_lines.append(f"")
-
-    # Local Users
-    md_lines.append(f"### Local User Management")
-    md_lines.append(f"")
-    try:
-        total_users = results.get('total_user_count', 0)
-        users_updated = results.get('total_users_forced_to_update_password', 0)
-        users_skipped = results.get('skipped_user_count', 0)
-
-        md_lines.append(f"- **Total Local Users:** {total_users}")
-        md_lines.append(f"- **Users Updated:** {users_updated}")
-        md_lines.append(f"- **Users Skipped:** {users_skipped}")
-    except Exception as e:
-        print(f"Error processing local users: {e}")
-        md_lines.append(f"- **Local Users:** Error retrieving information")
-
-    try:
-        if results.get('users'):
-            md_lines.append(f"")
-            md_lines.append(f"#### User Details")
-            md_lines.append(f"")
-            md_lines.append(f"| Username | Updated | Skipped | Reason |")
-            md_lines.append(f"|----------|---------|---------|--------|")
-            for user in results.get('users', []):
-                updated = "✅" if user.get('commit_successful') else "❌"
-                skipped = "Yes" if user.get('skipped') else "No"
-                reason = user.get('reason', '-')
-                md_lines.append(f"| {user.get('name', 'Unknown')} | {updated} | {skipped} | {reason} |")
-    except Exception as e:
-        print(f"Error generating user details table: {e}")
 
     # SSO Agents
     try:
         sso_count = get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))
         md_lines.append(f"- **SSO Agents:** {sso_count}")
         if sso_count > 0:
-            md_lines.append(f"  - Action: Update shared secrets")
+            md_lines.append(f"  - **Action:** Update shared secrets")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [SSO Shared Secret Update](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
     except Exception as e:
         print(f"Error generating SSO section: {e}")
         md_lines.append(f"- **SSO Agents:** Error retrieving information")
@@ -2110,17 +2051,21 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         ts_count = get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))
         md_lines.append(f"- **Terminal Services Agents:** {ts_count}")
         if ts_count > 0:
-            md_lines.append(f"  - Action: Update shared secrets")
+            md_lines.append(f"  - **Action:** Update shared secrets")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [SSO Shared Secret Update](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
     except Exception as e:
         print(f"Error generating Terminal Services section: {e}")
         md_lines.append(f"- **Terminal Services Agents:** Error retrieving information")
 
     # RADIUS Accounting Clients
     try:
-        radius_acct_count = get_count(results.get('radius_accounting_clients', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('client', []))
+        radius_acct_count = get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))
         md_lines.append(f"- **RADIUS Accounting Clients:** {radius_acct_count}")
         if radius_acct_count > 0:
-            md_lines.append(f"  - Action: Update shared secrets")
+            md_lines.append(f"  - **Action:** Update shared secrets")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [RADIUS Accounting Clients](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
     except Exception as e:
         print(f"Error generating RADIUS Accounting section: {e}")
         md_lines.append(f"- **RADIUS Accounting Clients:** Error retrieving information")
@@ -2130,43 +2075,172 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         api_client_count = get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))
         md_lines.append(f"- **3rd Party API Clients:** {api_client_count}")
         if api_client_count > 0:
-            md_lines.append(f"  - Action: Update shared secrets")
+            md_lines.append(f"  - **Action:** Update shared secrets")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [3rd Party API Clients](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
     except Exception as e:
         print(f"Error generating 3rd Party API Clients section: {e}")
         md_lines.append(f"- **3rd Party API Clients:** Error retrieving information")
 
+    # RADIUS Accounting Servers
+    try:
+        radius_acct_server_count = get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))
+        md_lines.append(f"- **RADIUS Accounting Servers:** {radius_acct_server_count}")
+        if radius_acct_server_count > 0:
+            md_lines.append(f"  - **Action:** Update shared secrets")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [RADIUS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers)")
+    except Exception as e:
+        print(f"Error generating RADIUS Accounting Servers section: {e}")
+        md_lines.append(f"- **RADIUS Accounting Servers:** Error retrieving information")
+
+    # TACACS Accounting Servers
+    try:
+        tacacs_acct_server_count = get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))
+        md_lines.append(f"- **TACACS Accounting Servers:** {tacacs_acct_server_count}")
+        if tacacs_acct_server_count > 0:
+            md_lines.append(f"  - **Action:** Update shared secrets")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [TACACS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Accounting_Servers)")
+    except Exception as e:
+        print(f"Error generating TACACS Accounting Servers section: {e}")
+        md_lines.append(f"- **TACACS Accounting Servers:** Error retrieving information")
 
     md_lines.append(f"")
 
-    # TOTP
-    md_lines.append(f"### Multi-Factor Authentication")
+    # VPN Configuration
+    md_lines.append(f"### VPN")
+    md_lines.append(f"")
+    try:
+        vpn_count = get_count(results.get('vpn', {}).get('policy', []))
+        md_lines.append(f"- **VPN Policies:** {vpn_count}")
+        if vpn_count > 0:
+            md_lines.append(f"  - **Action:** Review and update pre-shared keys and authentication/encryption keys")
+            md_lines.append(f"  - **Priority:** Critical")
+            md_lines.append(f"  - **Reference:** [IPSec VPN pre-shared keys](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
+            md_lines.append(f"  - **Policy List:**")
+        for policy in results.get('vpn', {}).get('policy', []):
+            policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
+            policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
+            md_lines.append(f"    - **{policy_name}** {'policy is enabled' if policy_status else 'policy is disabled'}")
+    except Exception as e:
+        print(f"Error processing VPN policies: {e}")
+        md_lines.append(f"- **VPN Policies:** Error retrieving count")
     md_lines.append(f"")
 
-    try:
-        totp_unbind = results.get('totp_unbind', {})
-        if totp_unbind.get('totp_unbind_attempted'):
-            success = totp_unbind.get('totp_unbind_successful_count', 0)
-            failed = totp_unbind.get('totp_unbind_failed_count', 0)
-            md_lines.append(f"- **TOTP Unbind:** {success} successful, {failed} failed")
-        else:
-            md_lines.append(f"- **TOTP Unbind:** Not performed")
-    except Exception as e:
-        print(f"Error processing TOTP unbind: {e}")
-        md_lines.append(f"- **TOTP Unbind:** Error retrieving information")
+    # Network Services
+    md_lines.append(f"### Network Services")
+    md_lines.append(f"")
 
+    # WAN Interfaces (PPPoE/PPTP/L2TP)
     try:
-        totp_sslvpn = results.get('totp_sslvpn', {})
-        if totp_sslvpn.get('sslvpn_services_totp_enabled'):
-            md_lines.append(f"- **SSLVPN Services TOTP:** Enabled ({totp_sslvpn.get('sslvpn_services_totp_mode', 'Unknown')})")
-        else:
-            md_lines.append(f"- **SSLVPN Services TOTP:** Not enabled")
+        interesting_wans = results.get('interesting_wan_list', [])
+        wan_interface_count = get_count(interesting_wans)
+        md_lines.append(f"- **PPPoE/PPTP/L2TP WAN Interfaces:** {wan_interface_count}")
+        if wan_interface_count > 0:
+            md_lines.append(f"  - **Action:** Update the username and password for each WAN interface configured with PPPoE, PPTP, or L2TP")
+            md_lines.append(f"  - **Priority:** High")
+            md_lines.append(f"  - **Reference:** [PPPoE Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-pppoe-on-sonicwall/170504323594835)")
+            md_lines.append(f"  - **Interface List:**")
+        for interface in interesting_wans:
+            md_lines.append(f"    - **{interface}**")
     except Exception as e:
-        print(f"Error processing SSLVPN TOTP: {e}")
-        md_lines.append(f"- **SSLVPN Services TOTP:** Error retrieving information")
+        print(f"Error processing WAN interfaces: {e}")
+        md_lines.append(f"- **WAN Interfaces (PPPoE/PPTP/L2TP):** Error retrieving count")
+
+    # Dynamic DNS
+    md_lines.append(f"- **Dynamic DNS (IPv4) Profiles:** {ddns_v4}")
+    md_lines.append(f"- **Dynamic DNS (IPv6) Profiles:** {ddns_v6}")
+    if ddns_v4 + ddns_v6 > 0:
+        md_lines.append(f"  - **Action:** Update DDNS provider credentials for each configured entry at the provider's website, then update in SonicOS")
+        md_lines.append(f"  - **Priority:** High")
+        md_lines.append(f"  - **Reference:** [Dynamic DNS Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835)")
+        md_lines.append(f"")
+
+    # ClearPass/NAC
+    try:
+        clearpass_enabled = results.get('clearpass_enabled', False)
+        clearpass_server_count = len(results.get('clearpass_servers', []))
+
+        if clearpass_enabled:
+            md_lines.append(f"- **ClearPass/NAC:** Enabled with {clearpass_server_count} server(s)")
+            md_lines.append(f"  - **Action:** Update shared secrets on ClearPass servers")
+        else:
+            md_lines.append(f"- **ClearPass/NAC:** Not enabled")
+    except Exception as e:
+        print(f"Error generating ClearPass section: {e}")
+        md_lines.append(f"- **ClearPass/NAC:** Error retrieving information")
+
+    # Dynamic External Address Objects
+    try:
+        dynamic_address_count = results.get('dynamic_ao_count', 0)
+        deao_data = results.get('dynamic_ao_data', [])
+        ftp_deaos = [d for d in deao_data if d['protocol'] == 'ftp']
+        http_deaos = [d for d in deao_data if d['protocol'] == 'https']
+
+        md_lines.append(f"- **Dynamic External Address Objects:** {dynamic_address_count}")
+        if dynamic_address_count > 0:
+            md_lines.append(f"  - **Action:** Review and update credentials for Dynamic External Address Object(s)")
+            md_lines.append(f"  - **Priority:** High")
+            md_lines.append(f"  - **Reference:** [Dynamic External Address Objects](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-external-address-objects/170504323594835)")
+            if len(ftp_deaos) > 0:
+                md_lines.append(f"  - **FTP-based DEAOs:** {len(ftp_deaos)}")
+                for obj in ftp_deaos:
+                    md_lines.append(f"    - **{obj.get('name', 'Unnamed Object')}** (Server: {obj.get('server', 'Unknown')})")
+            if len(http_deaos) > 0:
+                md_lines.append(f"  - **HTTPS-based DEAOs:** {len(http_deaos)}")
+                for obj in http_deaos:
+                    md_lines.append(f"    - **{obj.get('name', 'Unnamed Object')}** (URL: {obj.get('url', 'Unknown')})")
+    except Exception as e:
+        print(f"Error processing Dynamic External Address Objects: {e}")
+        md_lines.append(f"- **Dynamic External Address Objects:** Error retrieving count")
+
+    # Dynamic Botnet Server List
+    try:
+        botnet_data = results.get('botnet_data', {})
+        if botnet_data.get('protocol', False):
+            md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {botnet_data.get('protocol', '').upper()}")
+            md_lines.append(f"  - **Action:** Review and update Dynamic Botnet List Server credentials")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [Dynamic Botnet List Server](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password)")
+        else:
+            md_lines.append(f"- **Dynamic Botnet List Server:** Not configured")
+    except Exception as e:
+        print(f"Error processing Dynamic Botnet List Server: {e}")
+        md_lines.append(f"- **Dynamic Botnet List Server:** Error retrieving information")
+
+    # Custom NTP Servers
+    try:
+        ntp_count = get_count(results.get('ntp_data', []))
+        md_lines.append(f"- **Custom NTP Servers:** {ntp_count}")
+        if ntp_count > 0:
+            md_lines.append(f"  - **Action:** Update authentication passwords on each NTP server and in SonicOS")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [NTP Configuration](https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777)")
+    except Exception as e:
+        print(f"Error processing NTP servers: {e}")
+        md_lines.append(f"- **Custom NTP Servers:** Error retrieving count")
+
+    # Security Services Proxy
+    try:
+        sig_proxy_auth = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
+        sig_proxy_username = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', '')
+        if sig_proxy_auth or sig_proxy_username:
+            md_lines.append(f"- **Security Services Proxy:** Configured")
+            md_lines.append(f"  - **Action:** Update the proxy server credentials in SonicOS")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [Signature Downloads Through a Proxy Server](https://www.sonicwall.com/support/knowledge-base/signature-downloads-through-a-proxy-server/170503292286520)")
+        else:
+            md_lines.append(f"- **Security Services Proxy:** Not configured")
+    except Exception as e:
+        print(f"Error processing Security Services Proxy: {e}")
+        md_lines.append(f"- **Security Services Proxy:** Error retrieving information")
+
 
     md_lines.append(f"")
 
     # Wireless
+    # TODO: Section not complete
     md_lines.append(f"### Wireless Configuration")
     md_lines.append(f"")
     try:
@@ -2180,22 +2254,44 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     md_lines.append(f"")
 
     # Extended Infrastructure
-    md_lines.append(f"### Extended Infrastructure")
+    # TODO: Section not complete
+    md_lines.append(f"### Infrastructure")
     md_lines.append(f"")
     try:
-        switch_count = get_count(results.get('extended_switches', {}))
-        switch_user_count = get_count(results.get('extended_switch_users', {}))
+        switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
         md_lines.append(f"- **Extended Switches:** {switch_count}")
-        md_lines.append(f"- **Switch Users:** {switch_user_count}")
-        if switch_user_count > 0:
-            md_lines.append(f"  - Action: Update switch user passwords")
+        if switch_count > 0:
+            md_lines.append(f"  - **Action:** Update the password for any connected switches")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/how-to-change-the-password-for-sonicwall-switch/200607142015373)")
     except Exception as e:
         print(f"Error processing extended switches: {e}")
         md_lines.append(f"- **Extended Switches:** Error retrieving information")
-    md_lines.append(f"")
 
-    # Security Services
-    md_lines.append(f"### Security Services")
+    # Extended Switch Users
+    try:
+        switch_user_count = get_count(results.get('extended_switch_users', []))
+        md_lines.append(f"- **Extended Switch Users:** {switch_user_count}")
+        if switch_user_count > 0:
+            md_lines.append(f"  - **Action:** Update each user's password in the switch configuration")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password)")
+    except Exception as e:
+        print(f"Error processing extended switch users: {e}")
+        md_lines.append(f"- **Extended Switch Users:** Error retrieving information")
+
+    # Extended Switch RADIUS Servers
+    try:
+        switch_radius_count = get_count(results.get('switch_controller', {}).get('radius', []))
+        md_lines.append(f"- **Extended Switch RADIUS Servers:** {switch_radius_count}")
+        if switch_radius_count > 0:
+            md_lines.append(f"  - **Action:** Update the shared secret on each server and in the switch configuration")
+            md_lines.append(f"  - **Priority:** Low")
+            md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password)")
+    except Exception as e:
+        print(f"Error processing extended switch RADIUS servers: {e}")
+        md_lines.append(f"- **Extended Switch RADIUS Servers:** Error retrieving information")
+
     md_lines.append(f"")
 
     # Monitoring & Management
@@ -2206,11 +2302,12 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         snmp_count = get_count(results.get('snmp', {}).get('user', []))
         md_lines.append(f"- **SNMPv3 Users:** {snmp_count}")
         if snmp_count > 0:
-            md_lines.append(f"  - Action: Update authentication and privacy passwords")
+            md_lines.append(f"  - **Action:** Update authentication and privacy passwords")
+            md_lines.append(f"  - **Priority:** High")
+            md_lines.append(f"  - **Reference:** [SNMPv3 User Configuration](https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777#_SNMPv3_User_Configuration)")
     except Exception as e:
         print(f"Error generating SNMP section: {e}")
         md_lines.append(f"- **SNMPv3 Users:** Error retrieving information")
-
 
     # Email Logging
     try:
@@ -2259,26 +2356,95 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         print(f"Error generating Scheduled Exports section: {e}")
         md_lines.append(f"- **TSR/EXP Scheduled Exports:** Error retrieving information")
 
-    md_lines.append(f"")
-
-    # Add ClearPass/NAC section
-    md_lines.append(f"### Network Access Control")
-    md_lines.append(f"")
+    # AWS API Logging
+    try:
+        aws_enabled = results.get('aws_api', {}).get('log', {}).get('aws', {}).get('enable', False)
+        md_lines.append(f"- **AWS API Logging:** {'Enabled' if aws_enabled else 'Not Enabled'}")
+        if aws_enabled:
+            md_lines.append(f"  - **Action:** Update AWS secret key")
+            md_lines.append(f"  - **Priority:** Critical")
+            md_lines.append(f"  - **Reference:** [AWS Integration with SonicWall](https://www.sonicwall.com/support/knowledge-base/aws-integration-with-sonicwall-sonicos-6-5-x/181024232124532)")
+    except Exception as e:
+        print(f"Error processing AWS API logging: {e}")
+        md_lines.append(f"- **AWS API Logging:** Error retrieving information")
 
     try:
-        clearpass_enabled = results.get('clearpass_enabled', False)
-        clearpass_server_count = len(results.get('clearpass_servers', []))
-
-        if clearpass_enabled:
-            md_lines.append(f"- **ClearPass/NAC:** Enabled with {clearpass_server_count} server(s)")
-            md_lines.append(f"  - Action: Update shared secrets on ClearPass servers")
-        else:
-            md_lines.append(f"- **ClearPass/NAC:** Not enabled")
+        cse_enabled = results.get('cse_info', {}).get('cloud_secure_edge', {}).get('created', False)
+        md_lines.append(f"- **Cloud Secure Edge:** {'Enabled' if cse_enabled else 'Not Enabled'}")
+        if cse_enabled:
+            md_lines.append(f"  - **Action:** Reset Cloud Secure Edge connector authentication key")
+            md_lines.append(f"  - **Priority:** Critical")
+            md_lines.append(f"  - **Reference:** [Cloud Secure Edge](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE)")
     except Exception as e:
-        print(f"Error generating ClearPass section: {e}")
-        md_lines.append(f"- **ClearPass/NAC:** Error retrieving information")
+        print(f"Error processing Cloud Secure Edge: {e}")
+        md_lines.append(f"- **Cloud Secure Edge:** Error retrieving information")
+
+    # Cellular WWAN
+    try:
+        wwan_attached = results.get('cellular_attached', 0)
+        if wwan_attached != 0:
+            md_lines.append(f"- **Cellular WWAN Model Detected:** {wwan_attached}")
+            md_lines.append(f"  - **Action:** Update cellular provider credentials at the provider's website, then update in SonicOS")
+            md_lines.append(f"  - **Priority:** High")
+            md_lines.append(f"  - **Reference:** [Cellular WWAN Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-cellular-wwan-on-sonicwall-firewalls/170504323594835)")
+    except Exception as e:
+        print(f"Error processing Cellular WWAN: {e}")
+        md_lines.append(f"- **Cellular WWAN Interfaces:** Error retrieving information")
 
     md_lines.append(f"")
+
+    # Local Users
+    md_lines.append(f"### Local User Management")
+    md_lines.append(f"")
+    try:
+        total_users = results.get('total_user_count', 0)
+        users_updated = results.get('total_users_forced_to_update_password', 0)
+        users_skipped = results.get('skipped_user_count', 0)
+
+        md_lines.append(f"- **Total Local Users:** {total_users}")
+        md_lines.append(f"- **Users Updated:** {users_updated}")
+        md_lines.append(f"- **Users Skipped:** {users_skipped}")
+    except Exception as e:
+        print(f"Error processing local users: {e}")
+        md_lines.append(f"- **Local Users:** Error retrieving information")
+
+    try:
+        if results.get('users'):
+            md_lines.append(f"")
+            md_lines.append(f"#### User Details")
+            md_lines.append(f"")
+            md_lines.append(f"| Username | Updated | Skipped | Reason |")
+            md_lines.append(f"|----------|---------|---------|--------|")
+            for user in results.get('users', []):
+                updated = "✅" if user.get('commit_successful') else "❌"
+                skipped = "Yes" if user.get('skipped') else "No"
+                reason = user.get('reason', '-')
+                md_lines.append(f"| {user.get('name', 'Unknown')} | {updated} | {skipped} | {reason} |")
+    except Exception as e:
+        print(f"Error generating user details table: {e}")
+
+    # TOTP
+    try:
+        totp_unbind = results.get('totp_unbind', {})
+        if totp_unbind.get('totp_unbind_attempted'):
+            success = totp_unbind.get('totp_unbind_successful_count', 0)
+            failed = totp_unbind.get('totp_unbind_failed_count', 0)
+            md_lines.append(f"- **TOTP Unbind:** {success} successful, {failed} failed")
+        else:
+            md_lines.append(f"- **TOTP Unbind:** Not performed")
+    except Exception as e:
+        print(f"Error processing TOTP unbind: {e}")
+        md_lines.append(f"- **TOTP Unbind:** Error retrieving information")
+
+    # try:
+    #     totp_sslvpn = results.get('totp_sslvpn', {})
+    #     if totp_sslvpn.get('sslvpn_services_totp_enabled'):
+    #         md_lines.append(f"- **SSLVPN Services TOTP:** Enabled ({totp_sslvpn.get('sslvpn_services_totp_mode', 'Unknown')})")
+    #     else:
+    #         md_lines.append(f"- **SSLVPN Services TOTP:** Not enabled")
+    # except Exception as e:
+    #     print(f"Error processing SSLVPN TOTP: {e}")
+    #     md_lines.append(f"- **SSLVPN Services TOTP:** Error retrieving information")
 
     # Recommendations
     md_lines.append(f"## Recommendations")
