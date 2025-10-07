@@ -424,6 +424,7 @@ def export_tsr_if_enabled(api_session, api_base: str, args, target_numbers: tupl
         if not silent:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TSR downloaded to {tsr_file_name}")
         result['tsr_downloaded'] = True
+        result['tsr_file_name'] = f"{constants.START_TIMESTAMP_FOLDER}/{tsr_file_name}"
 
     return result
 
@@ -454,6 +455,7 @@ def export_tracelogs_if_enabled(api_session, api_base: str, args, target_numbers
         if not silent:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Trace logs downloaded.")
         result['trace_logs_downloaded'] = True
+        result['tracelog_filename'] = f"{constants.START_TIMESTAMP_FOLDER}/{tracelog_filename}"
 
     return result
 
@@ -510,6 +512,7 @@ def export_settings_if_enabled(api_session, api_base: str, args, target_numbers:
         if not silent:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Settings exported.")
         result['settings_exported'] = True
+        result['prefs_file_name'] = f"{constants.START_TIMESTAMP_FOLDER}/{prefs_file_name}"
 
     return result
 
@@ -1641,11 +1644,26 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         # Exports
         md_lines.append(f"### Log and Configuration Exports")
         md_lines.append(f"")
-        md_lines.append(f"- **TSR Downloaded:** {'Yes' if results.get('tsr_downloaded') else 'No'}")
-        md_lines.append(f"- **Trace Logs Downloaded:** {'Yes' if results.get('trace_logs_downloaded') else 'No'}")
-        md_lines.append(f"- **Settings Exported:** {'Yes' if results.get('settings_exported') else 'No'}")
-        md_lines.append(f"")
+        tsr_location = f"[{results.get('tsr_file_name', '')}]({results.get('tsr_file_name', '')})"
+        tracelogs_location = f"[{results.get('tracelog_filename', '')}]({results.get('tracelog_filename', '')})"
+        settings_location = f"[{results.get('prefs_file_name', '')}]({results.get('prefs_file_name', '')})"
 
+        if results.get('trace_logs_downloaded'):
+            md_lines.append(f"- **Trace Logs Downloaded:** {tracelogs_location}")
+        else:
+            md_lines.append(f"- **Trace Logs Downloaded:** No")
+
+        if results.get('tsr_downloaded'):
+            md_lines.append(f"- **TSR Downloaded:** {tsr_location}")
+        else:
+            md_lines.append(f"- **TSR Downloaded:** No")
+
+        if results.get('settings_exported'):
+            md_lines.append(f"- **Settings Exported:** {settings_location}")
+        else:
+            md_lines.append(f"- **Settings Exported:** No")
+
+        md_lines.append(f"")
         md_lines.append(f"---")
         md_lines.append(f"")
     except Exception as e:
