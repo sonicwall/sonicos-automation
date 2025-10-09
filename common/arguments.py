@@ -24,7 +24,7 @@ def get_parser(arg_set="all", description="", parse=True):
         ap.add_argument("-s", "--sshport", type=str, default='22',
                         help="If SonicOS API is disabled, the script will attempt to use SSH Management on port 22 to *temporarily* enable SonicOS API. Use this argument to specify a different SSH port. This has no effect if using a CSV file.")
 
-    if arg_set == "snwlid-2024-0015" or arg_set == "remediation":
+    if arg_set == "snwlid-2024-0015":
         ap.add_argument("-et", "--enable_totp", action='store_true',
                         help="If set, the script will enable Two-Factor Authentication (TOTP) on the 'SSLVPN Services' group. SSLVPN users will be prompted to set up the TOTP on their next login.")
 
@@ -43,27 +43,44 @@ def get_parser(arg_set="all", description="", parse=True):
         ap.add_argument("-df", "--download_firmware", action='store_true',
                         help="If set, the script will download the recommended firmware image for the current release track. This has no effect if using a CSV file.")
 
-    if arg_set == "snwlid-2025-0001" or arg_set == "snwlid-2024-0015" or arg_set == "remediation":
+    if arg_set == "snwlid-2025-0001" or arg_set == "snwlid-2024-0015":
         ap.add_argument("-es", "--export_settings", action='store_true',
                         help="If set, the script will export the firewall settings to a .exp file.")
 
-    if arg_set == "snwlid-2024-0015" or arg_set == "remediation":
+    if arg_set == "snwlid-2024-0015":
         ap.add_argument("-etl", "--export_tracelogs", action='store_true',
                         help="If set, the script will export the firewall trace logs.")
 
-    if arg_set == "snwlid-2025-0001" or arg_set == "snwlid-2024-0015" or arg_set == "remediation":
+    if arg_set == "snwlid-2025-0001" or arg_set == "snwlid-2024-0015":
         ap.add_argument("-etsr", "--export_tsr", action='store_true',
                         help="If set, the script will export the Tech Support Report (TSR).")
 
-    if arg_set == "snwlid-2024-0015" or arg_set == "remediation":
+    if arg_set == "snwlid-2024-0015":
         ap.add_argument("-w", "--wait_for_upgrade", action='store_true',
                         help="If set, the script will wait for the firmware upgrade to complete and confirm reachability.")
 
     if arg_set == "remediation":
+        ap.add_argument("-fpc", "--force_password_change", action='store_true',
+                        help="If set, the script will enable the logic that forces a password change for each local user, skipping domain users and expired users.")
+
+        ap.add_argument("-tp", "--temp_password", type=str, default='',
+                        help="If set, the script will reset each user's password to the specified temporary password. This has no effect if using a CSV file.")
+
         ap.add_argument("-ut", "--unbind_totp", action='store_true',
                         help="If set, the script will unbind TOTP for all users.")
+
+        ap.add_argument("-es", "--export_settings", action='store_true',
+                        help="If set, the script will export the firewall settings to a .exp file.")
+
+        ap.add_argument("-etl", "--export_tracelogs", action='store_true',
+                        help="If set, the script will export the firewall trace logs.")
+
+        ap.add_argument("-etsr", "--export_tsr", action='store_true',
+                        help="If set, the script will export the Tech Support Report (TSR).")
+
         ap.add_argument("--severity", type=str, choices=['all', 'low', 'medium', 'high', 'critical'], default='all',
                         help="Sets the severity level for the remediation check actions to take. For example, setting critical would perform only the critical remediation checks. Default is 'all'.")
+
         ap.add_argument("--silent", action='store_true',
                         help="If set, the script will run in silent mode, suppressing non-essential output.")
 

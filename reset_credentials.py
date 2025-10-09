@@ -51,10 +51,7 @@ class FirewallTarget:
     username: Optional[str] = None
     password: Optional[str] = None
     sshport: str = '22'
-    enable_totp: bool = False
-    enable_botnet_filtering: bool = False
     temp_password: str = ""
-    upgrade_firmware: str = ""
     unbind_totp: bool = False
     force_password_change: bool = False
 
@@ -83,19 +80,6 @@ def normalize_temp_password(password: str) -> str:
         password += 'x' * (8 - len(password))
 
     return password
-
-
-def normalize_firmware_path(path_str: str) -> str:
-    """Normalize and validate firmware upgrade path."""
-    if not path_str or path_str.strip(' "\'') in ['None', 'false', '']:
-        return ""
-
-    clean_path = path_str.strip(' "\'')
-    if not path.exists(clean_path):
-        print(f"{generate_timestamp()}: Warning: Firmware file '{clean_path}' not found")
-        return ""
-
-    return path.abspath(clean_path)
 
 
 def parse_csv_targets(filepath: str) -> List[FirewallTarget]:
@@ -147,10 +131,7 @@ def _parse_csv_row_dict(row: dict, row_num: int) -> Optional[FirewallTarget]:
         username=row.get('admin_user', '').strip() or None,
         password=normalize_password(row.get('admin_password', '')),
         sshport=row.get('target_ssh_mgmt_port', '22').strip() or '22',
-        enable_totp=normalize_boolean(row.get('enable_totp', '')),
-        enable_botnet_filtering=normalize_boolean(row.get('enable_botnet_filtering', '')),
         temp_password=normalize_temp_password(row.get('temporary_password', '')),
-        upgrade_firmware=normalize_firmware_path(row.get('upgrade_to_firmware_image', '')),
         unbind_totp=normalize_boolean(row.get('unbind_totp', '')),
         force_password_change=normalize_boolean(row.get('force_password_change', ''))
     )
@@ -183,10 +164,7 @@ def _parse_csv_row_list(row: List[str], row_num: int) -> Optional[FirewallTarget
         username=row[1].strip() or None,
         password=normalize_password(row[2]),
         sshport=row[3].strip() or '22',
-        enable_totp=normalize_boolean(row[4]),
-        enable_botnet_filtering=normalize_boolean(row[5]),
         temp_password=normalize_temp_password(row[6]),
-        upgrade_firmware=normalize_firmware_path(row[7]),
         unbind_totp=normalize_boolean(row[8]) if len(row) > 8 else False,
         force_password_change=normalize_boolean(row[9]) if len(row) > 9 else False
     )
@@ -201,20 +179,17 @@ def load_targets(target_input: str) -> List[FirewallTarget]:
         return [FirewallTarget(
             firewall=target_input,
             sshport=a.sshport,
-            enable_totp=a.enable_totp,
-            enable_botnet_filtering=a.enable_botnet_filtering,
             temp_password=normalize_temp_password(a.temp_password),
-            upgrade_firmware=normalize_firmware_path(a.upgrade_firmware),
             unbind_totp=normalize_boolean(a.unbind_totp),
             force_password_change=normalize_boolean(a.force_password_change)
         )]
 
 
 # Argument parsing
-arg_description = """SonicWall Cloud Backup Configuration Remediation Script.
-This tool automates remediation tasks such as forcing all local users to change their password on next login. Please refer to the README for more detailed help."""
+arg_description = """--- SonicWall Remediation Playbook / Essential Credential Reset Tool ---
+This tool assists administrators by analyzing SonicOS configurations and producing a detailed report.
+Refer to the README for more detailed help.\n"""
 a = get_parser(arg_set="remediation", description=arg_description)
-# TODO: some arguments from 'snwlid-2024-0015' will apply here.
 
 
 # This variable stores the results of the routine for each firewall.
@@ -244,10 +219,7 @@ def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, *
     username = kwargs.get('username', target.username)
     password = kwargs.get('password', target.password)
     sshport = kwargs.get('sshport', target.sshport)
-    enable_totp = kwargs.get('enable_totp', target.enable_totp)
-    enable_botnet_filtering = kwargs.get('enable_botnet_filtering', target.enable_botnet_filtering)
     temp_password = kwargs.get('temp_password', target.temp_password)
-    upgrade_firmware = kwargs.get('upgrade_firmware', target.upgrade_firmware)
     unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
     force_password_change = kwargs.get('force_password_change', target.force_password_change)
 
@@ -260,10 +232,7 @@ def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, *
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Administrative password length: {len(password)}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: API Base URL: {api_base}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: SSH Management Port: {sshport}")
-    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enable TOTP on 'SSLVPN Services' group: {enable_totp}")
-    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enable Botnet Filtering service: {enable_botnet_filtering}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Temporary Password for users: {temp_password}")
-    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Firmware upgrade file: {upgrade_firmware}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbind TOTP from all users: {unbind_totp}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Force password change for all local users: {force_password_change}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: ----------------------")
@@ -312,10 +281,6 @@ def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, sile
     firmware_version = None
     device_model = None
     serial_number = None
-    ha_status = None
-    ha_primary_state = None
-    ha_secondary_state = None
-    ha_uptime = None
 
     # Determine firewall generation and get basic info
     if isinstance(api_session, Login):
@@ -325,10 +290,6 @@ def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, sile
                 firmware_version = info['firmware_version']
                 device_model = info['model']
                 serial_number = info['serial_number']
-                ha_status = info.get('ha_status', "")
-                ha_primary_state = info.get('ha_primary_state', "")
-                ha_secondary_state = info.get('ha_secondary_state', "")
-                ha_uptime = info.get('ha_uptime', "")
                 constants.set_fw_model(device_model)
                 firewall_generation = 5
                 constants.set_fw_generation(5)
@@ -362,40 +323,11 @@ def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, sile
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting version information: {e}")
             return None, f"Error getting version information: {e}"
 
-        # Get HA information for non-GEN5 firewalls
-        # try:
-        #     ha_info = get_request(api_base, api_session, '/api/sonicos/reporting/high-availability')
-        #
-        #     if ha_info.get('status', None):
-        #         ha_status = ha_info.get('status', "")
-        #         ha_primary_state = ha_info.get('primary_state', "")
-        #         ha_secondary_state = ha_info.get('secondary_state', "")
-        #         ha_uptime = ha_info.get('active_up_time', "")
-        #
-        #     if ha_status:
-        #         ha_status = ha_status.upper()
-        #     if ha_primary_state:
-        #         ha_primary_state = ha_primary_state.upper()
-        #     if ha_secondary_state:
-        #         ha_secondary_state = ha_secondary_state.upper()
-        #     if ha_uptime:
-        #         ha_uptime = ha_uptime.upper()
-        # except KeyboardInterrupt:
-        #     print(f"\nStopped!")
-        #     exit()
-        # except Exception as e:
-        #     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting HA information: {e}")
-        #     return None, f"Error getting HA information: {e}"
-
     return {
         'firewall_generation': firewall_generation,
         'firmware_version': firmware_version,
         'device_model': device_model,
         'serial_number': serial_number,
-        # 'ha_status': ha_status,
-        # 'ha_primary_state': ha_primary_state,
-        # 'ha_secondary_state': ha_secondary_state,
-        # 'ha_uptime': ha_uptime
     }, None
 
 
@@ -515,36 +447,6 @@ def export_settings_if_enabled(api_session, api_base: str, args, target_numbers:
         result['prefs_file_name'] = f"{constants.START_TIMESTAMP_FOLDER}/{prefs_file_name}"
 
     return result
-
-
-def check_ha_upgrade_eligibility(ha_status: str, ha_primary_state: str, ha_secondary_state: str, ha_uptime: str, target_numbers: tuple):
-    """Check if the firewall is eligible for upgrade operations based on HA status."""
-    if not ha_status:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status not available. Skipping upgrade.")
-        return False, "HA status not available"
-
-    # When the secondary shows active or primary shows standby, the upgrade is skipped
-    if ha_status == "SECONDARY ACTIVE" or ha_status == "PRIMARY STANDBY":
-        msg = f"HA Status: {ha_status} | HA Primary State: {ha_primary_state} | HA Secondary State: {ha_secondary_state} | Skipping upgrade."
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {msg}")
-        return False, msg
-
-    # When HA is disabled, proceed with upgrade
-    elif ha_status == "PRIMARY DISABLED" or ha_uptime == "HIGH AVAILABILITY DISABLED":
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status: {ha_status} | HA Primary State: {ha_primary_state} | HA Secondary State: {ha_secondary_state} | Proceeding with upgrade.")
-        return True, "HA disabled, proceeding"
-
-    # When the primary is active and the secondary is standby, allow upgrade
-    elif ha_status == "PRIMARY ACTIVE":
-        if ha_primary_state == "ACTIVE" and ha_secondary_state == "STANDBY":
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: HA status: {ha_status} | {ha_primary_state} | {ha_secondary_state}. Proceeding with upgrade.")
-            return True, "Primary active with standby secondary"
-        else:
-            msg = f"HA status: {ha_status} | P:{ha_primary_state} | S:{ha_secondary_state}. Skipping upgrade."
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {msg}")
-            return False, msg
-
-    return False, f"Unknown HA status: {ha_status}"
 
 
 def get_local_users(api_session, api_base: str, firewall_generation: int, firewall: str, sshport: str, username: str, password: str, target_numbers: tuple):
@@ -1562,6 +1464,7 @@ def generate_summary_table(results: dict):
         table.add_row("", "", "", "", "", "", "")
 
         # Local Users
+        # Force Password Change
         total_users = results.get('total_user_count', 0)
         users_updated = results.get('total_users_forced_to_update_password', 0)
         users_skipped = results.get('skipped_user_count', 0)
@@ -1590,24 +1493,6 @@ def generate_summary_table(results: dict):
         else:
             table.add_row("Authentication", "Reset TOTP Bindings", "Total bindings reset: succeeded/failed",
                           "Critical", "[red]Not Performed[/red]", "N/A", "[red]TOTP bindings were not reset.[/red]")
-
-        # Botnet Filtering
-        # botnet = results.get('botnet_filtering', {})
-        # if botnet.get('botnet_filtering_licensed'):
-        #     status = "[green]Enabled[/green]" if botnet.get('botnet_filtering_enabled') else "[yellow]Licensed but Disabled[/yellow]"
-        #     action = "[green]None[/green]" if botnet.get('botnet_filtering_enabled') else "[yellow]Consider enabling[/yellow]"
-        #     table.add_row("Botnet Filtering", status, "N/A", action)
-        # else:
-        #     table.add_row("Botnet Filtering", "[dim]Not Licensed[/dim]", "N/A", "[dim]None[/dim]")
-
-        # TOTP on SSLVPN
-        # totp_sslvpn = results.get('totp_sslvpn', {})
-        # if totp_sslvpn.get('sslvpn_services_totp_enabled'):
-        #     table.add_row("SSLVPN TOTP/OTP", "[green]Enabled[/green]", "N/A", "[green]None[/green]")
-        # elif not totp_sslvpn.get('totp_disabled'):
-        #     table.add_row("SSLVPN TOTP/OTP", "[yellow]Not Enabled[/yellow]", "N/A", "[yellow]Consider enabling[/yellow]")
-        # else:
-        #     table.add_row("SSLVPN TOTP/OTP", "[dim]Not Checked[/dim]", "N/A", "[dim]None[/dim]")
 
         console.print("\n")
         console.print(table)
@@ -2105,7 +1990,6 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     except Exception as e:
         print(f"Error generating TACACS Accounting Servers section: {e}")
         md_lines.append(f"- **TACACS Accounting Servers:** Error retrieving information")
-
     md_lines.append(f"")
 
     # VPN Configuration
@@ -2246,13 +2130,9 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     except Exception as e:
         print(f"Error processing Security Services Proxy: {e}")
         md_lines.append(f"- **Security Services Proxy:** Error retrieving information")
-
-    # TODO: Left off adding the remaining items to the markdown report.
-
     md_lines.append(f"")
 
     # Wireless
-    # TODO: Section not complete
     md_lines.append(f"### Wireless Configuration")
     md_lines.append(f"")
 
@@ -2438,7 +2318,6 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     md_lines.append(f"")
 
     # Extended Infrastructure
-    # TODO: Section not complete
     md_lines.append(f"### Infrastructure")
     md_lines.append(f"")
     try:
@@ -2633,30 +2512,87 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     # Local Users
     md_lines.append(f"### Local User Management")
     md_lines.append(f"")
+
+    # Actions taken on local users
+    # Force Password Change
     try:
+        # The key will only be present if force password change is disabled.
+        if not results.get('force_password_change_disabled', False):
+            md_lines.append(f"- **Force Password Change on Local Users:** Enabled")
+            md_lines.append(f"   - **Action Taken:** All local users have been forced to update their password at next login")
+            md_lines.append(f"   - **Priority:** Critical")
+            md_lines.append(f"   - **Reference:** [Local User Password Change](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,Local%20Users,-Force%20a%20password)")
+        else:
+            md_lines.append(f"- **Force Password Change on Local Users:** Not Enabled")
+            md_lines.append(f"   - **Action Taken:** None")
+    except Exception as e:
+        print(f"Error processing action taken on local users: {e}")
+        md_lines.append(f"- **Action Taken on Local Users:** Error retrieving information")
+
+    # Unbind TOTP
+    try:
+        # The key will only be present if TOTP unbind was disabled.
+        if not results.get('totp_unbind_disabled', False) and results.get('totp_unbind_attempted', False):
+            md_lines.append(f"- **Unbind TOTP from Local Users:** Enabled")
+            md_lines.append(f"   - **Action Taken:** All TOTP tokens have been unbound from local users")
+            md_lines.append(f"   - **Priority:** Critical")
+            md_lines.append(f"   - **Reference:** [Local User TOTP Unbind](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,Local%20Users,-Unbind%20TOTP%20tokens)")
+        else:
+            md_lines.append(f"- **Unbind TOTP from Local Users:** Not Enabled")
+            md_lines.append(f"   - **Action Taken:** None")
+    except Exception as e:
+        print(f"Error processing action taken on TOTP unbind: {e}")
+        md_lines.append(f"- **Action Taken on TOTP Unbind:** Error retrieving information")
+
+    md_lines.append(f"")
+
+    # User Counts and Details
+    try:
+        md_lines.append(f"#### Statistics")
         total_users = results.get('total_user_count', 0)
         users_updated = results.get('total_users_forced_to_update_password', 0)
         users_skipped = results.get('skipped_user_count', 0)
+        totp_unbind_attempted = results.get('totp_unbind_attempted', False)
+        totp_unbind_successful_count = results.get('totp_unbind_successful_count', 0)
+        totp_unbind_failed_count = results.get('totp_unbind_failed_count', 0)
 
         md_lines.append(f"- **Total Local Users:** {total_users}")
         md_lines.append(f"- **Users Updated:** {users_updated}")
         md_lines.append(f"- **Users Skipped:** {users_skipped}")
+        md_lines.append(f"- **TOTP Unbind Attempted:** {'Yes' if totp_unbind_attempted else 'No'}")
+        if totp_unbind_attempted:
+            md_lines.append(f"- **TOTP Unbind Successful for Users:** {totp_unbind_successful_count}")
+            md_lines.append(f"- **TOTP Unbind Failed for Users:** {totp_unbind_failed_count}")
     except Exception as e:
         print(f"Error processing local users: {e}")
         md_lines.append(f"- **Local Users:** Error retrieving information")
 
+    # Copies of the two lists to merge
+    totp_unbind_results = results.get('totp_unbind_results', [])
+    fpc_results = results.get('users', [])
+
+    # Change some key named to avoid collision during merge
+    for t in totp_unbind_results:
+        t['totp_skipped'] = t.pop('skipped', False)
+        t['totp_reason'] = t.pop('reason', None)
+    totp_lookup = {t["name"]: t for t in totp_unbind_results}
+
+    # Merges the two lists based on username
+    user_list = [{**u, **totp_lookup.get(u["name"], {})} for u in fpc_results]
+
     try:
-        if results.get('users'):
+        if user_list:
             md_lines.append(f"")
             md_lines.append(f"#### User Details")
             md_lines.append(f"")
-            md_lines.append(f"| Username | Updated | Skipped | Reason |")
-            md_lines.append(f"|----------|---------|---------|--------|")
-            for user in results.get('users', []):
-                updated = "✅" if user.get('commit_successful') else "❌"
+            md_lines.append(f"| Username | Force Password Change | Skipped Force Password Change | Reset/Unbind TOTP | Skipped TOTP Binding Reset |")
+            md_lines.append(f"|----------|-----------------------|-------------------------------|-------------------|----------------------------|")
+            for user in user_list:
+                force_pass = "✅" if user.get('commit_successful') else "❌"
                 skipped = "Yes" if user.get('skipped') else "No"
-                reason = user.get('reason', '-')
-                md_lines.append(f"| {user.get('name', 'Unknown')} | {updated} | {skipped} | {reason} |")
+                unbound_totp = "✅" if user.get('totp_unbound', False) and not user.get('skipped', False) else ("❌" if user.get('totp_unbind_attempted') else "N/A")
+                totp_skipped = "Yes" if user.get('totp_skipped', False) else "No"
+                md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} |")
     except Exception as e:
         print(f"Error generating user details table: {e}")
 
@@ -2672,16 +2608,6 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     except Exception as e:
         print(f"Error processing TOTP unbind: {e}")
         md_lines.append(f"- **TOTP Unbind:** Error retrieving information")
-
-    # try:
-    #     totp_sslvpn = results.get('totp_sslvpn', {})
-    #     if totp_sslvpn.get('sslvpn_services_totp_enabled'):
-    #         md_lines.append(f"- **SSLVPN Services TOTP:** Enabled ({totp_sslvpn.get('sslvpn_services_totp_mode', 'Unknown')})")
-    #     else:
-    #         md_lines.append(f"- **SSLVPN Services TOTP:** Not enabled")
-    # except Exception as e:
-    #     print(f"Error processing SSLVPN TOTP: {e}")
-    #     md_lines.append(f"- **SSLVPN Services TOTP:** Error retrieving information")
 
     # Recommendations
     md_lines.append(f"## Recommendations")
@@ -2773,10 +2699,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     username = kwargs.get('username', target.username)
     password = kwargs.get('password', target.password)
     sshport = kwargs.get('sshport', target.sshport)
-    enable_totp = kwargs.get('enable_totp', target.enable_totp)
-    enable_botnet_filtering = kwargs.get('enable_botnet_filtering', target.enable_botnet_filtering)
     temp_password = kwargs.get('temp_password', target.temp_password)
-    upgrade_firmware = kwargs.get('upgrade_firmware', target.upgrade_firmware)
     unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
     force_password_change = kwargs.get('force_password_change', target.force_password_change)
 
@@ -2798,16 +2721,9 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: SSH logic is disabled.")
         routine_results[firewall]['ssh_logic_disabled'] = True
 
-    if upgrade_firmware != "":
-        routine_results[firewall]['firmware_upgrade_requested'] = False
-        routine_results[firewall]['firmware_image'] = upgrade_firmware
-
     # Print verbose details if enabled
     print_verbose_details(target, target_numbers, a, username=username, password=password,
-                         sshport=sshport, enable_totp=enable_totp,
-                         enable_botnet_filtering=enable_botnet_filtering,
-                         temp_password=temp_password, upgrade_firmware=upgrade_firmware,
-                         unbind_totp=unbind_totp)
+                         sshport=sshport, temp_password=temp_password, unbind_totp=unbind_totp)
 
     # Initialize session with the firewall
     api_session, return_msg, api_base, username, password = initialize_session(
@@ -2854,19 +2770,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     update_routine_results(routine_results, firewall, 'settings_result', settings_result)
     if not silent:
         print()
-
-    # Check HA eligibility for upgrade operations
-    # ha_status = firewall_info['ha_status']
-    # ha_primary_state = firewall_info['ha_primary_state']
-    # ha_secondary_state = firewall_info['ha_secondary_state']
-    # ha_uptime = firewall_info['ha_uptime']
-    #
-    # upgrade_eligible, upgrade_msg = check_ha_upgrade_eligibility(
-    #     ha_status, ha_primary_state, ha_secondary_state, ha_uptime, target_numbers)
-    #
-    # if not upgrade_eligible:
-    #     return "HA_NOT_PRIMARY", upgrade_msg
-    # print()
 
     # Remediation Playbook -- Checks the items in this KB article:
     # https://www.sonicwall.com/support/knowledge-base/remediation-playbook/250916130050523
@@ -4715,17 +4618,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     #   Force password change. - need to make sure arguments work as expected.
     #   Randomize password based on configured temporary password. Will have to provide a list of user/pass combos.
 
-    # Manage botnet filtering (if enabled)
-    # botnet_result = manage_botnet_filtering(api_session, api_base, enable_botnet_filtering,
-    #                                       firewall_info['firewall_generation'], target_numbers, a)
-    # update_routine_results(routine_results, firewall, 'botnet_filtering', botnet_result)
-
-    # Enable TOTP on SSLVPN Services group (if enabled)
-    # totp_sslvpn_result = enable_totp_on_sslvpn_group(api_session, api_base, enable_totp,
-    #                                                 firewall_info['firewall_generation'],
-    #                                                 firewall, sshport, username, password, target_numbers)
-    # update_routine_results(routine_results, firewall, 'totp_sslvpn', totp_sslvpn_result)
-
     # Calculate routine statistics
     calculate_routine_statistics(routine_results, firewall)
 
@@ -4739,11 +4631,28 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 # Main function
 if __name__ == "__main__":
     banner_info = [
-        "This tool automates some remediation tasks such as:",
-        "  - Includes checks from the 'Essential Credential Reset' KB article: https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590"
-        "  - Forces all local users to update their password",
-        "  - Reset TOTP binding for all users",
-        "  - ...",
+        "Remediation Playbook / Essential Credential Reset Tool",
+        "",
+        "This tool assists administrators by analyzing SonicOS configurations and producing a",
+        "  detailed report based on the 'Remediation Playbook' and 'Essential Credential Reset' KB articles:",
+        "    https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590",
+        "    https://www.sonicwall.com/support/knowledge-base/remediation-playbook/250916130050523",
+        "",
+        "What this tool does:",
+        "  - Connects to SonicWall firewalls using the SonicOS API",
+        "    - SSH may be used as a fallback for auto-enabling SonicOS API and other operations",
+        "    - SonicOS API will be auto-disabled if enabled by the tool",
+        "  - Performs automated checks from the 'Essential Credential Reset' guidelines",
+        "  - Identifies configuration items requiring attention",
+        "  - Generates a summary table of findings and recommended actions with resources for remediation",
+        "  - Produces a detailed findings report for review",
+        "  - Optionally resets local user passwords to a specified temporary password with randomization",
+        "     - Users will also be forced to change the password at next login",
+        "  - Optionally unbinds TOTP from all local users",
+        "",
+        "Important:",
+        "  - This tool does NOT make the recommended configuration changes for you.",
+        "  - It uses the SonicOS API to gather data and provide guidance for manual remediation.",
     ]
     print_banner(info=banner_info)
 
