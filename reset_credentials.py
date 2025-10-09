@@ -1,6 +1,8 @@
 # Imports
 import json
 import csv
+import random
+import string
 from dataclasses import dataclass
 from typing import Optional, List
 from os import path, mkdir
@@ -52,6 +54,7 @@ class FirewallTarget:
     password: Optional[str] = None
     sshport: str = '22'
     temp_password: str = ""
+    randomize_temp_password: bool = False
     unbind_totp: bool = False
     force_password_change: bool = False
 
@@ -70,16 +73,74 @@ def normalize_password(password: str) -> str:
     return password.replace("<comma>", ",")
 
 
-def normalize_temp_password(password: str) -> str:
-    """Normalize temporary password with minimum length validation."""
+def normalize_temp_password(password: str, randomize: bool) -> str:
+    """Normalize temporary password with minimum length and password complexity validation."""
+    if randomize:
+        password = create_random_password(length=12)
+        return password
+
     if not password or password in ['None', 'false', '']:
         return ""
 
-    if len(password) < 8:
+    # Make sure the password meets minimum complexity requirements.
+    # Enforce minimum length of 12 characters
+    if len(password) < 12:
         print(f"{generate_timestamp()}: Warning: Temporary password too short, padding with 'x'")
-        password += 'x' * (8 - len(password))
+        password += 'x' * (12 - len(password))
+
+    # Make sure there is at least 1 uppercase character
+    if not any(c.isupper() for c in password):
+        print(f"{generate_timestamp()}: Warning: Temporary password missing uppercase character, adding 'X'")
+        password += 'X'
+
+    # Make sure there is at least 1 lowercase character
+    if not any(c.islower() for c in password):
+        print(f"{generate_timestamp()}: Warning: Temporary password missing lowercase character, adding 'x'")
+        password += 'x'
+
+    # Make sure there is at least 1 digit
+    if not any(c.isdigit() for c in password):
+        print(f"{generate_timestamp()}: Warning: Temporary password missing digit, adding '1'")
+        password += '1'
+
+    # Make sure there is at least 1 special character
+    special_characters = "!@#$%^&*()-_=+[]{}|;:,.<>?/"
+    if not any(c in special_characters for c in password):
+        print(f"{generate_timestamp()}: Warning: Temporary password missing special character, adding '!'")
+        password += '!'
 
     return password
+
+
+def create_random_password(length: int = 12) -> str:
+    """Generate a random password meeting complexity requirements. Minimum length is 12."""
+    if length < 12:
+        length = 12
+
+    # Ensure the password contains at least one character from each category
+    categories = {
+        'uppercase': string.ascii_uppercase,
+        'lowercase': string.ascii_lowercase,
+        'digits': string.digits,
+        'special': "!@#$%^&*()-_=+[]{}|;:,.<>?/"
+    }
+
+    # Start with one character from each category
+    password_chars = [
+        random.choice(categories['uppercase']),
+        random.choice(categories['lowercase']),
+        random.choice(categories['digits']),
+        random.choice(categories['special'])
+    ]
+
+    # Fill the rest of the password length with random choices from all categories
+    all_chars = ''.join(categories.values())
+    password_chars += random.choices(all_chars, k=length - len(password_chars))
+
+    # Shuffle the resulting list to ensure randomness
+    random.shuffle(password_chars)
+
+    return ''.join(password_chars)
 
 
 def parse_csv_targets(filepath: str) -> List[FirewallTarget]:
@@ -131,7 +192,9 @@ def _parse_csv_row_dict(row: dict, row_num: int) -> Optional[FirewallTarget]:
         username=row.get('admin_user', '').strip() or None,
         password=normalize_password(row.get('admin_password', '')),
         sshport=row.get('target_ssh_mgmt_port', '22').strip() or '22',
-        temp_password=normalize_temp_password(row.get('temporary_password', '')),
+        temp_password=normalize_temp_password(password=row.get('temporary_password', ''),
+                                              randomize=normalize_boolean(row.get('randomize_temp_password', 'false'))),
+        randomize_temp_password=normalize_boolean(row.get('randomize_temp_password', '')),
         unbind_totp=normalize_boolean(row.get('unbind_totp', '')),
         force_password_change=normalize_boolean(row.get('force_password_change', ''))
     )
@@ -164,9 +227,11 @@ def _parse_csv_row_list(row: List[str], row_num: int) -> Optional[FirewallTarget
         username=row[1].strip() or None,
         password=normalize_password(row[2]),
         sshport=row[3].strip() or '22',
-        temp_password=normalize_temp_password(row[6]),
-        unbind_totp=normalize_boolean(row[8]) if len(row) > 8 else False,
-        force_password_change=normalize_boolean(row[9]) if len(row) > 9 else False
+        temp_password=normalize_temp_password(password=row[4],
+                                              randomize=normalize_boolean(row[7])),
+        randomize_temp_password=normalize_boolean(row[7]),
+        unbind_totp=normalize_boolean(row[5]),
+        force_password_change=normalize_boolean(row[6])
     )
 
 
@@ -179,7 +244,9 @@ def load_targets(target_input: str) -> List[FirewallTarget]:
         return [FirewallTarget(
             firewall=target_input,
             sshport=a.sshport,
-            temp_password=normalize_temp_password(a.temp_password),
+            temp_password=normalize_temp_password(password=a.temp_password,
+                                                  randomize=normalize_boolean(a.randomize_password)),
+            randomize_temp_password=normalize_boolean(a.randomize_password),
             unbind_totp=normalize_boolean(a.unbind_totp),
             force_password_change=normalize_boolean(a.force_password_change)
         )]
@@ -220,6 +287,7 @@ def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, *
     password = kwargs.get('password', target.password)
     sshport = kwargs.get('sshport', target.sshport)
     temp_password = kwargs.get('temp_password', target.temp_password)
+    randomize_temp_password = kwargs.get('randomize_temp_password', target.randomize_temp_password)
     unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
     force_password_change = kwargs.get('force_password_change', target.force_password_change)
 
@@ -233,6 +301,7 @@ def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, *
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: API Base URL: {api_base}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: SSH Management Port: {sshport}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Temporary Password for users: {temp_password}")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Randomize Temporary Passwords: {randomize_temp_password}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbind TOTP from all users: {unbind_totp}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Force password change for all local users: {force_password_change}")
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: ----------------------")
@@ -489,7 +558,7 @@ def get_local_users(api_session, api_base: str, firewall_generation: int, firewa
     return users
 
 
-def process_password_changes(users: dict, api_session, api_base: str, temp_password: str, firewall_generation: int,
+def process_password_changes(users: dict, api_session, api_base: str, temp_password: str, randomize_temp_password: bool, firewall_generation: int,
                            firewall: str, sshport: str, username: str, password: str, target_numbers: tuple, args):
     """Process password changes for all eligible local users."""
     if not users:
@@ -499,8 +568,10 @@ def process_password_changes(users: dict, api_session, api_base: str, temp_passw
     users_list = users['user']['local']['user']
 
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Updating the force password reset flag for all local users...")
-    if temp_password != "":
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Passwords will be reset to '{temp_password}'")
+    if temp_password != "" and not randomize_temp_password:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Passwords will be reset to '{temp_password}'. If the configured password did not meet complexity requirements, it was modified to include one of each character category (uppercase, lowercase, digit, special).")
+    elif temp_password != "" and randomize_temp_password:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Passwords will be reset to a random password that includes at least one of each character category (uppercase, lowercase, digit, special).")
 
     # Create SSH session for GEN5 firewalls
     ssh_session = None
@@ -571,6 +642,7 @@ def process_password_changes(users: dict, api_session, api_base: str, temp_passw
 
         # Update password if temporary password is set
         if temp_password != "":
+            temp_password = create_random_password(length=12)
             if firewall_generation == 7:
                 usr['password'] = temp_password
             elif firewall_generation == 6:
@@ -587,7 +659,8 @@ def process_password_changes(users: dict, api_session, api_base: str, temp_passw
             "skipped": False,
             "reason": None,
             "user_update_successful": False,
-            "commit_successful": False
+            "commit_successful": False,
+            "new_password": temp_password
         }
 
         if firewall_generation != 5:
@@ -776,145 +849,6 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
     return result
 
 
-def manage_botnet_filtering(api_session, api_base: str, enable_botnet_filtering: bool, firewall_generation: int, target_numbers: tuple, args):
-    """Check and manage botnet filtering configuration."""
-    result = {
-        'botnet_filtering_licensed': None,
-        'botnet_filtering_enabled': None,
-        'botnet_filtering_autoenabled': False
-    }
-
-    if not enable_botnet_filtering:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Botnet Filtering logic is disabled. Enable it with -eb.")
-        result['botnet_filtering_disabled'] = True
-        return result
-
-    try:
-        print()
-        botnet_status = check_botnet_status(api_base, api_session, firewall_generation=firewall_generation)
-
-        if botnet_status["license_status"] == "not_licensed":
-            result['botnet_filtering_licensed'] = False
-            msg = botnet_status.get("message", "")
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is not licensed. {msg}")
-            return result
-        elif botnet_status["license_status"] == "licensed":
-            result['botnet_filtering_licensed'] = True
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is licensed.")
-
-        if botnet_status["status"] == "enabled":
-            result['botnet_filtering_enabled'] = True
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is enabled.")
-            return result
-        elif botnet_status["status"] == "disabled":
-            result['botnet_filtering_enabled'] = False
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Botnet Filtering is not enabled.")
-
-        # Enable botnet filtering if licensed but not enabled
-        if (result['botnet_filtering_licensed'] and not result['botnet_filtering_enabled'] and
-            (enable_botnet_filtering or args.enable_botnet_filtering)):
-
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Enabling Botnet Filtering for all connections.")
-            botnet_status_response = botnet_status['response']
-            botnet_status_response['botnet']['logging'] = True
-
-            enable_botnet_resp = {}
-            if firewall_generation == 7:
-                botnet_status_response['botnet']['block']['connections'] = {'enable': True, 'mode': 'all'}
-                enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/base', data=botnet_status_response)
-            elif firewall_generation == 6:
-                botnet_status_response['botnet']['block']['connections'] = {'all': True}
-                # Remove problematic keys that can cause out of bounds errors
-                botnet_status_response['botnet'].pop('dynamic_list', None)
-                botnet_status_response['botnet'].pop('exclude', None)
-                botnet_status_response['botnet'].pop('include', None)
-                enable_botnet_resp = put_request(api_base, api_session, '/api/sonicos/botnet/global', data=botnet_status_response)
-            elif firewall_generation == 5:
-                enable_botnet_resp = api_session.enable_botnet_filtering()
-
-            if enable_botnet_resp.get('status', {}).get('success', False) is False:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error enabling Botnet Filtering.")
-            else:
-                result['botnet_filtering_autoenabled'] = True
-
-            # Commit changes
-            if firewall_generation != 5:
-                commit_pending(api_base, api_session)
-
-    except KeyboardInterrupt:
-        print(f"\nStopped!")
-        exit()
-    except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error managing botnet filtering: {e}")
-        result['botnet_filtering_error'] = str(e)
-
-    return result
-
-
-def enable_totp_on_sslvpn_group(api_session, api_base: str, enable_totp: bool, firewall_generation: int,
-                               firewall: str, sshport: str, username: str, password: str, target_numbers: tuple):
-    """Check and enable TOTP on SSLVPN Services group."""
-    result = {
-        'sslvpn_services_totp_enabled': None,
-        'sslvpn_services_totp_autoenabled': None
-    }
-
-    if not enable_totp:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP logic is disabled. Enable it with -et.")
-        result['totp_disabled'] = True
-        return result
-
-    try:
-        print()
-
-        # Check TOTP status based on firewall generation
-        if firewall_generation != 5:
-            totp_status = check_totp_status(api_base, api_session, group_name="SSLVPN Services",
-                                          enable_totp=enable_totp, firewall_generation=firewall_generation)
-        else:
-            # GEN5 does not support TOTP
-            totp_status = {
-                "status": "disabled",
-                "mode": "",
-                "autoenabled": False,
-                "message": "GEN5 firewalls do not support TOTP. Consider enabling Email-based OTP manually.",
-                "try_ssh": False
-            }
-            if enable_totp:
-                print("TOTP is not available on GEN5 firewalls. Only Email-based OTP, which requires an email address configured for each user.")
-                print("Please consider enabling Email-based OTP manually after configuring an email address for each user.")
-
-        # Update results based on TOTP status
-        if totp_status["status"] == "enabled":
-            result['sslvpn_services_totp_enabled'] = True
-            result['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
-            result['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {totp_status.get('mode', '')} is enabled on the SSLVPN Services group.")
-        elif totp_status["status"] == "disabled":
-            result['sslvpn_services_totp_enabled'] = False
-            result['sslvpn_services_totp_mode'] = totp_status.get("mode", "")
-            result['sslvpn_services_totp_autoenabled'] = totp_status.get("autoenabled", False)
-            result['sslvpn_services_totp_error_msg'] = totp_status.get("message", "")
-
-            if firewall_generation == 5:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: {totp_status.get('message', '')}")
-            else:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP/OTP is not enabled on the SSLVPN Services group.")
-
-            if totp_status.get("try_ssh", None):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unable to enable TOTP via API. Trying SSH instead. ({totp_status.get('message', '')})\n")
-                enable_totp_ssh(firewall, sshport, username, password, "SSLVPN Services")
-
-    except KeyboardInterrupt:
-        print(f"\nStopped!")
-        exit()
-    except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error managing TOTP: {e}")
-        result['totp_error'] = str(e)
-
-    return result
-
-
 # Helper function for the summary
 def calculate_routine_statistics(routine_results: dict, firewall: str):
     """Calculate and update routine statistics."""
@@ -941,13 +875,6 @@ def calculate_routine_statistics(routine_results: dict, firewall: str):
     routine_results[firewall]['completed_routine_successfully'] = True
 
 
-def link_text(label: str, url: str) -> Text:
-    """Creates a clickable link in rich text."""
-    # return Text(label, style=f"blue underline link {url}")
-    # TODO: This does not work. Need to pivot to putting the URL in the markdown instead of a clickable link.
-    return
-
-
 def generate_summary_table(results: dict):
     """Generate a rich table summarizing all security checks and their findings."""
     try:
@@ -961,7 +888,6 @@ def generate_summary_table(results: dict):
                       caption_style="bold magenta",
                       caption=f"Refer to ./{constants.START_TIMESTAMP_FOLDER}/{results['device_model']}-{results['serial_number']}-summary.md for resources to address each of the findings above."
                       )
-        table.add_column("Category", style="cyan", no_wrap=True)
         table.add_column("Configuration Area", style="cyan", no_wrap=True)
         table.add_column("Description", style="cyan", no_wrap=False, max_width=40)
         table.add_column("Priority", style="white", no_wrap=True)
@@ -993,55 +919,55 @@ def generate_summary_table(results: dict):
         # Authentication Servers - api/sonicos/user/tacacs/servers, /api/sonicos/user/radius/servers, /api/sonicos/user/ldap/servers
         ldap_count = get_count(results.get('ldap_servers', {}))
         if ldap_count > 0:
-            table.add_row("Authentication", "LDAP Servers", "Find configured LDAP servers", "Critical",
+            table.add_row("LDAP Servers", "Find configured LDAP servers", "Critical",
                           "[green]Servers Configured[/green]", str(ldap_count), "[red]Update the LDAP bind credentials on the server and in SonicOS.[/red]")
         else:
-            table.add_row("Authentication", "LDAP Servers", "Find configured LDAP servers", "Critical",
+            table.add_row("LDAP Servers", "Find configured LDAP servers", "Critical",
                           "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         radius_count = get_count(results.get('radius_servers', {}))
         if radius_count > 0:
-            table.add_row("Authentication", "RADIUS Servers", "Find configured RADIUS servers", "Critical",
+            table.add_row("RADIUS Servers", "Find configured RADIUS servers", "Critical",
                           "[green]Servers Configured[/green]", str(radius_count), "[red]Update the RADIUS shared secret on the server and in SonicOS.[/red]")
         else:
-            table.add_row("Authentication", "RADIUS Servers", "Find configured RADIUS servers", "Critical",
+            table.add_row("RADIUS Servers", "Find configured RADIUS servers", "Critical",
                           "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         tacacs_count = get_count(results.get('tacacs_servers', {}))
         if tacacs_count > 0:
-            table.add_row("Authentication", "TACACS Servers", "Find configured TACACS servers", "Critical",
+            table.add_row("TACACS Servers", "Find configured TACACS servers", "Critical",
                           "[green]Servers Configured[/green]", str(tacacs_count), "[red]Update the shared secret on the server and in SonicOS.[/red]")
         else:
-            table.add_row("Authentication", "TACACS Servers", "Find configured TACACS servers", "Critical",
+            table.add_row("TACACS Servers", "Find configured TACACS servers", "Critical",
                           "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # VPN - /api/sonicos/vpn/policies/all
         vpn_count = get_count(results.get('vpn', {}).get('policy', []))
         if vpn_count > 0:
-            table.add_row("VPN", "VPN Policies", "Find configured VPN policies", "Critical",
+            table.add_row("VPN Policies", "Find configured VPN policies", "Critical",
                           "[green]Policies Found[/green]", str(vpn_count), "[red]Update the pre-shared secrets and/or encryption and authentication keys on each policy.[/red]")
         else:
-            table.add_row("VPN", "VPN Policies", "Find configured VPN policies", "Critical",
+            table.add_row("VPN Policies", "Find configured VPN policies", "Critical",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # WAN Interfaces (PPPoE/PPTP/L2TP) - /api/sonicos/interfaces/ipv4
         interesting_wans = results.get('interesting_wan_list', [])
         if len(interesting_wans) > 0:
-            table.add_row("Network Services", "WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
+            table.add_row("WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
                           "[green]Interfaces Found[/green]", str(len(interesting_wans)),
                           "[red]Update the credentials with your ISP, then in SonicOS.[/red]")
-            table.add_row("", "", "", "", "", "", "[red] - Interface(s): " + ", ".join(interesting_wans) + "[/red]")
+            table.add_row("", "", "", "", "", "[red] - Interface(s): " + ", ".join(interesting_wans) + "[/red]")
         else:
-            table.add_row("Network Services", "WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
+            table.add_row("WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # AWS API - /api/sonicos/log/aws
         aws_enabled = results.get('log', {}).get('aws', {}).get('enable', False)
         if aws_enabled:
-            table.add_row("Cloud/Integrations", "AWS API Logging", "Check the AWS API integration status", "Critical",
+            table.add_row("AWS API Logging", "Check the AWS API integration status", "Critical",
                           "[green]Enabled[/green]", "", "[red]Update the secret key on the AWS Console, then in SonicOS.[/red]")
         else:
-            table.add_row("Cloud/Integrations", "AWS API Logging", "Check the AWS API integration status", "Critical",
+            table.add_row("AWS API Logging", "Check the AWS API integration status", "Critical",
                           "[dim]Not Enabled[/dim]", "", "[dim]No action required[/dim]")
 
         # Network Services - Dynamic DNS - /api/sonicos/dynamic-dns/profiles/ipv6 and /api/sonicos/dynamic-dns/profiles/ipv4
@@ -1049,20 +975,20 @@ def generate_summary_table(results: dict):
         ddns_v6 = get_count(results.get('ddns_services_v6', []))
         total_ddns = ddns_v4 + ddns_v6
         if total_ddns > 0:
-            table.add_row("Network Services", "Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
+            table.add_row("Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
                           "[green]Profiles Found[/green]", str(total_ddns),
                           "[red]Update the credentials at the DDNS provider's website, then in SonicOS.[/red]")
         else:
-            table.add_row("Network Services", "Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
+            table.add_row("Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
                           "[dim]No profiles found[/dim]", "", "[dim]No action required[/dim]")
 
         # Cloud Secure Edge - /api/sonicos/cloud-secure-edge/base
         cse_enabled = results.get('cloud_secure_edge', {}).get('created', False)
         if cse_enabled:
-            table.add_row("Cloud/Integrations", "Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
+            table.add_row("Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
                           "[green]Enabled[/green]", "", "[red]Reset the CSE connector's API token.[/red]")
         else:
-            table.add_row("Cloud/Integrations", "Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
+            table.add_row("Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
                           "[dim]Not Enabled[/dim]", "", "[dim]No action required[/dim]")
 
         # Email Logging - /api/sonicos/log/automation
@@ -1073,47 +999,47 @@ def generate_summary_table(results: dict):
                     email_logging_data.get('smtp_flag', False) or
                     email_logging_data.get('ftp_flag', False)
             ):
-                table.add_row("Monitoring", "Email Logging", "Checks for Log Automation config", "Medium",
+                table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
                               "[green]Configured[/green]", "", "[red]Update the email credentials on the server and in SonicOS.[/red]")
             if email_logging_data.get('pop3_flag', False):
-                table.add_row("", "", "", "", "", "", "[red] - POP3: Update the email credentials on the server and in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", "[red] - POP3: Update the email credentials on the server and in SonicOS.[/red]")
             if email_logging_data.get('smtp_flag', False):
-                table.add_row("", "", "", "", "", "", "[red] - SMTP: Update the email credentials on the server and in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", "[red] - SMTP: Update the email credentials on the server and in SonicOS.[/red]")
             if email_logging_data.get('ftp_flag', False):
-                table.add_row("", "", "", "", "", "", "[red] - FTP: Update the email credentials on the server and in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", "[red] - FTP: Update the email credentials on the server and in SonicOS.[/red]")
             if (
                     email_logging_data.get('pop3_flag', False) is False and
                     email_logging_data.get('smtp_flag', False) is False and
                     email_logging_data.get('ftp_flag', False) is False
             ):
-                table.add_row("Monitoring", "Email Logging", "Checks for Log Automation config", "Medium",
+                table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
                               "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]", "")
         else:
-            table.add_row("Monitoring", "Email Logging", "Checks for Log Automation config", "Medium",
+            table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]", "")
 
         # Packet Monitor FTP Logging - /api/sonicos/packet-monitor/base
         pktmon_flagged = results.get('packet_monitor_ftp_set', False)
         if pktmon_flagged:
-            table.add_row("Monitoring", "Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
+            table.add_row("Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
                           "[green]Configured[/green]", "", "[red]Update the FTP credentials on the server and in SonicOS.[/red]")
         else:
-            table.add_row("Monitoring", "Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
+            table.add_row("Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Settings/TSR Scheduled Exports - /api/sonicos/ftp/base
         export_enabled = results.get('scheduled_exports_ftp_set', False)
         if export_enabled:
-            table.add_row("Cloud/Integrations", "TSR/EXP Scheduled Exports", "Checks for FTP configuration", "Medium",
+            table.add_row("TSR/EXP Scheduled Exports", "Checks for FTP configuration", "Medium",
                           "[green]Configured[/green]", "", "[red]Update the FTP credentials on the server and in SonicOS.[/red]")
         else:
-            table.add_row("Cloud/Integrations", "TSR Scheduled Exports", "Checks for FTP configuration", "Medium",
+            table.add_row("TSR Scheduled Exports", "Checks for FTP configuration", "Medium",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # SNMP - /api/sonicos/snmp/users
         snmp_count = get_count(results.get('snmp', {}).get('user', []))
         if snmp_count > 0:
-            table.add_row("Network Services", "SNMPv3 Users", "Find configured SNMP user entries", "High",
+            table.add_row("SNMPv3 Users", "Find configured SNMP user entries", "High",
                           "[green]Users Found[/green]", str(snmp_count), "[red]Update the password of each SNMP user.[/red]")
         else:
             table.add_row("Network Services","SNMPv3 Users", "Find configured SNMP user entries", "High",
@@ -1124,92 +1050,92 @@ def generate_summary_table(results: dict):
         clearpass_enabled = results.get('clearpass_enabled', False)
         clearpass_count = get_count(results.get('clearpass_servers', {}.get('clearpass_servers', [])))
         if clearpass_enabled or clearpass_count > 0:
-            table.add_row("Network Services", "Clearpass/Network Access Control", "Finds configured servers", "High",
+            table.add_row("Clearpass/Network Access Control", "Finds configured servers", "High",
                           f"[green]{'Servers Found' if clearpass_count > 0 else 'Enabled'}[/green]", str(clearpass_count), "[red]Update the shared secret on the server and in SonicOS.[/red]")
             if clearpass_count == 0:
-                table.add_row("", "", "", "", "", "", "[red] - Feature is enabled but no servers are configured.[/red]")
+                table.add_row("", "", "", "", "", "[red] - Feature is enabled but no servers are configured.[/red]")
         else:
-            table.add_row("Network Services", "Clearpass/Network Access Control", "Finds configured servers", "High",
+            table.add_row("Clearpass/Network Access Control", "Finds configured servers", "High",
                           "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # Cellular WWAN - /api/sonicos/reporting/wwan
         cell_attached = results.get('cellular_data', {}).get('wwan_attached', False)
         if cell_attached:
-            table.add_row("Cloud/Integrations", "Cellular WWAN", "Checks for an attached modem", "High",
+            table.add_row("Cellular WWAN", "Checks for an attached modem", "High",
                           "[green]Modem Attached[/green]", "", "[red]Update the credentials with the cellular provider and in SonicOS.[/red]")
         else:
-            table.add_row("Cloud/Integrations", "Cellular WWAN", "Checks for an attached modem", "High",
+            table.add_row("Cellular WWAN", "Checks for an attached modem", "High",
                           "[dim]Modem not found[/dim]", "", "[dim]No action required[/dim]")
 
         # Zone Objects: Wireless Guest Services External Guest Authentication (Message Authentication)
         guest_message_auth = [i['zone'] for i in results.get('guest_zone_data', []) if i['guest_auth_ext_enabled']]
         guest_message_count = len(guest_message_auth)
         if guest_message_count > 0:
-            table.add_row("Wireless", "Guest Services External Auth", "Finds Message Authentication config", "Medium",
+            table.add_row("Guest Services External Auth", "Finds Message Authentication config", "Medium",
                           "[green]Zones Found[/green]", str(guest_message_count), "[red]Update the Message Authentication password.[/red]")
             for g in guest_message_auth:
-                table.add_row("", "", "", "", "", "", f"[red] - {str(g)}: Guest Services Message Authentication enabled. Update the Message Authentication password.[/red]")
+                table.add_row("", "", "", "", "", f"[red] - {str(g)}: Guest Services Message Authentication enabled. Update the Message Authentication password.[/red]")
         else:
-            table.add_row("Wireless", "Guest Services External Auth", "Finds Message Authentication config", "Medium",
+            table.add_row("Guest Services External Auth", "Finds Message Authentication config", "Medium",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Zone Objects: WLAN RADIUS Servers - /api/sonicos/zones
         zone_data = results.get('wlan_zone_data', [])
         zone_radius_count = len(zone_data)
         if zone_radius_count > 0:
-            table.add_row("Wireless", "Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
+            table.add_row("Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
                           "[green]Zones Found[/green]", str(zone_radius_count), "[red]Update the RADIUS shared secret and/or LDAP password.[/red]")
             for z in zone_data:
                 if z['radius_server_enabled']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {z['zone']}: Local RADIUS server enabled. Update the RADIUS server shared secret.[/red]")
+                    table.add_row("", "", "", "", "", f"[red] - {z['zone']}: Local RADIUS server enabled. Update the RADIUS server shared secret.[/red]")
                 if z['ldap_server_enabled'] or z['ldap_server_host']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {z['zone']}: LDAP server enabled. Update the LDAP server password.[/red]")
+                    table.add_row("", "", "", "", "", f"[red] - {z['zone']}: LDAP server enabled. Update the LDAP server password.[/red]")
         else:
-            table.add_row("Wireless", "Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
+            table.add_row("Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Internal Wireless - Radio - /api/sonicos/wireless/radio
         radio_radius = results.get('internal_wlan', {}).get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
         radio_psk = results.get('internal_wlan', {}).get('wireless', {}).get('wpa', {}).get('passphrase', None)
         if radio_radius or radio_psk:
-            table.add_row("Wireless", "Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
+            table.add_row("Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
                           "[green]Configured[/green]", "", "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
             if radio_radius:
-                table.add_row("", "", "", "", "", "", "[red] - Update the RADIUS and/or RADIUS Accounting secrets on the server, then in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", "[red] - Update the RADIUS and/or RADIUS Accounting secrets on the server, then in SonicOS.[/red]")
             if radio_psk:
-                table.add_row("", "", "", "", "", "", "[red] - Update the pre-shared keys on the server, then in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", "[red] - Update the pre-shared keys on the server, then in SonicOS.[/red]")
         else:
-            table.add_row("Wireless", "Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
+            table.add_row("Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Internal Wireless - Virtual Access Point Objects - /api/sonicos/wireless/virtual-access-point/objects
         vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
         vap_data = results.get('internal_wlan_vap_data', [])
         if vap_count > 0:
-            table.add_row("Wireless", "Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
+            table.add_row("Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
                           "[green]Found[/green]", str(vap_count), "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
             for p in vap_data:
                 if p['radius']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
                 if p['accounting']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
         else:
-            table.add_row("Wireless", "Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
+            table.add_row("Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Internal Wireless - Virtual Access Point Profiles - /api/sonicos/wireless/virtual-access-point/profiles
         vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
         profile_data = results.get('internal_wlan_vap_profile_data', [])
         if vap_profile_count > 0:
-            table.add_row("Wireless", "Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
+            table.add_row("Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
                           "[green]Found[/green]", str(vap_profile_count), "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
             for p in profile_data:
                 if p['radius']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
                 if p['accounting']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
         else:
-            table.add_row("Wireless", "Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
+            table.add_row("Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Access Point Objects - /api/sonicos/sonicpoint/sonicpoints
@@ -1217,68 +1143,68 @@ def generate_summary_table(results: dict):
         ap_data = results.get('sonicpoint_object_data', [])
 
         if ap_count > 0:
-            table.add_row("Wireless", "SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
+            table.add_row("SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
                           "[green]Objects Found[/green]", str(ap_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
             for p in ap_data:
                 if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
                 if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
                 if p['sslvpn_user'] or p['sslvpn_server']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
                 if p['administrator']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
         else:
-            table.add_row("Wireless", "SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
+            table.add_row("SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Access Point Profiles - /api/sonicos/sonicpoint/profiles
         profile_count = len(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
         profile_data = results.get('sonicpoint_profile_data', [])
         if profile_count > 0:
-            table.add_row("Wireless", "SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
+            table.add_row("SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
                           "[green]Profiles Found[/green]", str(profile_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
             for p in profile_data:
                 if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
                 if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
                 if p['sslvpn_user'] or p['sslvpn_server']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
                 if p['administrator']:
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
         else:
-            table.add_row("Wireless", "SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
+            table.add_row("SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Virtual Access Points - /api/sonicos/sonicpoint/virtual-access-point/objects
         vap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
         vap_data = results.get('sonicpoint_vap_data', [])
         if vap_count > 0:
-            table.add_row("Wireless", "SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
+            table.add_row("SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
                           "[green]Objects Found[/green]", str(vap_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
             for p in vap_data:
                 if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
                 if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
         else:
-            table.add_row("Wireless", "SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
+            table.add_row("SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Virtual Access Point Profiles - /api/sonicos/sonicpoint/virtual-access-point/profiles
         vap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
         profile_data = results.get('sonicpoint_vap_profile_data', [])
         if vap_profile_count > 0:
-            table.add_row("Wireless", "SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
+            table.add_row("SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
                           "[green]Profiles Found[/green]", str(vap_profile_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
             for p in profile_data:
                 if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
                 if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
         else:
-            table.add_row("Wireless", "SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
+            table.add_row("SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Dynamic External Address Objects - /api/sonicos/dynamic-external-objects
@@ -1287,150 +1213,150 @@ def generate_summary_table(results: dict):
         ftp_deaos = [d for d in deao_data if d['protocol'] == 'ftp']
         http_deaos = [d for d in deao_data if d['protocol'] == 'https']
         if deao_count > 0:
-            table.add_row("Network Services", "Dynamic External Address Objects", "Finds configured objects", "High",
+            table.add_row("Dynamic External Address Objects", "Finds configured objects", "High",
                           "[green]Objects Found[/green]", str(deao_count), "[red]Update the credentials at the server, then in SonicOS.[/red]")
             if len(ftp_deaos) > 0:
-                table.add_row("", "", "", "", "", "", f"[red] - {str(len(ftp_deaos))} object(s) using FTP. Update the credentials at the server, then in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", f"[red] - {str(len(ftp_deaos))} object(s) using FTP. Update the credentials at the server, then in SonicOS.[/red]")
             if len(http_deaos) > 0:
-                table.add_row("", "", "", "", "", "", f"[red] - {str(len(http_deaos))} object(s) using HTTPS. Update the credentials at the server, then in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", f"[red] - {str(len(http_deaos))} object(s) using HTTPS. Update the credentials at the server, then in SonicOS.[/red]")
         else:
-            table.add_row("Network Services", "Dynamic External Address Objects", "Finds configured objects", "High",
+            table.add_row("Dynamic External Address Objects", "Finds configured objects", "High",
                           "[dim]No objects found[/dim]", "", "[dim]No action required[/dim]")
 
         # Dynamic Botnet Server List - /api/sonicos/botnet/base
         botnet_data = results.get('botnet_data', {})
         if botnet_data:
             if botnet_data['protocol'] == 'ftp':
-                table.add_row("Security Services", "Botnet Server List (FTP)", "Checks Botnet server list protocol", "Low",
+                table.add_row("Botnet Server List (FTP)", "Checks Botnet server list protocol", "Low",
                               "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
             elif botnet_data['protocol'] == 'https':
-                table.add_row("Security Services", "Botnet Server List (HTTP)", "Checks Botnet server list protocol", "Low",
+                table.add_row("Botnet Server List (HTTP)", "Checks Botnet server list protocol", "Low",
                               "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
             else:
-                table.add_row("Security Services", "Botnet Server List", "Checks Botnet server list protocol", "Low",
+                table.add_row("Botnet Server List", "Checks Botnet server list protocol", "Low",
                               "[green]Not configured[/green]", "", "[dim]No action required[/dim]")
         else:
-            table.add_row("Security Services", "Botnet Server List", "Checks Botnet server list protocol", "Low",
+            table.add_row("Botnet Server List", "Checks Botnet server list protocol", "Low",
                           "[dim]No configuration found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switches
         switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
         if switch_count > 0:
-            table.add_row("Infrastructure", "Extended Switches", "Checks for connected switches", "Low",
+            table.add_row("Extended Switches", "Checks for connected switches", "Low",
                           "[green]Switches Found[/green]", str(switch_count), "[red]Update the password for any extended switches.[/red]")
         else:
-            table.add_row("Infrastructure", "Extended Switches", "Checks for connected switches", "Low",
+            table.add_row("Extended Switches", "Checks for connected switches", "Low",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switch Users
         switch_user_count = get_count(results.get('extended_switch_users', []))
         if switch_user_count > 0:
-            table.add_row("Infrastructure", "External Switch Users", "Looks for users in switch config", "Low",
+            table.add_row("External Switch Users", "Looks for users in switch config", "Low",
                           "[green]Users Found[/green]", str(switch_user_count), "[red]Update each user's password in the switch configuration.[/red]")
         else:
-            table.add_row("Infrastructure", "External Switch Users", "Looks for users in switch config", "Low",
+            table.add_row("External Switch Users", "Looks for users in switch config", "Low",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switch RADIUS Servers
         switch_radius_count = get_count(results.get('switch_controller', {}).get('radius', []))
         if switch_radius_count > 0:
-            table.add_row("Infrastructure", "External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
+            table.add_row("External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
                           "[green]Servers Found[/green]", str(switch_radius_count), "[red]Update the RADIUS shared secret on each server and in the switch configuration.[/red]")
         else:
-            table.add_row("Infrastructure", "External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
+            table.add_row("External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SSO Agents - /api/sonicos/user/sso/agents
         sso_count = get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))
         if sso_count > 0:
-            table.add_row("Authentication", "Single Sign On Agents", "Finds configured SSO Agents", "Low",
+            table.add_row("Single Sign On Agents", "Finds configured SSO Agents", "Low",
                           "[green]Agents Found[/green]", str(sso_count), "[red]Update the shared secrets on each agent.[/red]")
         else:
-            table.add_row("Authentication", "Single Sign On Agents", "Finds configured SSO Agents", "Low",
+            table.add_row("Single Sign On Agents", "Finds configured SSO Agents", "Low",
                           "[dim]No agents found[/dim]", "", "[dim]No action required[/dim]")
 
         # TS Agents - /api/sonicos/user/sso/terminal-services-agents
         tsa_count = get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))
         if tsa_count > 0:
-            table.add_row("Authentication", "Terminal Services Agents", "Finds configured TS Agents", "Low",
+            table.add_row("Terminal Services Agents", "Finds configured TS Agents", "Low",
                           "[green]Agents Found[/green]", str(tsa_count), "[red]Update the shared secrets on each agent.[/red]")
         else:
-            table.add_row("Authentication", "Terminal Services Agents", "Finds configured TS Agents", "Low",
+            table.add_row("Terminal Services Agents", "Finds configured TS Agents", "Low",
                           "[dim]No agents found[/dim]", "", "[dim]No action required[/dim]")
 
         # SSO RADIUS Accounting Clients - /api/sonicos/user/sso/radius-accounting-clients
         sso_radius_count = get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))
         if sso_radius_count > 0:
-            table.add_row("Authentication", "SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
+            table.add_row("SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
                           "[green]RA Clients Found[/green]", str(sso_radius_count), "[red]Update the shared secrets on each client and in SonicOS.[/red]")
         else:
-            table.add_row("Authentication", "SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
+            table.add_row("SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
                           "[dim]No RA clients found[/dim]", "", "[dim]No action required[/dim]")
 
         # SSO 3rd Party API - /api/sonicos/user/sso/third-party-api/clients
         sso_api_count = get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))
         if sso_api_count > 0:
-            table.add_row("Authentication", "SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
+            table.add_row("SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
                           "[green]API Clients Found[/green]", str(sso_api_count), "[red]Update the shared secrets on each client and in SonicOS.[/red]")
         else:
-            table.add_row("Authentication", "SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
+            table.add_row("SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
                           "[dim]No API clients found[/dim]", "", "[dim]No action required[/dim]")
 
         # RADIUS Accounting Servers - /api/sonicos/user/radius/accounting/servers
         acct_count = get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))
         if acct_count > 0:
-            table.add_row("Authentication", "RADIUS Accounting Servers", "Finds configured RA servers", "Low",
+            table.add_row("RADIUS Accounting Servers", "Finds configured RA servers", "Low",
                           "[green]RA Servers Found[/green]", str(acct_count), "[red]Update the shared secrets on each server and in SonicOS.[/red]")
         else:
-            table.add_row("Authentication", "RADIUS Accounting Servers", "Finds configured RA servers", "Low",
+            table.add_row("RADIUS Accounting Servers", "Finds configured RA servers", "Low",
                           "[dim]No RA servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # TACACS Accounting Servers - /api/sonicos/user/tacacs/accounting/servers
         tacacs_acct_count = get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))
         if tacacs_acct_count > 0:
-            table.add_row("Authentication", "TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
+            table.add_row("TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
                           "[green]Servers Found[/green]", str(tacacs_acct_count), "[red]Update the shared secrets on each server and in SonicOS.[/red]")
         else:
-            table.add_row("Authentication", "TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
+            table.add_row("TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
                           "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # AppFlow SFR Mailing - /api/sonicos/appflow/sfr-mailing/base
         sfr_smtp_configured = results.get('sfr_data', {}).get('smtp_configured', False)
         sfr_pop_configured = results.get('sfr_data', {}).get('pop_configured', False)
         if sfr_smtp_configured or sfr_pop_configured:
-            table.add_row("Reporting", "AppFlow SFR Mailing", f"Checks for SMTP/POP configuration", "Low",
+            table.add_row("AppFlow SFR Mailing", f"Checks for SMTP/POP configuration", "Low",
                           "[green]Configured[/green]", "", "[red]Update the email server credentials in SonicOS.[/red]")
         else:
-            table.add_row("Reporting", "AppFlow SFR Mailing", "Checks for SMTP/POP configuration", "Low",
+            table.add_row("AppFlow SFR Mailing", "Checks for SMTP/POP configuration", "Low",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Custom NTP Servers - /api/sonicos/time/ntp-servers
         ntp_count = get_count(results.get('ntp_data', []))
         if ntp_count > 0:
-            table.add_row("Network Services", "Custom NTP Servers", "Finds NTP entries with auth", "Low",
+            table.add_row("Custom NTP Servers", "Finds NTP entries with auth", "Low",
                           "[green]Entries Found[/green]", str(ntp_count), "[red]Update the credentials on each NTP server and in SonicOS.[/red]")
         else:
-            table.add_row("Network Services", "Custom NTP Servers", "Finds NTP entries with auth", "Low",
+            table.add_row("Custom NTP Servers", "Finds NTP entries with auth", "Low",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Security Services Signature Proxy - /api/sonicos/security-services/base
         sig_proxy_auth = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
         sig_proxy_username = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', '')
         if sig_proxy_auth or sig_proxy_username:
-            table.add_row("Network Services", "Security Services Proxy", "Checks for proxy for signature downloads", "Low",
+            table.add_row("Security Services Proxy", "Checks for proxy for signature downloads", "Low",
                           "[green]Configured[/green]", "", "[red]Update the credentials on the proxy server and in SonicOS.[/red]")
         else:
-            table.add_row("Network Services", "Security Services Proxy", "Checks for proxy for signature downloads", "Low",
+            table.add_row("Security Services Proxy", "Checks for proxy for signature downloads", "Low",
                           "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # GMS IPSec Manaagement Tunnel - /api/sonicos/administration/global
         gms_conf = results.get('gms', {}).get('ipsec_tunnel', False)
         if gms_conf:
-            table.add_row("Infrastructure", "GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
+            table.add_row("GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
                             "[green]Configured[/green]", "", "[red]Update the encryption/authentication keys.")
 
         else:
-            table.add_row("Infrastructure", "GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
+            table.add_row("GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
                             "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Advanced Routing - /api/sonicos/dynamic-file/getAdvancedRoutingData.json
@@ -1448,34 +1374,34 @@ def generate_summary_table(results: dict):
         bgp_ints = ", ".join(bgp_ints)
 
         if adv_routing_count > 0:
-            table.add_row("Infrastructure", "Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
+            table.add_row("Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
                           "[green]Configured[/green]", str(adv_routing_count), "[red]Update the credentials on each routing peer and in SonicOS.[/red]")
             if any_rip:
-                table.add_row("", "", "", "", "", "", f"[red] - RIP on {rip_ints}: Update the RIP password on the routing peer and in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", f"[red] - RIP on {rip_ints}: Update the RIP password on the routing peer and in SonicOS.[/red]")
             if any_ospf:
-                table.add_row("", "", "", "", "", "", f"[red] - OSPFv2 on {ospf_ints}: Update the OSPFv2 authentication on the routing peer and in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", f"[red] - OSPFv2 on {ospf_ints}: Update the OSPFv2 authentication on the routing peer and in SonicOS.[/red]")
             if any_bgp:
-                table.add_row("", "", "", "", "", "", f"[red] - BGP on {bgp_ints}: Update the BGP password on the routing peer and in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", f"[red] - BGP on {bgp_ints}: Update the BGP password on the routing peer and in SonicOS.[/red]")
         else:
-            table.add_row("Infrastructure", "Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
+            table.add_row("Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
                           "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Blank row for spacing
-        table.add_row("", "", "", "", "", "", "")
+        table.add_row("", "", "", "", "", "")
 
         # Local Users
         # Force Password Change
+        # TODO: Make sure this works properly. The link is still here, meaning I may have missed something.
         total_users = results.get('total_user_count', 0)
         users_updated = results.get('total_users_forced_to_update_password', 0)
         users_skipped = results.get('skipped_user_count', 0)
         if total_users > 0:
-            table.add_row("Authentication", "Force Password Change", "Total users updated and skipped",
+            table.add_row("Force Password Change", "Total users updated and skipped",
                           "Critical", "[green]Users Found[/green]", str(total_users),
-                         f"[green]{users_updated} updated[/green], [yellow]{users_skipped} skipped[/yellow]",
-                          link_text("Click here", "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords"))
+                         f"[green]{users_updated} updated[/green], [yellow]{users_skipped} skipped[/yellow]")
         else:
-            table.add_row("Authentication", "Force Password Change", "Total users updated and skipped",
-                          "Critical", "[red]Not Performed[/red]", "N/A", "[red]No users found or not executed.[/red]", "")
+            table.add_row("Force Password Change", "Total users updated and skipped",
+                          "Critical", "[red]Not Performed[/red]", "N/A", "[red]No users found or not executed.[/red]")
 
         # TOTP Unbind
         totp_unbind_attempted = results.get('totp_unbind_attempted', False)
@@ -1484,14 +1410,14 @@ def generate_summary_table(results: dict):
             failed = results.get('totp_unbind_failed_count', 0)
             success = results.get('totp_unbind_successful_count', 0)
             if success > 0 or failed > 0:
-                table.add_row("Authentication", "Reset TOTP Bindings", "Total bindings reset: succeeded/failed",
+                table.add_row("Reset TOTP Bindings", "Total bindings reset: succeeded/failed",
                               "Critical", "[green]Processed[/green]", f"{success+failed}",
                              f"[green]{success} unbound[/green], [yellow]{failed} failed[/yellow]")
             else:
-                table.add_row("Authentication", "Reset TOTP Bindings", "Total bindings reset: succeeded/failed",
+                table.add_row("Reset TOTP Bindings", "Total bindings reset: succeeded/failed",
                               "Critical", "[red]No Users Processed[/red]", "0", "[red]No TOTP bindings were reset.[/red]")
         else:
-            table.add_row("Authentication", "Reset TOTP Bindings", "Total bindings reset: succeeded/failed",
+            table.add_row("Reset TOTP Bindings", "Total bindings reset: succeeded/failed",
                           "Critical", "[red]Not Performed[/red]", "N/A", "[red]TOTP bindings were not reset.[/red]")
 
         console.print("\n")
@@ -1846,7 +1772,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     if action_items:
         md_lines.append(f"### Action Items ({len(action_items)}) for {firewall_info.get('device_model', 'Unknown')} ({firewall_info.get('serial_number', 'Unknown')})")
-        md_lines.append(f"The following items were identified during the execution of the remediation playbook. Please review and take action as necessary.")
+        md_lines.append(f"The following items were identified by the tool during the execution of the remediation playbook checks. Please review and manually take action as necessary.")
         md_lines.append(f"")
         md_lines.append("| Priority | Finding | Action Item | Resources |")
         md_lines.append("|----------|---------|-------------|-----------|")
@@ -1864,12 +1790,22 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     if completed_items:
         md_lines.append(f"### Completed Actions ({len(completed_items)})")
-        md_lines.append(f"The following actions were completed, as requested via CLI argument or CSV input file.")
+        md_lines.append(f"The following actions were completed by the tool, as requested via CLI argument or CSV input file.")
         md_lines.append(f"")
         for item in completed_items:
             md_lines.append(item)
         md_lines.append(f"")
 
+    md_lines.append(f"")
+    md_lines.append(f"---")
+    md_lines.append(f"")
+
+    # Recommendations
+    md_lines.append(f"## Recommendations")
+    md_lines.append(f"")
+    md_lines.append(f"1. **Immediately** update all credentials, pre-shared keys, and shared secrets identified in the Action Items section")
+    md_lines.append(f"2. **Test** critical services after credential updates to ensure continued operation")
+    md_lines.append(f"3. **Distribute** the temporary password to each user, if one was set. If randomized passwords were enabled, refer to the `user_passwords.csv` file generated during playbook execution")
     md_lines.append(f"")
     md_lines.append(f"---")
     md_lines.append(f"")
@@ -2557,12 +2493,9 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         totp_unbind_failed_count = results.get('totp_unbind_failed_count', 0)
 
         md_lines.append(f"- **Total Local Users:** {total_users}")
-        md_lines.append(f"- **Users Updated:** {users_updated}")
-        md_lines.append(f"- **Users Skipped:** {users_skipped}")
-        md_lines.append(f"- **TOTP Unbind Attempted:** {'Yes' if totp_unbind_attempted else 'No'}")
-        if totp_unbind_attempted:
-            md_lines.append(f"- **TOTP Unbind Successful for Users:** {totp_unbind_successful_count}")
-            md_lines.append(f"- **TOTP Unbind Failed for Users:** {totp_unbind_failed_count}")
+        md_lines.append(f"- **Users Updated:**")
+        md_lines.append(f"  - **Forced Password Change:** {users_updated} successful, {users_skipped} skipped")
+        md_lines.append(f"  - **Reset/Unbound TOTP:** {totp_unbind_successful_count} successful, {totp_unbind_failed_count} skipped or failed")
     except Exception as e:
         print(f"Error processing local users: {e}")
         md_lines.append(f"- **Local Users:** Error retrieving information")
@@ -2585,42 +2518,17 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
             md_lines.append(f"")
             md_lines.append(f"#### User Details")
             md_lines.append(f"")
-            md_lines.append(f"| Username | Force Password Change | Skipped Force Password Change | Reset/Unbind TOTP | Skipped TOTP Binding Reset |")
-            md_lines.append(f"|----------|-----------------------|-------------------------------|-------------------|----------------------------|")
+            md_lines.append(f"| Username | Force Password Change | Skipped Force Password Change | Reset/Unbind TOTP | Skipped TOTP Binding Reset | New Password |")
+            md_lines.append(f"|----------|-----------------------|-------------------------------|-------------------|----------------------------|--------------|")
             for user in user_list:
                 force_pass = "✅" if user.get('commit_successful') else "❌"
                 skipped = "Yes" if user.get('skipped') else "No"
                 unbound_totp = "✅" if user.get('totp_unbound', False) and not user.get('skipped', False) else ("❌" if user.get('totp_unbind_attempted') else "N/A")
                 totp_skipped = "Yes" if user.get('totp_skipped', False) else "No"
-                md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} |")
+                new_passwd = user.get('new_password', '')
+                md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} | {new_passwd} |")
     except Exception as e:
         print(f"Error generating user details table: {e}")
-
-    # TOTP
-    try:
-        totp_unbind = results.get('totp_unbind', {})
-        if totp_unbind.get('totp_unbind_attempted'):
-            success = totp_unbind.get('totp_unbind_successful_count', 0)
-            failed = totp_unbind.get('totp_unbind_failed_count', 0)
-            md_lines.append(f"- **TOTP Unbind:** {success} successful, {failed} failed")
-        else:
-            md_lines.append(f"- **TOTP Unbind:** Not performed")
-    except Exception as e:
-        print(f"Error processing TOTP unbind: {e}")
-        md_lines.append(f"- **TOTP Unbind:** Error retrieving information")
-
-    # Recommendations
-    md_lines.append(f"## Recommendations")
-    md_lines.append(f"")
-    md_lines.append(f"1. **Immediately** update all credentials identified in the Action Items section")
-    md_lines.append(f"2. **Review** all VPN policies and update pre-shared keys or regenerate certificates")
-    md_lines.append(f"3. **Verify** that forced password changes were successful for all local users")
-    md_lines.append(f"4. **Document** all credential changes in your organization's password management system")
-    md_lines.append(f"5. **Test** critical services after credential updates to ensure continued operation")
-    md_lines.append(f"6. **Schedule** regular credential rotation going forward")
-    md_lines.append(f"")
-    md_lines.append(f"---")
-    md_lines.append(f"")
 
     return "\n".join(md_lines)
 
@@ -2628,8 +2536,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 def print_and_save_summary(results: dict, firewall: str, firewall_info: dict, output_folder: str):
     """Print summary table to console and save markdown report to file."""
     try:
-        # Print rich table to console
-        generate_summary_table(results)
+        if not a.no_summary:
+            generate_summary_table(results)
     except Exception as e:
         print(f"Error printing summary table: {e}")
 
@@ -2700,6 +2608,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     password = kwargs.get('password', target.password)
     sshport = kwargs.get('sshport', target.sshport)
     temp_password = kwargs.get('temp_password', target.temp_password)
+    randomize_temp_password = kwargs.get('randomize_temp_password', target.randomize_temp_password)
     unbind_totp = kwargs.get('unbind_totp', target.unbind_totp)
     force_password_change = kwargs.get('force_password_change', target.force_password_change)
 
@@ -2723,7 +2632,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # Print verbose details if enabled
     print_verbose_details(target, target_numbers, a, username=username, password=password,
-                         sshport=sshport, temp_password=temp_password, unbind_totp=unbind_totp)
+                         sshport=sshport, temp_password=temp_password, randomize_temp_password=randomize_temp_password, unbind_totp=unbind_totp)
 
     # Initialize session with the firewall
     api_session, return_msg, api_base, username, password = initialize_session(
@@ -2877,6 +2786,12 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print()
 
     # List TACACS servers
+    # TODO: Investigate what to do with GEN6. API endpoint does not exist or is wrong. Says endpoing is incomplete.
+    # TODO: VPN response needs to be handled for GEN6. I assume there is an API endpoint for it.
+    # TODO: Dynamic DNS gets an empty dict on GEN6. Need to make sure that NOT having something configured is handled properly.
+    # TODO: SNMPv3 users are available on GEN6. API endpoint may not exist.... says incomplete.
+    # TODO: dynamic address object on GEN6. Says API not found.
+    # TODO: Packet monitor info on GEN6. Says nonetype object does not support item assignment. Need to review response.
     try:
         tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/servers', silent=silent)
         tacacs_count = 0
@@ -2890,9 +2805,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                     elif isinstance(tacacs_key, list):
                         tacacs_count = len(tacacs_key)
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TACACS server count.")
-                print(type(tacacs_servers), "->", tacacs_servers)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TACACS server count.")
+                    print(type(tacacs_servers), "->", tacacs_servers)
+                    print()
 
             if tacacs_count > 0:
                 tacacs_servers = tacacs_servers['user']['tacacs']['server']
@@ -2915,7 +2831,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             print(type(tacacs_servers), "->", tacacs_servers)
             print("-----------------------")
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TACACS servers: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TACACS servers: {e}")
 
     if not silent:
         print()
@@ -2934,9 +2851,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                     elif isinstance(vpn_key, list):
                         vpn_policy_count = len(vpn_key)
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VPN policy count.")
-                print(type(vpn_policies), "->", vpn_policies)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VPN policy count.")
+                    print(type(vpn_policies), "->", vpn_policies)
+                    print()
 
             if vpn_policy_count > 0:
                 if not silent:
@@ -2953,11 +2871,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
             update_routine_results(routine_results, firewall, 'vpn', vpn_policies)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No VPN policies found")
-            print(type(vpn_policies), "->", vpn_policies)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No VPN policies found")
+                print(type(vpn_policies), "->", vpn_policies)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving VPN policies: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving VPN policies: {e}")
 
     if not silent:
         print()
@@ -2965,7 +2885,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # List WAN interfaces (check for L2TP/PPTP/PPPoE/WWAN)
     try:
         interfaces = get_request(api_base, api_session, '/api/sonicos/interfaces/ipv4', silent=silent)
-        # print(interfaces)
         if interfaces:
             wan_interfaces = []
             wan_list = []
@@ -3004,11 +2923,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             wan_interfaces = {"interesting_wan_list": wan_list, "wan_interfaces": wan_interfaces}
             update_routine_results(routine_results, firewall, 'wan_interfaces', wan_interfaces)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No interfaces found")
-            print(type(interfaces), "->", interfaces)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No interfaces found")
+                print(type(interfaces), "->", interfaces)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving interfaces: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving interfaces: {e}")
 
     if not silent:
         print()
@@ -3027,11 +2948,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
             update_routine_results(routine_results, firewall, 'aws_api', aws_api)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No AWS API information found")
-            print(type(aws_api), "->", aws_api)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No AWS API information found")
+                print(type(aws_api), "->", aws_api)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving AWS API information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving AWS API information: {e}")
 
     if not silent:
         print()
@@ -3054,9 +2977,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif ddns_key is None:
                     ddns_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining IPv4 dynamic DNS service count.")
-                print(type(ddns_services_v4), "->", ddns_services_v4)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining IPv4 dynamic DNS service count.")
+                    print(type(ddns_services_v4), "->", ddns_services_v4)
+                    print()
 
             if ddns_count > 0:
                 if not silent:
@@ -3075,11 +2999,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
             update_routine_results(routine_results, firewall, 'ddns_services_v4', ddns_services_v4)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No IPv4 dynamic DNS services found")
-            print(type(ddns_services_v4), "->", ddns_services_v4)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No IPv4 dynamic DNS services found")
+                print(type(ddns_services_v4), "->", ddns_services_v4)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving IPv4 dynamic DNS services: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving IPv4 dynamic DNS services: {e}")
 
     try:
         ddns_services_v6 = get_request(api_base, api_session, '/api/sonicos/dynamic-dns/profiles/ipv6', silent=silent)
@@ -3098,9 +3024,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif ddns_key is None:
                     ddns_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining IPv6 dynamic DNS service count.")
-                print(type(ddns_services_v6), "->", ddns_services_v6)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining IPv6 dynamic DNS service count.")
+                    print(type(ddns_services_v6), "->", ddns_services_v6)
+                    print()
 
             if ddns_count > 0:
                 if not silent:
@@ -3119,11 +3046,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
             update_routine_results(routine_results, firewall, 'ddns_services_v6', ddns_services_v6)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No IPv6 dynamic DNS services found")
-            print(type(ddns_services_v6), "->", ddns_services_v6)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No IPv6 dynamic DNS services found")
+                print(type(ddns_services_v6), "->", ddns_services_v6)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving IPv6 dynamic DNS services: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving IPv6 dynamic DNS services: {e}")
 
     if not silent:
         print()
@@ -3159,7 +3088,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Clearpass/NAC is enabled but no servers found.")
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Clearpass/NAC information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Clearpass/NAC information: {e}")
 
     if not silent:
         print()
@@ -3178,9 +3108,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                     elif isinstance(snmpv3_key, list):
                         snmpv3_user_count = len(snmpv3_key)
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SNMP user count.")
-                print(type(snmpv3_users), "->", snmpv3_users)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SNMP user count.")
+                    print(type(snmpv3_users), "->", snmpv3_users)
+                    print()
 
             if snmpv3_user_count > 0:
                 if not silent:
@@ -3199,11 +3130,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
             update_routine_results(routine_results, firewall, 'snmp_users', snmpv3_users)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SNMP users found")
-            print(type(snmpv3_users), "->", snmpv3_users)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SNMP users found")
+                print(type(snmpv3_users), "->", snmpv3_users)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SNMP users: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SNMP users: {e}")
 
     if not silent:
         print()
@@ -3224,10 +3157,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No CSE information found")
-            print(type(cse_info), "->", cse_info)
-            print("-----------------------")
+                print(type(cse_info), "->", cse_info)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving CSE information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving CSE information: {e}")
 
     if not silent:
         print()
@@ -3283,10 +3217,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No log automation information found")
-            print(type(email_logging), "->", email_logging)
-            print("-----------------------")
+                print(type(email_logging), "->", email_logging)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving log automation information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving log automation information: {e}")
 
     if not silent:
         print()
@@ -3314,10 +3249,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Packet Monitor information found")
-            print(type(pktmon_settings), "->", pktmon_settings)
-            print("-----------------------")
+                print(type(pktmon_settings), "->", pktmon_settings)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Packet Monitor information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Packet Monitor information: {e}")
 
     if not silent:
         print()
@@ -3340,10 +3276,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No settings/TSR scheduled exports information found")
-            print(type(scheduled_exports), "->", scheduled_exports)
-            print("-----------------------")
+                print(type(scheduled_exports), "->", scheduled_exports)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving settings/TSR scheduled exports information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving settings/TSR scheduled exports information: {e}")
 
     if not silent:
         print()
@@ -3364,9 +3301,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(dynamic_key, list):
                     dynamic_object_count = len(dynamic_key)
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining dynamic address object count.")
-                print(type(dynamic_address_objects), "->", dynamic_address_objects)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining dynamic address object count.")
+                    print(type(dynamic_address_objects), "->", dynamic_address_objects)
+                    print()
 
             if dynamic_object_count > 0:
                 dynamic_address_objects['dynamic_ao_count'] = dynamic_object_count
@@ -3402,10 +3340,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No dynamic address objects found")
-            print(type(dynamic_address_objects), "->", dynamic_address_objects)
-            print("-----------------------")
+                print(type(dynamic_address_objects), "->", dynamic_address_objects)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic address objects: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic address objects: {e}")
 
     if not silent:
         print()
@@ -3449,10 +3388,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No dynamic botnet list information found")
-            print(type(dynamic_botnet_list), "->", dynamic_botnet_list)
-            print("-----------------------")
+                print(type(dynamic_botnet_list), "->", dynamic_botnet_list)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic botnet list information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic botnet list information: {e}")
 
     if not silent:
         print()
@@ -3472,7 +3412,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining extended switch count.")
                     print(type(ext_switches), "->", ext_switches)
-                    print("-----------------------")
+                    print()
 
             if ext_switch_count > 0:
                 if not silent:
@@ -3493,10 +3433,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No extended switches found")
-            print(type(ext_switches), "->", ext_switches)
-            print("-----------------------")
+                print(type(ext_switches), "->", ext_switches)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switches: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switches: {e}")
 
     if not silent:
         print()
@@ -3516,7 +3457,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining extended switch user count.")
                     print(type(switch_users), "->", switch_users)
-                    print("-----------------------")
+                    print()
 
             if switch_user_count > 0:
                 if not silent:
@@ -3536,10 +3477,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No extended switch users found")
-            print(type(switch_users), "->", switch_users)
-            print("-----------------------")
+                print(type(switch_users), "->", switch_users)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switch users: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switch users: {e}")
 
     if not silent:
         print()
@@ -3559,7 +3501,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining extended switch RADIUS server count.")
                     print(type(switch_radius), "->", switch_radius)
-                    print("-----------------------")
+                    print()
 
             if switch_radius_count > 0:
                 if not silent:
@@ -3578,10 +3520,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No extended switch RADIUS servers found")
-            print(type(switch_radius), "->", switch_radius)
-            print("-----------------------")
+                print(type(switch_radius), "->", switch_radius)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switch RADIUS servers: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switch RADIUS servers: {e}")
 
     if not silent:
         print()
@@ -3616,17 +3559,18 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             except (KeyError, TypeError):
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving WLAN RADIUS Server configuration from zone objects.")
                 print(type(zone_objects), "->", zone_objects)
-                print("-----------------------")
+                print()
 
             zone_objects = {'wlan_radius_servers': zone_objects, 'wlan_zone_data': zone_data}
             update_routine_results(routine_results, firewall, 'wlan_radius_servers', zone_objects)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No zone objects found")
-            print(type(zone_objects), "->", zone_objects)
-            print("-----------------------")
+                print(type(zone_objects), "->", zone_objects)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving zone objects: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving zone objects: {e}")
 
     if not silent:
         print()
@@ -3649,9 +3593,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                         if not silent:
                             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}:  - External Guest Authentication is enabled on Zone {zone.get('name', '')}. Please update the message authentication shared secret.")
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Guest Services External Guest Authentication configuration from zone objects.")
-                print(type(guest_zones), "->", guest_zones)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Guest Services External Guest Authentication configuration from zone objects.")
+                    print(type(guest_zones), "->", guest_zones)
+                    print()
 
             guest_zones = {'guest_services_external_auth': guest_zones, 'guest_zone_data': guest_zone_data}
             update_routine_results(routine_results, firewall, 'guest_services_external_auth', guest_zones)
@@ -3659,7 +3604,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No zone objects with Guest Services External Guest Authentication found")
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving zone objects for Guest Services: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving zone objects for Guest Services: {e}")
 
     if not silent:
         print()
@@ -3676,9 +3622,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(sso_agent_key, dict) and sso_agent_key == {}:
                     sso_agent_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO agent count.")
-                print(type(sso_agents), "->", sso_agents)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO agent count.")
+                    print(type(sso_agents), "->", sso_agents)
+                    print()
 
             if sso_agent_count > 0:
                 if not silent:
@@ -3699,11 +3646,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             sso_agents = {'sso_agents': sso_agents}
             update_routine_results(routine_results, firewall, 'sso_agents', sso_agents)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO Agents found")
-            print(type(sso_agents), "->", sso_agents)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO Agents found")
+                print(type(sso_agents), "->", sso_agents)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO Agents: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO Agents: {e}")
 
     if not silent:
         print()
@@ -3720,9 +3669,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(ts_agent_key, dict) and ts_agent_key == {}:
                     ts_agent_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TS Agent count.")
-                print(type(ts_agents), "->", ts_agents)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TS Agent count.")
+                    print(type(ts_agents), "->", ts_agents)
+                    print()
 
             if ts_agent_count > 0:
                 if not silent:
@@ -3743,11 +3693,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             ts_agents = {'ts_agents': ts_agents}
             update_routine_results(routine_results, firewall, 'tsa_agents', ts_agents)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No TS agents found")
-            print(type(ts_agents), "->", ts_agents)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No TS agents found")
+                print(type(ts_agents), "->", ts_agents)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TSA agents: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TSA agents: {e}")
 
     if not silent:
         print()
@@ -3764,9 +3716,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(sso_radius_client_key, dict) and sso_radius_client_key == {}:
                     sso_radius_client_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO RADIUS client count.")
-                print(type(sso_radius_clients), "->", sso_radius_clients)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO RADIUS client count.")
+                    print(type(sso_radius_clients), "->", sso_radius_clients)
+                    print()
 
             if sso_radius_client_count > 0:
                 if not silent:
@@ -3785,11 +3738,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             sso_radius_clients = {'sso_radius_clients': sso_radius_clients}
             update_routine_results(routine_results, firewall, 'sso_radius_clients', sso_radius_clients)
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO RADIUS clients found")
-            print(type(sso_radius_clients), "->", sso_radius_clients)
-            print("-----------------------")
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO RADIUS clients found")
+                print(type(sso_radius_clients), "->", sso_radius_clients)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO RADIUS clients: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO RADIUS clients: {e}")
 
     if not silent:
         print()
@@ -3806,9 +3761,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(sso_api_client_key, dict) and sso_api_client_key == {}:
                     sso_api_client_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO API client count.")
-                print(type(sso_api_clients), "->", sso_api_clients)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SSO API client count.")
+                    print(type(sso_api_clients), "->", sso_api_clients)
+                    print()
 
             if sso_api_client_count > 0:
                 if not silent:
@@ -3832,10 +3788,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SSO API clients found")
-            print(type(sso_api_clients), "->", sso_api_clients)
-            print("-----------------------")
+                print(type(sso_api_clients), "->", sso_api_clients)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO API clients: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO API clients: {e}")
 
     if not silent:
         print()
@@ -3852,9 +3809,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(acct_server_key, dict) and acct_server_key == {}:
                     acct_server_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining RADIUS accounting server count.")
-                print(type(acct_servers), "->", acct_servers)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining RADIUS accounting server count.")
+                    print(type(acct_servers), "->", acct_servers)
+                    print()
 
             if acct_server_count > 0:
                 if not silent:
@@ -3877,10 +3835,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No RADIUS accounting servers found")
-            print(type(acct_servers), "->", acct_servers)
-            print("-----------------------")
+                print(type(acct_servers), "->", acct_servers)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving RADIUS accounting servers: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving RADIUS accounting servers: {e}")
 
     if not silent:
         print()
@@ -3897,9 +3856,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(tacacs_server_key, dict) and tacacs_server_key == {}:
                     tacacs_server_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TACACS+ server count.")
-                print(type(tacacs_servers), "->", tacacs_servers)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining TACACS+ server count.")
+                    print(type(tacacs_servers), "->", tacacs_servers)
+                    print()
 
             if tacacs_server_count > 0:
                 if not silent:
@@ -3922,10 +3882,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No TACACS+ servers found")
-            print(type(tacacs_servers), "->", tacacs_servers)
-            print("-----------------------")
+                print(type(tacacs_servers), "->", tacacs_servers)
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TACACS+ servers: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TACACS+ servers: {e}")
 
     if not silent:
         print()
@@ -3961,9 +3922,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No AppFlow SFR reporting information found")
                 print(type(sfr), "->", sfr)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving AppFlow SFR reporting information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving AppFlow SFR reporting information: {e}")
 
     if not silent:
         print()
@@ -3980,9 +3942,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 elif isinstance(ntp_server_key, dict) and ntp_server_key == {}:
                     ntp_server_count = 0
             except (KeyError, TypeError):
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining NTP server count.")
-                print(type(ntp_servers), "->", ntp_servers)
-                print("-----------------------")
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining NTP server count.")
+                    print(type(ntp_servers), "->", ntp_servers)
+                    print()
 
             ntps = []
             if ntp_server_count > 0:
@@ -4006,9 +3969,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No NTP servers found")
                 print(type(ntp_servers), "->", ntp_servers)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving NTP servers: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving NTP servers: {e}")
 
     if not silent:
         print()
@@ -4032,9 +3996,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Security Services Signature Proxy information found")
                 print(type(security_services), "->", security_services)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Security Services Signature Proxy information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Security Services Signature Proxy information: {e}")
 
     if not silent:
         print()
@@ -4056,9 +4021,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No GMS IPsec Management Tunnel information found")
                 print(type(gms_config), "->", gms_config)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving GMS IPsec Management Tunnel information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving GMS IPsec Management Tunnel information: {e}")
 
     if not silent:
         print()
@@ -4130,12 +4096,12 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Advanced Routing Protocols configuration.")
                 print(type(routing_adv_data), "->", routing_adv_data)
-                print("-----------------------")
+                print()
     else:
         if not silent:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Advanced Routing Protocols information found")
             print(type(routing_adv_data), "->", routing_adv_data)
-            print("-----------------------")
+            print()
 
     if not silent:
         print()
@@ -4161,12 +4127,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving WWAN modem configuration.")
                     print(type(cellular), "->", cellular)
-                    print("-----------------------")
+                    print()
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No WWAN modem information found")
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving WWAN modem information: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving WWAN modem information: {e}")
 
     if not silent:
         print()
@@ -4200,9 +4167,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Radios found")
                 print(type(radios), "->", radios)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Radios: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Radios: {e}")
 
     if not silent:
         print()
@@ -4222,7 +4190,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining Internal Wireless VAP count.")
                     print(type(vaps), "->", vaps)
-                    print("-----------------------")
+                    print()
 
             vap_data = []
             if vap_count > 0:
@@ -4259,9 +4227,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Virtual Access Points found")
                 print(type(vaps), "->", vaps)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Points: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Points: {e}")
 
     if not silent:
         print()
@@ -4282,7 +4251,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining Internal Wireless VAP profile count.")
                     print(type(vap_profiles), "->", vap_profiles)
-                    print("-----------------------")
+                    print()
 
             vap_profile_data = []
             if vap_profile_count > 0:
@@ -4315,9 +4284,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Internal Wireless Virtual Access Point Profiles found")
                 print(type(vap_profiles), "->", vap_profiles)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Point Profiles: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Point Profiles: {e}")
 
     if not silent:
         print()
@@ -4339,7 +4309,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining VAP count.")
                     print(type(vaps), "->", vaps)
-                    print("-----------------------")
+                    print()
 
             vap_data = []
             if vap_count > 0:
@@ -4376,9 +4346,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No Virtual Access Points found")
                 print(type(vaps), "->", vaps)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Virtual Access Points: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Virtual Access Points: {e}")
 
     if not silent:
         print()
@@ -4399,7 +4370,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SonicPoint/SonicWave VAP profile count.")
                     print(type(vap_profiles), "->", vap_profiles)
-                    print("-----------------------")
+                    print()
 
             vap_profile_data = []
             if vap_profile_count > 0:
@@ -4432,9 +4403,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Virtual Access Point Profiles found")
                 print(type(vap_profiles), "->", vap_profiles)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Virtual Access Point Profiles: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Virtual Access Point Profiles: {e}")
 
     if not silent:
         print()
@@ -4455,7 +4427,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SonicPoint/SonicWave profile count.")
                     print(type(sp_profiles), "->", sp_profiles)
-                    print("-----------------------")
+                    print()
 
             sp_profile_data = []
             if sp_profile_count > 0:
@@ -4501,9 +4473,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Profiles found")
                 print(type(sp_profiles), "->", sp_profiles)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Profiles: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Profiles: {e}")
 
     if not silent:
         print()
@@ -4523,7 +4496,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 if not silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error determining SonicPoint/SonicWave object count.")
                     print(type(sp_objects), "->", sp_objects)
-                    print("-----------------------")
+                    print()
 
             sp_object_data = []
             if sp_object_count > 0:
@@ -4569,9 +4542,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SonicPoint/SonicWave Objects found")
                 print(type(sp_objects), "->", sp_objects)
-                print("-----------------------")
+                print()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Objects: {e}")
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Objects: {e}")
 
     # REMEDIATION CHECKS END
 
@@ -4597,8 +4571,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
         # Process password changes
         user_results = process_password_changes(
-            users, api_session, api_base, temp_password, firewall_info['firewall_generation'],
-            firewall, sshport, username, password, target_numbers, a)
+            users, api_session, api_base, temp_password, randomize_temp_password or a.randomize_password,
+            firewall_info['firewall_generation'], firewall, sshport, username, password, target_numbers, a)
 
         routine_results[firewall]['users'] = user_results
     else:
@@ -4614,10 +4588,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP unbind logic is disabled. Enable it with -ut or in the input CSV.")
         routine_results[firewall]['totp_unbind_disabled'] = True
 
-    # TODO: Things to add.
-    #   Force password change. - need to make sure arguments work as expected.
-    #   Randomize password based on configured temporary password. Will have to provide a list of user/pass combos.
-
     # Calculate routine statistics
     calculate_routine_statistics(routine_results, firewall)
 
@@ -4625,6 +4595,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     finalize_routine(api_session, api_base, firewall, firewall_info['firewall_generation'],
                     sshport, username, password, target_numbers, firewall_info)
 
+    print(f"Refer to ./{constants.START_TIMESTAMP_FOLDER}/{routine_results[firewall]['device_model'].replace(' ', '')}-{routine_results[firewall]['serial_number']}-summary.md for resources to address each of the findings above.")
     return "ROUTINE_COMPLETE", "Routine completed successfully."
 
 
