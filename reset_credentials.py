@@ -833,15 +833,20 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
 
                 # Perform TOTP unbind for this user
                 uname = usr['name']
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbinding TOTP for user '{uname}'...")
+                if not a.silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unbinding TOTP for user '{uname}'...")
 
-                totp_unbound = post_request(api_base, api_session, data=None,
-                                          api_path=f"/api/sonicos/user/local/unbind-totp-key/{uname}")
+                totp_unbound = post_request(api_base,
+                                            api_session,
+                                            data=None,
+                                            api_path=f"/api/sonicos/user/local/unbind-totp-key/{uname}",
+                                            silent=a.silent)
 
                 if totp_unbound:
                     api_result = totp_unbound.get('status', {}).get('info', [{}])[-1].get('message', 'No message returned.')
                     success = api_result.lower() == "changes made."
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind for user '{uname}' -> {api_result}")
+                    if not a.silent:
+                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind for user '{uname}' -> {api_result}")
 
                     result['totp_unbind_results'].append({
                         "name": uname,
@@ -856,7 +861,8 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
                     else:
                         result['totp_unbind_failed_count'] += 1
                 else:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error unbinding TOTP for user '{uname}' - no response from API.")
+                    if not a.silent:
+                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error unbinding TOTP for user '{uname}' - no response from API.")
                     result['totp_unbind_results'].append({
                         "name": uname,
                         "totp_unbound": False,
@@ -868,15 +874,18 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
 
             # Commit changes after all TOTP unbinds
             if result['totp_unbind_successful_count'] > 0:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Committing TOTP unbind changes...")
+                if not a.silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Committing TOTP unbind changes...")
                 commit_pending(api_base, api_session)
 
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind complete - {result['totp_unbind_successful_count']} successful, {result['totp_unbind_failed_count']} failed")
         else:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No local users found for TOTP unbind.")
+            if not a.silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No local users found for TOTP unbind.")
             result['totp_unbind_no_users'] = True
     else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unable to retrieve users for TOTP unbind.")
+        if not a.silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Unable to retrieve users for TOTP unbind.")
         result['totp_unbind_get_users_failed'] = True
 
     return result
@@ -2715,8 +2724,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # Remediation Playbook -- Checks the items in this KB article:
     # https://www.sonicwall.com/support/knowledge-base/remediation-playbook/250916130050523
-    if not silent:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Starting Remediation Playbook checks...")
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Starting Remediation Playbook checks...")
 
     # List LDAP servers
     try:
@@ -4581,6 +4589,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Objects: {e}")
 
     # REMEDIATION CHECKS END
+    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Completed remediation playbook checks.")
 
     # TODO: The checks above need to be compiled into functions to reduce the size of this routine function.
 
