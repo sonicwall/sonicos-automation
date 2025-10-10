@@ -761,12 +761,13 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
     # Get users for TOTP unbind if not already available
     totp_users = users
     if totp_users is None:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Retrieving users for TOTP unbind...")
+        if not a.silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Retrieving users for TOTP unbind...")
         try:
             if firewall_generation == 7:
-                totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+                totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users', silent=a.silent)
             elif firewall_generation == 6:
-                totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+                totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users', silent=a.silent)
         except KeyboardInterrupt:
             print(f"\nStopped!")
             exit()
@@ -876,7 +877,7 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
             if result['totp_unbind_successful_count'] > 0:
                 if not a.silent:
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Committing TOTP unbind changes...")
-                commit_pending(api_base, api_session)
+                commit_pending(api_base, api_session, silent=a.silent)
 
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TOTP unbind complete - {result['totp_unbind_successful_count']} successful, {result['totp_unbind_failed_count']} failed")
         else:
