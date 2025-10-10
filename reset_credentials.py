@@ -2837,8 +2837,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # List TACACS servers
     # TODO: Investigate what to do with GEN6. API endpoint does not exist or is wrong. Says endpoint is incomplete.
     # TODO: Dynamic DNS gets an empty dict on GEN6. Need to make sure that NOT having something configured is handled properly.
-    # TODO: SNMPv3 users are available on GEN6. API endpoint may not exist.... says incomplete.
     # TODO: dynamic address object on GEN6. Says API not found.
+    # TODO: gms ipsec management tunnel returns {} on gen6. check it.
+    # TODO: NTP failing with status code 414 request URI too long on GEN6. Need to review response.
+    # TODO: security-services/base is also failing with code 414 on GEN6. Need to review response.
     # TODO: Packet monitor info on GEN6. Says nonetype object does not support item assignment. Need to review response.
     try:
         tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/servers', silent=silent)
@@ -3176,7 +3178,12 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # List SNMPv3 users
     try:
-        snmpv3_users = get_request(api_base, api_session, '/api/sonicos/snmp/users', silent=silent)
+        snmpv3_users = None
+        if firewall_info['firewall_generation'] == 6:
+            snmpv3_users = get_request(api_base, api_session, '/api/sonicos/snmp/settings', silent=silent)
+        else:
+            snmpv3_users = get_request(api_base, api_session, '/api/sonicos/snmp/users', silent=silent)
+
         snmpv3_user_count = 0
         if snmpv3_users:
             try:
