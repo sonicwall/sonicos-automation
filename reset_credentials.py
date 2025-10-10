@@ -1434,7 +1434,6 @@ def generate_summary_table(results: dict):
 
         # Local Users
         # Force Password Change
-        # TODO: Make sure this works properly. The link is still here, meaning I may have missed something.
         total_users = results.get('total_user_count', 0)
         users_updated = results.get('total_users_forced_to_update_password', 0)
         users_skipped = results.get('skipped_user_count', 0)
@@ -1562,8 +1561,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         action_items.append(f"| Critical | {get_count(results.get('tacacs_servers', {}))} Server(s) Configured | TACACS server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication) |")
 
     # VPN Policies
-    if get_count(results.get('vpn', {})) > 0:
-        action_items.append(f"| Critical | {get_count(results.get('vpn', {}))} VPN Configured | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
+    if get_count(results.get('vpn', {}).get('policy', [])) > 0:
+        action_items.append(f"| Critical | {get_count(results.get('vpn', {}).get('policy', []))} Policies Found | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
 
     # Dynamic DNS
     ddns_v4 = get_count(results.get('ddns_services_v4', []))
@@ -2836,8 +2835,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print()
 
     # List TACACS servers
-    # TODO: Investigate what to do with GEN6. API endpoint does not exist or is wrong. Says endpoing is incomplete.
-    # TODO: VPN response needs to be handled for GEN6. I assume there is an API endpoint for it.
+    # TODO: Investigate what to do with GEN6. API endpoint does not exist or is wrong. Says endpoint is incomplete.
     # TODO: Dynamic DNS gets an empty dict on GEN6. Need to make sure that NOT having something configured is handled properly.
     # TODO: SNMPv3 users are available on GEN6. API endpoint may not exist.... says incomplete.
     # TODO: dynamic address object on GEN6. Says API not found.
@@ -2889,7 +2887,39 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # List VPN policies
     try:
-        vpn_policies = get_request(api_base, api_session, '/api/sonicos/vpn/policies/all', silent=silent)
+        vpn_policies = None
+        if firewall_info['firewall_generation'] == 6:
+            # In GEN6, we have to get VPN policies per type
+            vpn_policies = {'vpn': {'policy': []}}
+
+            # Site to Site
+            site_to_site = get_request(api_base, api_session, '/api/sonicos/vpn/policies/ipv4/site-to-site', silent=silent)
+            if site_to_site and site_to_site.get('vpn', {}).get('policy', []):
+                vpn_policies['vpn']['policy'].extend(site_to_site['vpn']['policy'])
+
+            site_to_site_v6 = get_request(api_base, api_session, '/api/sonicos/vpn/policies/ipv6/site-to-site', silent=silent)
+            if site_to_site_v6 and site_to_site_v6.get('vpn', {}).get('policy', []):
+                vpn_policies['vpn']['policy'].extend(site_to_site_v6['vpn']['policy'])
+
+            # GroupVPN
+            group_vpn = get_request(api_base, api_session, '/api/sonicos/vpn/policies/ipv4/group-vpn', silent=silent)
+            if group_vpn and group_vpn.get('vpn', {}).get('policy', []):
+                vpn_policies['vpn']['policy'].extend(group_vpn['vpn']['policy'])
+
+            # Tunnel Interface
+            tunnel_interface = get_request(api_base, api_session, '/api/sonicos/vpn/policies/ipv4/tunnel-interface', silent=silent)
+            if tunnel_interface and tunnel_interface.get('vpn', {}).get('policy', []):
+                vpn_policies['vpn']['policy'].extend(tunnel_interface['vpn']['policy'])
+
+            if vpn_policies['vpn']['policy'] == []:
+                vpn_policies = None
+
+            if vpn_policies is None:
+                if not silent:
+                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No VPN policies found.")
+        else:
+            vpn_policies = get_request(api_base, api_session, '/api/sonicos/vpn/policies/all', silent=silent)
+
         vpn_policy_count = 0
         if vpn_policies:
             try:
@@ -4193,12 +4223,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         radios = get_request(api_base, api_session, '/api/sonicos/wireless/radio', silent=silent)
         if radios:
             # The only confirmed radio role is access_point_mesh. Changing the setting does not trigger an API change when in read only.
-            # TODO: Confirm the other radio role values.
             radio_role = (
-                    radios.get('wireless', {}).get('radio_role', {}).get('access_point_mesh', None) or
-                    radios.get('wireless', {}).get('radio_role', {}).get('access_point_station', None) or
-                    radios.get('wireless', {}).get('radio_role', {}).get('station', None) or
-                    radios.get('wireless', {}).get('radio_role', {}).get('access_point', None)
+                    radios.get('wireless', {}).get('radio_role', {}).get('access_point_mesh', None) or  # GEN7
+                    radios.get('wireless', {}).get('radio_role', {}).get('access_point_station', None) or  # GEN6/7
+                    radios.get('wireless', {}).get('radio_role', {}).get('station', None) or  # May be invalid
+                    radios.get('wireless', {}).get('radio_role', {}).get('wds-station', None) or  # GEN7
+                    radios.get('wireless', {}).get('radio_role', {}).get('client-bridge', None) or  # GEN6
+                    radios.get('wireless', {}).get('radio_role', {}).get('access_point', None)  # GEN6/7
             )
             radio_auth_type = radios.get('wireless', {}).get('authentication_type', {})
             radio_radius = radios.get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
