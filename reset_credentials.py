@@ -85,26 +85,48 @@ def normalize_temp_password(password: str, randomize: bool) -> str:
     # Make sure the password meets minimum complexity requirements.
     # Enforce minimum length of 12 characters
     if len(password) < 12:
-        print(f"{generate_timestamp()}: Warning: Temporary password too short, padding with 'x'")
+        if not a.silent:
+            print(f"{generate_timestamp()}: Warning: Temporary password too short, padding with 'x'")
         password += 'x' * (12 - len(password))
 
     # Make sure there is at least 1 uppercase character
     if not any(c.isupper() for c in password):
-        print(f"{generate_timestamp()}: Warning: Temporary password missing uppercase character, adding 'X'")
+        if not a.silent:
+            print(f"{generate_timestamp()}: Warning: Temporary password missing uppercase character, adding 'X'")
         password += 'X'
 
     # Make sure there is at least 1 lowercase character
     if not any(c.islower() for c in password):
-        print(f"{generate_timestamp()}: Warning: Temporary password missing lowercase character, adding 'x'")
+        if not a.silent:
+            print(f"{generate_timestamp()}: Warning: Temporary password missing lowercase character, adding 'x'")
         password += 'x'
 
     # Make sure there is at least 1 digit
     if not any(c.isdigit() for c in password):
-        print(f"{generate_timestamp()}: Warning: Temporary password missing digit, adding '1'")
+        if not a.silent:
+            print(f"{generate_timestamp()}: Warning: Temporary password missing digit, adding '1'")
         password += '1'
 
+    # Replace any spaces with underscores
+    if ' ' in password:
+        if not a.silent:
+            print(f"{generate_timestamp()}: Warning: Temporary password contains spaces, replacing with underscores")
+        password = password.replace(' ', '_')
+
+    # Replaces # with dashes to avoid errors setting password via API/CLI
+    if '#' in password:
+        if not a.silent:
+            print(f"{generate_timestamp()}: Warning: Temporary password contains '#', replacing with dashes")
+        password = password.replace('#', '-')
+
+    # Replaces | with underscores to avoid errors setting password via API/CLI
+    if '|' in password:
+        if not a.silent:
+            print(f"{generate_timestamp()}: Warning: Temporary password contains '|', replacing with underscores")
+        password = password.replace('|', '_')
+
     # Make sure there is at least 1 special character
-    special_characters = "!@#$%^&*()-_=+[]{}|;:,.<>?/"
+    special_characters = "!@$%^&*()-_=+[]{};:,.<>?/"
     if not any(c in special_characters for c in password):
         print(f"{generate_timestamp()}: Warning: Temporary password missing special character, adding '!'")
         password += '!'
@@ -122,7 +144,7 @@ def create_random_password(length: int = 12) -> str:
         'uppercase': string.ascii_uppercase,
         'lowercase': string.ascii_lowercase,
         'digits': string.digits,
-        'special': "!@#$%^&*()-_=+[]{}|;:,.<>?/"
+        'special': "!@$%^&*()-_=+[]{};:,.<>?/"
     }
 
     # Start with one character from each category
@@ -524,21 +546,24 @@ def get_local_users(api_session, api_base: str, firewall_generation: int, firewa
 
     try:
         if firewall_generation == 7:
-            users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+            users = get_request(api_base, api_session, '/api/sonicos/user/local/users', silent=a.silent)
         elif firewall_generation == 6:
-            users = get_request(api_base, api_session, '/api/sonicos/user/local/users')
+            users = get_request(api_base, api_session, '/api/sonicos/user/local/users', silent=a.silent)
         elif firewall_generation == 5:
             users = get_users_ssh(firewall, sshport, username, password)
 
             if users:
-                print(f"{generate_timestamp()}: Users retrieved from SSH.")
+                if not a.silent:
+                    print(f"{generate_timestamp()}: Users retrieved from SSH.")
             else:
-                print(f"{generate_timestamp()}: Error getting users from SSH.")
+                if not a.silent:
+                    print(f"{generate_timestamp()}: Error getting users from SSH.")
     except KeyboardInterrupt:
         print(f"\nStopped!")
         exit()
     except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users from API: {e}")
+        if not a.silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users from API: {e}")
         return None
 
     # Handle bytes response and JSON parsing for GEN6
@@ -549,10 +574,12 @@ def get_local_users(api_session, api_base: str, firewall_generation: int, firewa
     # Validate users data
     if isinstance(users, dict):
         if users.get('user', {}).get('local', {}).get('user', None) is None:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: No local users found.")
+            if not a.silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: No local users found.")
             return None
     elif isinstance(users, bool):
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: Unable to get users.")
+        if not a.silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error: Unable to get users.")
         return None
 
     return users
@@ -664,9 +691,12 @@ def process_password_changes(users: dict, api_session, api_base: str, temp_passw
         }
 
         if firewall_generation != 5:
-            print(f"\nUpdating '{uname}'", end='')
+            if not a.silent:
+                # print(f"\nUpdating '{uname}'", end='')
+                print(f"\nUpdating '{uname}'")
         else:
-            print(f"\nUpdating '{uname}'")
+            if not a.silent:
+                print(f"\nUpdating '{uname}'")
 
         # Create expected JSON structure
         data_structure = {
@@ -682,28 +712,31 @@ def process_password_changes(users: dict, api_session, api_base: str, temp_passw
         if firewall_generation == 7:
             update_resp = patch_request(api_base, api_session,
                                       api_path=f"/api/sonicos/user/local/users/uuid/{uuid}",
-                                      data=data_structure)
+                                      data=data_structure, silent=a.silent)
         elif firewall_generation == 6:
             update_resp = put_request(api_base, api_session,
                                     api_path=f"/api/sonicos/user/local/user/uuid/{uuid}",
-                                    data=data_structure)
+                                    data=data_structure, silent=a.silent)
         elif firewall_generation == 5:
             update_resp = force_password_change_ssh(ssh_session, ssh_connection, data=usr)
 
         if update_resp['status']['success'] is False:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error updating user: {uname}")
-            input("Press Enter to continue or CTRL+C to exit.")
+            print(update_resp)
+            print()
+            # input("Press Enter to continue or CTRL+C to exit.")
 
         routine_result_temp['user_update_successful'] = True
 
         # Commit changes (GEN5 already committed via SSH)
         if firewall_generation != 5:
-            commit_pending(api_base, api_session)
+            commit_pending(api_base, api_session, silent=a.silent)
         routine_result_temp['commit_successful'] = True
 
         user_results.append(routine_result_temp)
         sleep(1)
-        print()
+        if not a.silent:
+            print()
 
     return user_results
 
@@ -886,7 +919,7 @@ def generate_summary_table(results: dict):
                       show_header=True,
                       header_style="bold magenta",
                       caption_style="bold magenta",
-                      caption=f"Refer to ./{constants.START_TIMESTAMP_FOLDER}/{results['device_model']}-{results['serial_number']}-summary.md for resources to address each of the findings above."
+                      caption=f"Refer to ./{constants.START_TIMESTAMP_FOLDER}/{results['device_model'].replace(' ', '')}-{results['serial_number']}-summary.md for resources to address each of the findings above."
                       )
         table.add_column("Configuration Area", style="cyan", no_wrap=True)
         table.add_column("Description", style="cyan", no_wrap=False, max_width=40)
@@ -1013,10 +1046,10 @@ def generate_summary_table(results: dict):
                     email_logging_data.get('ftp_flag', False) is False
             ):
                 table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
-                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]", "")
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
         else:
             table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]", "")
+                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Packet Monitor FTP Logging - /api/sonicos/packet-monitor/base
         pktmon_flagged = results.get('packet_monitor_ftp_set', False)
@@ -1042,7 +1075,7 @@ def generate_summary_table(results: dict):
             table.add_row("SNMPv3 Users", "Find configured SNMP user entries", "High",
                           "[green]Users Found[/green]", str(snmp_count), "[red]Update the password of each SNMP user.[/red]")
         else:
-            table.add_row("Network Services","SNMPv3 Users", "Find configured SNMP user entries", "High",
+            table.add_row("SNMPv3 Users", "Find configured SNMP user entries", "High",
                           "[dim]No users found[/dim]", "", "[dim]No action required[/dim]")
 
         # Clearpass/NAC - /api/sonicos/network-access-control/clearpass/base
@@ -4550,10 +4583,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # REMEDIATION CHECKS END
 
     # TODO: The checks above need to be compiled into functions to reduce the size of this routine function.
-    # TODO: User passwords should be randomized on the provided temporary password base.
-    #       - This will require a list of user/password combos to be provided in a CSV or similar file.
-    #       - Or a pattern to generate passwords from the provided temporary password base.
-    # TODO: Clean up requirements for input CSV.
 
     # Process user operations (if enabled)
     print()
