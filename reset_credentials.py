@@ -2836,11 +2836,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # List TACACS servers
     # TODO: Investigate what to do with GEN6. API endpoint does not exist or is wrong. Says endpoint is incomplete.
-    # TODO: Dynamic DNS gets an empty dict on GEN6. Need to make sure that NOT having something configured is handled properly.
     # TODO: dynamic address object on GEN6. Says API not found.
-    # TODO: gms ipsec management tunnel returns {} on gen6. check it.
-    # TODO: NTP failing with status code 414 request URI too long on GEN6. Need to review response.
-    # TODO: security-services/base is also failing with code 414 on GEN6. Need to review response.
     # TODO: Packet monitor info on GEN6. Says nonetype object does not support item assignment. Need to review response.
     try:
         tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/servers', silent=silent)
@@ -3083,8 +3079,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No IPv4 dynamic DNS services found")
-                print(type(ddns_services_v4), "->", ddns_services_v4)
-                print()
+                # print(type(ddns_services_v4), "->", ddns_services_v4)
+                # print()
     except Exception as e:
         if not silent:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving IPv4 dynamic DNS services: {e}")
@@ -3130,8 +3126,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         else:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No IPv6 dynamic DNS services found")
-                print(type(ddns_services_v6), "->", ddns_services_v6)
-                print()
+                # print(type(ddns_services_v6), "->", ddns_services_v6)
+                # print()
     except Exception as e:
         if not silent:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving IPv6 dynamic DNS services: {e}")
@@ -4019,7 +4015,12 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # Custom NTP Servers
     try:
-        ntp_servers = get_request(api_base, api_session, '/api/sonicos/time/ntp-servers', silent=silent)
+        ntp_servers = None
+        if firewall_info['firewall_generation'] == 6:
+            ntp_servers = get_request(api_base, api_session, '/api/sonicos/time', silent=silent)
+        else:
+            ntp_servers = get_request(api_base, api_session, '/api/sonicos/time/ntp-servers', silent=silent)
+
         if ntp_servers:
             ntp_server_count = 0
             try:
@@ -4066,7 +4067,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # Security Services Signature Proxy
     try:
-        security_services = get_request(api_base, api_session, '/api/sonicos/security-services/base', silent=silent)
+        if firewall_info['firewall_generation'] == 6:
+            security_services = get_request(api_base, api_session, '/api/sonicos/security-services', silent=silent)
+        else:
+            security_services = get_request(api_base, api_session, '/api/sonicos/security-services/base', silent=silent)
+
         if security_services:
             sig_proxy_enabled = security_services.get('security_services', {}).get('proxy_server', {}).get('enable', False)
             sig_proxy_auth = security_services.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
@@ -4106,9 +4111,9 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             update_routine_results(routine_results, firewall, 'gms_ipsec_management_tunnel', gms_config)
         else:
             if not silent:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No GMS IPsec Management Tunnel information found")
-                print(type(gms_config), "->", gms_config)
-                print()
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No GMS IPsec Management Tunnel configuration found.")
+                # print(type(gms_config), "->", gms_config)
+                # print()
     except Exception as e:
         if not silent:
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving GMS IPsec Management Tunnel information: {e}")
