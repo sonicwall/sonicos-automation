@@ -1574,7 +1574,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     # WAN Interfaces (L2TP/PPPoE/PPTP)
     interesting_wan_ints = [i for i in results.get('interesting_wan_list', [])]
     if len(interesting_wan_ints) > 0:
-        action_items.append(f"| Critical | {len(interesting_wan_ints)} WAN interface(s) | {', '.join(interesting_wan_ints)} require credential updates for L2TP/PPPoE/PPTP connections | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP_PPPoE_PPTP_password_s__a) |")
+        action_items.append(f"| Critical | {len(interesting_wan_ints)} WAN interface(s) | {', '.join(interesting_wan_ints)} require credential updates for L2TP/PPPoE/PPTP connections | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
 
     # AWS API Logging
     if results.get('log', {}).get('aws', {}).get('enable', False):
@@ -1594,12 +1594,12 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     if email_logging.get('ftp_flag'):
         email_actions.append("FTP")
     if email_actions:
-        action_items.append(f"| Critical | Configured | Email logging credentials require updates for the following protocols: {', '.join(email_actions)} | [Link](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038) |")
+        action_items.append(f"| Medium | Configured | Email logging credentials require updates for the following protocols: {', '.join(email_actions)} | [Link](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038) |")
 
     try:
         # Packet Monitor FTP action
         if results.get('packet_monitor_ftp_set', False):
-            action_items.append(f"| Medium | Configured | Packet Monitor FTP credentials require updates | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-configure-ftp-logging-in-sonicos/170504323594835) |")
+            action_items.append(f"| Medium | Configured | Packet Monitor FTP credentials require updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password) |")
     except Exception as e:
         print(f"Error checking packet monitor FTP setting: {e}")
 
@@ -1630,7 +1630,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     try:
         guest_auth = results.get('guest_zone_data', [])
         if guest_auth:
-            action_items.append(f"| Medium | {len(guest_auth)} Zone(s) Found | Wireless Guest Services External Authentication is enabled - Update the shared secret on each configured entry | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-access_points/Content/Access_Points_Settings/access-point-settings-about-guest-services.htm) |")
+            action_items.append(f"| Medium | {len(guest_auth)} Zone(s) Found | Wireless Guest Services External Authentication is enabled - Update the shared secret on each configured entry | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=more%20information.-,Guest%20Services,-Reset%20the%20shared) |")
     except Exception as e:
         print(f"Error checking Wireless Guest Services setting: {e}")
 
@@ -1703,7 +1703,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     try:
         dynamic_address_count = get_count(results.get('dynamic_ao_count', 0))
         if dynamic_address_count > 0:
-            action_items.append(f"| High | {dynamic_address_count} Object(s) Found | Review and update credentials for Dynamic External Address Object(s) | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-external-address-objects/170504323594835) |")
+            action_items.append(f"| High | {dynamic_address_count} Object(s) Found | Review and update credentials for Dynamic External Address Object(s) | [Link](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280) |")
     except Exception as e:
         print(f"Error checking Dynamic External Address Objects: {e}")
 
@@ -1711,7 +1711,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     try:
         botnet_data = results.get('botnet_data', {})
         if botnet_data.get('protocol', False):
-            action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password) |")
+            action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm) |")
     except Exception as e:
         print(f"Error checking Dynamic Botnet List Server: {e}")
 
@@ -1757,11 +1757,11 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     # RADIUS Accounting Servers
     if get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))} Servers Found | RADIUS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers) |")
+        action_items.append(f"| Low | {get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))} Servers Found | RADIUS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries) |")
 
     # TACACS Accounting Servers
     if get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))} Servers Found | TACACS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Accounting_Servers) |")
+        action_items.append(f"| Low | {get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))} Servers Found | TACACS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries) |")
 
     # AppFlow SFR Mailing
     if results.get('sfr_data', {}).get('smtp_configured', False) or results.get('sfr_data', {}).get('pop_configured', False):
@@ -1953,7 +1953,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if radius_acct_server_count > 0:
             md_lines.append(f"  - **Action:** Update shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [RADIUS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers)")
+            md_lines.append(f"  - **Reference:** [RADIUS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries)")
     except Exception as e:
         print(f"Error generating RADIUS Accounting Servers section: {e}")
         md_lines.append(f"- **RADIUS Accounting Servers:** Error retrieving information")
@@ -1965,7 +1965,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if tacacs_acct_server_count > 0:
             md_lines.append(f"  - **Action:** Update shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [TACACS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Accounting_Servers)")
+            md_lines.append(f"  - **Reference:** [TACACS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries)")
     except Exception as e:
         print(f"Error generating TACACS Accounting Servers section: {e}")
         md_lines.append(f"- **TACACS Accounting Servers:** Error retrieving information")
@@ -2003,7 +2003,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if wan_interface_count > 0:
             md_lines.append(f"  - **Action:** Update the username and password for each WAN interface configured with PPPoE, PPTP, or L2TP")
             md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [PPPoE Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-pppoe-on-sonicwall/170504323594835)")
+            md_lines.append(f"  - **Reference:** [PPPoE Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
             md_lines.append(f"  - **Interface List:**")
         for interface in interesting_wans:
             md_lines.append(f"    - **{interface}**")
@@ -2018,7 +2018,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
             md_lines.append(f"- **Cellular WWAN Model Detected:** {wwan_attached}")
             md_lines.append(f"  - **Action:** Update cellular provider credentials at the provider's website, then update in SonicOS")
             md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [Cellular WWAN Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-cellular-wwan-on-sonicwall-firewalls/170504323594835)")
+            md_lines.append(f"  - **Reference:** [Cellular WWAN Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
     except Exception as e:
         print(f"Error processing Cellular WWAN: {e}")
         md_lines.append(f"- **Cellular WWAN Interfaces:** Error retrieving information")
@@ -2039,6 +2039,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if clearpass_enabled:
             md_lines.append(f"- **ClearPass/NAC:** Enabled with {clearpass_server_count} server(s)")
             md_lines.append(f"  - **Action:** Update shared secrets on ClearPass servers")
+            md_lines.append(f"  - **Priority:** High")
+            md_lines.append(f"  - **Reference:** [ClearPass/NAC Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440)")
         else:
             md_lines.append(f"- **ClearPass/NAC:** Not enabled")
     except Exception as e:
@@ -2056,7 +2058,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if dynamic_address_count > 0:
             md_lines.append(f"  - **Action:** Review and update credentials for Dynamic External Address Object(s)")
             md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [Dynamic External Address Objects](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-external-address-objects/170504323594835)")
+            md_lines.append(f"  - **Reference:** [Dynamic External Address Objects](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280)")
             if len(ftp_deaos) > 0:
                 md_lines.append(f"  - **FTP-based DEAOs:** {len(ftp_deaos)}")
                 for obj in ftp_deaos:
@@ -2076,7 +2078,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
             md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {botnet_data.get('protocol', '').upper()}")
             md_lines.append(f"  - **Action:** Review and update Dynamic Botnet List Server credentials")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Dynamic Botnet List Server](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password)")
+            md_lines.append(f"  - **Reference:** [Dynamic Botnet List Server](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm)")
         else:
             md_lines.append(f"- **Dynamic Botnet List Server:** Not configured")
     except Exception as e:
@@ -2122,7 +2124,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if len(guest_zones) > 0:
             md_lines.append(f"  - **Action:** Update shared secrets on each server and in SonicOS")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Guest Services External Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,Guest%20Services%20External%20Authentication,-Reset%20shared%20secrets)")
+            md_lines.append(f"  - **Reference:** [Guest Services External Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=more%20information.-,Guest%20Services,-Reset%20the%20shared)")
             md_lines.append(f"  - **Zones with External Guest Auth with Message Authentication:**")
             for zone in guest_zones:
                 md_lines.append(f"    - **{zone.get('zone', 'Unnamed Zone')}** Zone")
@@ -2137,7 +2139,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if len(wlan_radius_zones) > 0:
             md_lines.append(f"  - **Action:** Update the RADIUS shared secrets and LDAP server password in SonicOS")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [WLAN Local RADIUS Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,Guest%20Services%20External%20Authentication,-Reset%20shared%20secrets)")
+            md_lines.append(f"  - **Reference:** [WLAN Local RADIUS Servers](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-access_points/Content/Access_Points_Settings/access-point-settings-about-local-radius-servers.htm)")
             for zone in wlan_radius_zones:
                 md_lines.append(f"    - **{zone.get('zone', 'Unnamed Zone')}** Zone")
                 if zone['radius_server_enabled']:
@@ -2156,7 +2158,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if radio_radius or radio_psk:
             md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Internal WLAN Radio Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,WLAN%20Radios,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [Internal WLAN Radio Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
             if radio_radius:
                 md_lines.append(f"    - RADIUS Server is configured. Update the RADIUS shared secret.")
             if radio_psk:
@@ -2173,7 +2175,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if vap_count > 0:
             md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,WLAN%20Radios,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
             for vap in vap_data:
                 md_lines.append(f"    - **{vap.get('name', 'Unnamed VAP')}** Virtual Access Point")
                 if vap.get('radius', False):
@@ -2192,7 +2194,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if vap_profile_count > 0:
             md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,WLAN%20Radios,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
             md_lines.append(f"  - **Profile List:**")
             for profile in vap_profile_data:
                 md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
@@ -2212,7 +2214,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if ap_count > 0:
             md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,WLAN%20Radios,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
             for p in ap_data:
                 md_lines.append(f"    - **{p.get('name', 'Unnamed AP')}** Access Point")
                 if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
@@ -2235,7 +2237,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if ap_profile_count > 0:
             md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS/RADIUS Accounting shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,WLAN%20Radios,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
             md_lines.append(f"  - **Profile List:**")
             for profile in ap_profile_data:
                 md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
@@ -2260,7 +2262,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if spvap_count > 0:
             md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,WLAN%20Radios,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
             md_lines.append(f"  - **Virtual Access Point Object List:**")
             for vap in spvap_data:
                 md_lines.append(f"    - **{vap.get('name', 'Unnamed VAP')}**")
@@ -2281,7 +2283,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if spvap_profile_count > 0:
             md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,WLAN%20Radios,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
             md_lines.append(f"  - **Virtual Access Point Profile List:**")
             for profile in spvap_profile_data:
                 md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
@@ -2341,7 +2343,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
             md_lines.append(f"- **GMS IPSec Management Tunnel Detected:**")
             md_lines.append(f"  - **Action:** Update the authentication/encryption keys")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [GMS IPSec Management Tunnel](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,IPSec%20Management%20Tunnels,-Update%20pre-shared%20keys)")
+            md_lines.append(f"  - **Reference:** [GMS IPSec Management Tunnel](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
     except Exception as e:
         print(f"Error processing GMS IPSec Management Tunnels: {e}")
         md_lines.append(f"- **GMS IPSec Management Tunnels:** Error retrieving information")
@@ -2371,7 +2373,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
                     md_lines.append(f"  - **BGP:** Enabled on {len(any_bgp)} interface(s) ({bgp_ints})")
                 md_lines.append(f"  - **Action:** Update authentication keys for each enabled protocol")
                 md_lines.append(f"  - **Priority:** Low")
-                md_lines.append(f"  - **Reference:** [Advanced Routing Protocols](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=for%20more%20information.-,Routing%20Protocols,-Update%20authentication%20keys)")
+                md_lines.append(f"  - **Reference:** [Advanced Routing Protocols](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used)")
         else:
             md_lines.append(f"- **Advanced Routing Protocols:** None enabled")
     except Exception as e:
@@ -2391,7 +2393,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if snmp_count > 0:
             md_lines.append(f"  - **Action:** Update authentication and privacy passwords")
             md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [SNMPv3 User Configuration](https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777#_SNMPv3_User_Configuration)")
+            md_lines.append(f"  - **Reference:** [SNMPv3 User Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP)")
     except Exception as e:
         print(f"Error generating SNMP section: {e}")
         md_lines.append(f"- **SNMPv3 Users:** Error retrieving information")
@@ -2410,6 +2412,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if email_services:
             md_lines.append(f"- **Email Logging:** {len(email_services)} service(s) configured ({', '.join(email_services)})")
             md_lines.append(f"  - Action: Update email server credentials")
+            md_lines.append(f"  - Priority: Medium")
+            md_lines.append(f"  - Reference: [Email Logging Configuration](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038)")
         else:
             md_lines.append(f"- **Email Logging:** Not configured")
     except Exception as e:
@@ -2421,6 +2425,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if results.get('packet_monitor_ftp_set', False):
             md_lines.append(f"- **Packet Monitor FTP:** Configured")
             md_lines.append(f"  - Action: Update FTP server credentials")
+            md_lines.append(f"  - Priority: Medium")
+            md_lines.append(f"  - Reference: [Packet Monitor Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password)")
         else:
             md_lines.append(f"- **Packet Monitor FTP:** Not configured")
     except Exception as e:
@@ -2432,6 +2438,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         if results.get('scheduled_exports_ftp_set', False):
             md_lines.append(f"- **TSR/EXP Scheduled Exports:** Configured")
             md_lines.append(f"  - Action: Update FTP server credentials")
+            md_lines.append(f"  - Priority: Medium")
+            md_lines.append(f"  - Reference: [TSR/EXP Scheduled Exports](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm)")
         else:
             md_lines.append(f"- **TSR/EXP Scheduled Exports:** Not configured")
     except Exception as e:
@@ -2446,7 +2454,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
             md_lines.append(f"- **AppFlow SFR Mailing:** Configured")
             md_lines.append(f"  - **Action:** Update email server credentials")
             md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [AppFlow SFR Email Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-email-settings-for-appflow-sfr/170504323594835)")
+            md_lines.append(f"  - **Reference:** [AppFlow SFR Email Configuration](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-appflow_device/Content/appflow-d-flow-reporting-sfr-mailing.htm)")
             if sfr_smtp:
                 md_lines.append(f"  - **SMTP Server:** Configured")
             if sfr_pop:
