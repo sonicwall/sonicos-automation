@@ -2837,7 +2837,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # List TACACS servers
     # TODO: Investigate what to do with GEN6. API endpoint does not exist or is wrong. Says endpoint is incomplete.
     # TODO: dynamic address object on GEN6. Says API not found.
-    # TODO: Packet monitor info on GEN6. Says nonetype object does not support item assignment. Need to review response.
     try:
         tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/servers', silent=silent)
         tacacs_count = 0
@@ -3311,7 +3310,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # Packet Monitor FTP Logging.
     try:
-        pktmon_settings = get_request(api_base, api_session, '/api/sonicos/packet-monitor/base', silent=silent)
+        if firewall_info['firewall_generation'] == 6:
+            pktmon_settings = get_request(api_base, api_session, '/api/sonicos/packet-monitor/settings', silent=silent)
+        else:
+            pktmon_settings = get_request(api_base, api_session, '/api/sonicos/packet-monitor/base', silent=silent)
+
         pkmon_flag = False
         if pktmon_settings:
             pktmon_ftp = pktmon_settings.get('packet_monitor', {}).get('ftp', None)
