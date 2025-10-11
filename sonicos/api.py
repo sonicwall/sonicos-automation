@@ -120,7 +120,7 @@ def print_response_info(resp, override_verbose=False, **kwargs):
     except KeyError as e:
         print(f"{generate_timestamp()}: KeyError (1): {e}")
     except AttributeError as e:
-        # print(f"{generate_timestamp()}: AttributeError: {e}")
+        print(f"{generate_timestamp()}: AttributeError: {e}")
         print(f"{generate_timestamp()}: Response: {resp.content}")
     print()
     if override_verbose is True:
@@ -497,6 +497,27 @@ def logout(fw, session, firewall_generation=None, timeout=10, silent=False):
             if not silent:
                 print(f"{generate_timestamp()}: Logged out successfully! (HTTP {resp.status_code}): {resp.json()['status']['info'][0]['code']} -- {resp.json()['status']['info'][0]['message']}")
             return resp.json()
+
+
+# Send command to the direct/cli endpoint.
+def post_request_direct_cli(fw, session, command, timeout=30, silent=False):
+    start_time = generate_timestamp(split=False)
+    # Update the Content-Type request header to plain/text.
+    sonicos_api_headers['Content-Type'] = 'text/plain'
+
+    resp = session.post(fw + '/api/sonicos/direct/cli',
+                        headers=sonicos_api_headers,
+                        data=command,
+                        verify=False,
+                        timeout=timeout)
+    # print_response_info(resp, start_time=start_time)
+
+    # Set the Content-Type header back to application/json.
+    sonicos_api_headers['Content-Type'] = 'application/json'
+
+    if not silent:
+        print_response_info(resp, start_time=start_time)
+    return resp.json()
 
 
 # Downloads the tech support report (TSR) from the firewall.
