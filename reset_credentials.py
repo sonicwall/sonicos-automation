@@ -842,8 +842,8 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
                     commands = f"user local\nuser {uname}\nunbind-totp-key\nexit\nexit"
                     totp_unbound = post_request_direct_cli(api_base,
                                                            api_session,
-                                                           command=commands)
-                    print(totp_unbound)
+                                                           command=commands,
+                                                           silent=a.silent)
 
                 else:
                     totp_unbound = post_request(api_base,
