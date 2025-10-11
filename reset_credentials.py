@@ -2848,7 +2848,12 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # List TACACS servers
     # TODO: TACACS on GEN6. API endpoint does not exist. endpoint is incomplete.
     try:
-        tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/servers', silent=silent)
+        if firewall_info['firewall_generation'] == 6:
+            tacacs_servers = None
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TACACS server listing not supported on GEN6 firewalls.")
+        else:
+            tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/servers', silent=silent)
+
         tacacs_count = 0
         if tacacs_servers:
             try:
