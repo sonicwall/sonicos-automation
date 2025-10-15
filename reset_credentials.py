@@ -430,7 +430,7 @@ def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, sile
     }, None
 
 
-def export_tsr_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict, silent=False):
+def export_tsr_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict, silent=False, tag: str = ""):
     """Export TSR if enabled in arguments."""
     result = {'tsr_downloaded': False}
 
@@ -443,7 +443,10 @@ def export_tsr_if_enabled(api_session, api_base: str, args, target_numbers: tupl
         print(f"{generate_timestamp()}: Downloading TSR...")
     dm = firewall_info['device_model'].replace(" ", "")
     sn = firewall_info['serial_number']
-    tsr_file_name = f"{dm}-{sn}-tsr.wri"
+    if tag == "":
+        tsr_file_name = f"{dm}-{sn}-tsr.wri"
+    else:
+        tsr_file_name = f"{dm}-{sn}-{tag}-tsr.wri"
 
     tsr_downloaded = download_tsr(api_base,
                                   api_session,
@@ -460,7 +463,7 @@ def export_tsr_if_enabled(api_session, api_base: str, args, target_numbers: tupl
     return result
 
 
-def export_tracelogs_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict, silent=False):
+def export_tracelogs_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict, silent=False, tag: str = ""):
     """Export trace logs if enabled in arguments."""
     result = {'trace_logs_downloaded': False}
 
@@ -473,7 +476,10 @@ def export_tracelogs_if_enabled(api_session, api_base: str, args, target_numbers
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Downloading trace logs...")
     dm = firewall_info['device_model'].replace(" ", "")
     sn = firewall_info['serial_number']
-    tracelog_filename = f"{dm}-{sn}-tracelog-current.txt"
+    if tag == "":
+        tracelog_filename = f"{dm}-{sn}-tracelog-current.txt"
+    else:
+        tracelog_filename = f"{dm}-{sn}-{tag}-tracelog-current.txt"
 
     trace_logs_downloaded = download_tracelog(api_base,
                                               api_session,
@@ -491,7 +497,7 @@ def export_tracelogs_if_enabled(api_session, api_base: str, args, target_numbers
     return result
 
 
-def export_settings_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict, username: str, password: str, silent=False):
+def export_settings_if_enabled(api_session, api_base: str, args, target_numbers: tuple, firewall_info: dict, username: str, password: str, silent=False, tag: str = ""):
     """Export settings if enabled in arguments."""
     result = {'settings_exported': False}
 
@@ -504,7 +510,10 @@ def export_settings_if_enabled(api_session, api_base: str, args, target_numbers:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Exporting settings...")
     dm = firewall_info['device_model'].replace(" ", "")
     sn = firewall_info['serial_number']
-    prefs_file_name = f"{dm}-{sn}-prefs.exp"
+    if tag == "":
+        prefs_file_name = f"{dm}-{sn}-prefs.exp"
+    else:
+        prefs_file_name = f"{dm}-{sn}-{tag}-prefs.exp"
 
     prefs_downloaded = False
     firewall_generation = firewall_info['firewall_generation']
@@ -4835,6 +4844,24 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP unbind logic is disabled. Enable it with -ut or in the input CSV.")
         routine_results[firewall]['totp_unbind_disabled'] = True
+
+    # Export operations after making user changes (if force-password-change or unbind-totp were enabled)
+    if (force_password_change or a.force_password_change) or (unbind_totp or a.unbind_totp):
+        tsr_result = export_tsr_if_enabled(api_session, api_base, a, target_numbers, firewall_info, silent=silent, tag="post-user-changes")
+        update_routine_results(routine_results, firewall, 'tsr_result', tsr_result)
+        if not silent:
+            print()
+
+        tracelog_result = export_tracelogs_if_enabled(api_session, api_base, a, target_numbers, firewall_info, silent=silent, tag="post-user-changes")
+        update_routine_results(routine_results, firewall, 'tracelog_result', tracelog_result)
+        if not silent:
+            print()
+
+        settings_result = export_settings_if_enabled(api_session, api_base, a, target_numbers,
+                                                    firewall_info, username, password, silent=silent, tag="post-user-changes")
+        update_routine_results(routine_results, firewall, 'settings_result', settings_result)
+        if not silent:
+            print()
 
     # Calculate routine statistics
     calculate_routine_statistics(routine_results, firewall)
