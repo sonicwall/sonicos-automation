@@ -21,11 +21,7 @@ from sonicos.api import (
     patch_request,
     commit_pending,
     logout,
-    enable_sonicos_api_ssh,
     disable_sonicos_api_ssh,
-    check_botnet_status,
-    check_totp_status,
-    enable_totp_ssh,
     download_tsr,
     download_tracelog,
     export_preferences,
@@ -198,8 +194,8 @@ def parse_csv_targets(filepath: str) -> List[FirewallTarget]:
                     if target:
                         targets.append(target)
 
-    except Exception as e:
-        print(f"{generate_timestamp()}: Error opening/parsing CSV file: {e}")
+    except Exception as err:
+        print(f"{generate_timestamp()}: Error opening/parsing CSV file: {err}")
         exit(1)
 
     return targets
@@ -292,12 +288,84 @@ a = get_parser(arg_set="remediation", description=arg_description)
 # This variable stores the results of the routine for each firewall.
 routine_results = {}
 
+# Severity configuration for security checks
+SECURITY_CHECK_SEVERITIES = {
+    # Critical severity checks
+    'ldap_servers': 'critical',
+    'radius_servers': 'critical',
+    'tacacs_servers': 'critical',
+    'vpn_policies': 'critical',
+    'wan_interfaces': 'critical',
+    'aws_api': 'critical',
+    'cloud_secure_edge': 'critical',
+
+    # High severity checks
+    'ddns_services': 'high',
+    'snmp_users': 'high',
+    'clearpass_nac': 'high',
+    'cellular_wwan': 'high',
+    'dynamic_address_objects': 'high',
+
+    # Medium severity checks
+    'email_logging': 'medium',
+    'packet_monitor_ftp': 'medium',
+    'scheduled_exports': 'medium',
+    'guest_services_auth': 'medium',
+    'wlan_radius_servers': 'medium',
+    'internal_wlan_radio': 'medium',
+    'internal_wlan_vaps': 'medium',
+    'internal_wlan_vap_profiles': 'medium',
+    'sonicpoint_objects': 'medium',
+    'sonicpoint_profiles': 'medium',
+    'sonicpoint_vaps': 'medium',
+    'sonicpoint_vap_profiles': 'medium',
+
+    # Low severity checks
+    'botnet_server_list': 'low',
+    'extended_switches': 'low',
+    'extended_switch_users': 'low',
+    'extended_switch_radius': 'low',
+    'sso_agents': 'low',
+    'ts_agents': 'low',
+    'sso_radius_clients': 'low',
+    'sso_api_clients': 'low',
+    'radius_accounting_servers': 'low',
+    'tacacs_accounting_servers': 'low',
+    'sfr_reporting': 'low',
+    'ntp_servers': 'low',
+    'security_services_proxy': 'low',
+    'gms_ipsec_tunnel': 'low',
+    'advanced_routing': 'low'
+}
+
+
+def should_run_check(check_name: str, target_severity: str) -> bool:
+    """
+    Determine if a security check should be run based on the target severity.
+
+    Args:
+        check_name (str): Name of the security check
+        target_severity (str): Target severity level ('all', 'critical', 'high', 'medium', 'low')
+
+    Returns:
+        bool: True if the check should be run, False otherwise
+    """
+    if target_severity == 'all':
+        return True
+
+    check_severity = SECURITY_CHECK_SEVERITIES.get(check_name)
+    if check_severity is None:
+        # If severity is not defined, default to running it for 'all'
+        return target_severity == 'all'
+
+    return check_severity == target_severity
+
 
 # Helper Functions for Routine Breakdown
 # =====================================
 
 def update_routine_results(routine_results: dict, firewall: str, section: str, data: dict):
-    """Centralized function to update routine results dictionary."""
+    """Centralized function to update the routine result dictionary."""
     if firewall not in routine_results:
         routine_results[firewall] = {}
 
@@ -369,9 +437,9 @@ def initialize_session(target: FirewallTarget, target_numbers: tuple, **kwargs):
     except KeyboardInterrupt:
         print(f"\nStopped!")
         exit()
-    except Exception as e:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error creating admin session: {e}")
-        return None, f"Error creating admin session: {e}", api_base, username, password
+    except Exception as err:
+        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error creating admin session: {err}")
+        return None, f"Error creating admin session: {err}", api_base, username, password
 
 
 def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, silent=False):
@@ -395,9 +463,9 @@ def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, sile
         except KeyboardInterrupt:
             print(f"\nStopped!")
             exit()
-        except Exception as e:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting version information: {e}")
-            return None, f"Error getting version information: {e}"
+        except Exception as err:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting version information: {err}")
+            return None, f"Error getting version information: {err}"
     else:
         try:
             info = get_request(api_base, api_session, '/api/sonicos/version', silent=silent)
@@ -418,9 +486,9 @@ def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, sile
         except KeyboardInterrupt:
             print(f"\nStopped!")
             exit()
-        except Exception as e:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting version information: {e}")
-            return None, f"Error getting version information: {e}"
+        except Exception as err:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting version information: {err}")
+            return None, f"Error getting version information: {err}"
 
     return {
         'firewall_generation': firewall_generation,
@@ -578,9 +646,9 @@ def get_local_users(api_session, api_base: str, firewall_generation: int, firewa
     except KeyboardInterrupt:
         print(f"\nStopped!")
         exit()
-    except Exception as e:
+    except Exception as err:
         if not a.silent:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users from API: {e}")
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users from API: {err}")
         return None
 
     # Handle bytes response and JSON parsing for GEN6
@@ -798,9 +866,9 @@ def unbind_totp_from_users(api_session, api_base: str, firewall_generation: int,
         except KeyboardInterrupt:
             print(f"\nStopped!")
             exit()
-        except Exception as e:
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users for TOTP unbind: {e}")
-            result['totp_unbind_get_users_error'] = str(e)
+        except Exception as err:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error getting users for TOTP unbind: {err}")
+            result['totp_unbind_get_users_error'] = str(err)
             return result
 
         # Handle bytes response
@@ -1504,8 +1572,8 @@ def generate_summary_table(results: dict):
         console.print("\n")
 
         return table
-    except Exception as e:
-        print(f"Error generating summary table: {e}")
+    except Exception as err:
+        print(f"Error generating summary table: {err}")
         return None
 
 
@@ -1526,8 +1594,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         md_lines.append(f"")
         md_lines.append(f"---")
         md_lines.append(f"")
-    except Exception as e:
-        print(f"Error generating markdown header: {e}")
+    except Exception as err:
+        print(f"Error generating markdown header: {err}")
         return None
 
     try:
@@ -1556,8 +1624,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
         md_lines.append(f"")
         md_lines.append(f"---")
         md_lines.append(f"")
-    except Exception as e:
-        print(f"Error generating markdown exports section: {e}")
+    except Exception as err:
+        print(f"Error generating markdown exports section: {err}")
         return None
 
     # Executive Summary
@@ -2642,9 +2710,8 @@ def print_and_save_summary(results: dict, firewall: str, firewall_info: dict, ou
         except Exception as e:
             print(f"Error writing markdown summary to file: {e}")
 
-    except Exception as e:
-        raise
-        print(f"Error generating markdown summary: {e}")
+    except Exception as err:
+        print(f"Error generating markdown summary: {err}")
 
 
 def finalize_routine(api_session, api_base: str, firewall: str, firewall_generation: int,
