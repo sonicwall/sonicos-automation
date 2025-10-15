@@ -99,7 +99,7 @@ python reset_credentials.py 192.168.1.1 --silent
 python reset_credentials.py 192.168.1.1 --no-summary
 
 # Combined operations
-python reset_credentials.py 192.168.1.1 --ssgoirt 2222 --force-password-change --randomize-password --unbind-totp --export-tsr --silent --no-summary
+python reset_credentials.py 192.168.1.1 --sshport 2222 --force-password-change --randomize-password --unbind-totp --export-tsr --silent --no-summary
 ```
 
 #### Multiple Firewall Targets (CSV)

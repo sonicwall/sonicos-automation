@@ -62,9 +62,16 @@ class FirewallTarget:
 
 def normalize_boolean(value: str) -> bool:
     """Convert string values to boolean."""
-    if not value or value.lower() in ['none', 'false', '']:
+    if value is None:
         return False
-    return value.lower() in ['true', 'yes', '1', 'y']
+
+    if isinstance(value, bool):
+        return value
+
+    if not value or str(value.lower()) in ['none', 'false', '']:
+        return False
+
+    return str(value.lower()) in ['true', 'yes', '1', 'y']
 
 
 def normalize_password(password: str) -> str:
@@ -668,15 +675,25 @@ def process_password_changes(users: dict, api_session, api_base: str, temp_passw
         # Process user password change
         usr['force_password_change'] = True
 
-        # Update password if temporary password is set
-        if temp_password != "":
+        # When temp password is not blank and randomization is not requested, we'll use the provided temp password.
+        # This temp password should already be validated and padded if necessary.
+        if temp_password != "" and not randomize_temp_password:
+            if not a.silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Using configured temporary password for {usr['name']}.")
+
+        # Overrides any configured temp password and generates a random one instead if randomization is requested or
+        # if the temp password is blank.
+        elif randomize_temp_password or temp_password == "":
+            if not a.silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Generating random temporary password for {usr['name']}.")
             temp_password = create_random_password(length=12)
-            if firewall_generation == 7:
-                usr['password'] = temp_password
-            elif firewall_generation == 6:
-                usr['password']["pwd"] = temp_password
-            elif firewall_generation == 5:
-                usr['password'] = temp_password
+
+        if firewall_generation == 7:
+            usr['password'] = temp_password
+        elif firewall_generation == 6:
+            usr['password']["pwd"] = temp_password
+        elif firewall_generation == 5:
+            usr['password'] = temp_password
 
         uname = usr['name']
         uuid = usr['uuid']
@@ -1858,7 +1875,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     md_lines.append(f"")
     md_lines.append(f"1. **Immediately** update all credentials, pre-shared keys, and shared secrets identified in the Action Items section")
     md_lines.append(f"2. **Test** critical services after credential updates to ensure continued operation")
-    md_lines.append(f"3. **Distribute** the temporary password to each user, if one was set. If randomized passwords were enabled, refer to the `user_passwords.csv` file generated during playbook execution")
+    md_lines.append(f"3. **Distribute** the temporary password to each user, if one was set. If randomized passwords were enabled, refer to table at the end of this report for the assigned passwords")
     md_lines.append(f"")
     md_lines.append(f"---")
     md_lines.append(f"")
@@ -2579,12 +2596,12 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
             md_lines.append(f"")
             md_lines.append(f"#### User Details")
             md_lines.append(f"")
-            md_lines.append(f"| Username | Force Password Change | Skipped Force Password Change | Reset/Unbind TOTP | Skipped TOTP Binding Reset | New Password |")
+            md_lines.append(f"| Username | Password Change Forced | Skipped Force Password Change | Reset/Unbind TOTP | Skipped TOTP Binding Reset | New Password |")
             md_lines.append(f"|----------|-----------------------|-------------------------------|-------------------|----------------------------|--------------|")
             for user in user_list:
-                force_pass = "✅" if user.get('commit_successful') else "❌"
+                force_pass = "Yes" if user.get('commit_successful') else "No"
                 skipped = "Yes" if user.get('skipped') else "No"
-                unbound_totp = "✅" if user.get('totp_unbound', False) and not user.get('skipped', False) else ("❌" if user.get('totp_unbind_attempted') else "N/A")
+                unbound_totp = "Yes" if user.get('totp_unbound', False) and not user.get('skipped', False) else ("No" if user.get('totp_unbind_attempted') else "N/A")
                 totp_skipped = "Yes" if user.get('totp_skipped', False) else "No"
                 new_passwd = user.get('new_password', '')
                 md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} | {new_passwd} |")
@@ -3032,6 +3049,32 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             # TODO: Seems GEN6 does not have this endpoint or CLI path.
             aws_api = None
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: AWS API endpoint is not available on GEN6 firewalls.")
+
+            # Create a Login object and log into the firewall using the alternate API method
+            # if a.verbose:
+            #     verbose_int = 1
+            # else:
+            #     verbose_int = 0
+            #
+            # alt_session = Login(
+            #     ipaddress=api_base,
+            #     userid=username,
+            #     passwd=password,
+            #     admin_mode="config",
+            #     http_type="https",
+            #     brwsr_cache=0,
+            #     verbose=verbose_int,
+            #     sessIdRef=0
+            # )
+            #
+            # logged_in, rmsg = alt_session.login2()
+            # if logged_in == 1:
+            #     if not silent:
+            #         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Successfully logged into alternate API session for GEN6 firewall.")
+            #     aws_api = alt_session.get_aws_logging()
+            #     alt_session.logout()
+            #
+            # exit()
         else:
             aws_api = get_request(api_base, api_session, '/api/sonicos/log/aws', silent=silent)
 
@@ -4757,8 +4800,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     users = None
     if force_password_change or a.force_password_change:
         # Get local users
-        users = get_local_users(api_session, api_base, firewall_info['firewall_generation'],
-                               firewall, sshport, username, password, target_numbers)
+        users = get_local_users(api_session, api_base, firewall_info['firewall_generation'], firewall, sshport, username, password, target_numbers)
 
         if users is None:
             return "UNABLE_TO_GET_USERS", "Unable to get users"
@@ -4767,19 +4809,28 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         routine_results[firewall]['total_user_count'] = len(users['user']['local']['user'])
 
         # Process password changes
-        user_results = process_password_changes(
-            users, api_session, api_base, temp_password, randomize_temp_password or a.randomize_password,
-            firewall_info['firewall_generation'], firewall, sshport, username, password, target_numbers, a)
+        user_results = process_password_changes(users,
+                                                api_session,
+                                                api_base,
+                                                temp_password,
+                                                randomize_temp_password or a.randomize_password,
+                                                firewall_info['firewall_generation'],
+                                                firewall,
+                                                sshport,
+                                                username,
+                                                password,
+                                                target_numbers,
+                                                a)
 
         routine_results[firewall]['users'] = user_results
+
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: Force password change logic is disabled. Enable it with -fpc or in the input CSV.")
         routine_results[firewall]['force_password_change_disabled'] = True
 
     # Handle TOTP unbind operations (if enabled)
     if unbind_totp or a.unbind_totp:
-        totp_result = unbind_totp_from_users(api_session, api_base, firewall_info['firewall_generation'],
-                                           users, target_numbers)
+        totp_result = unbind_totp_from_users(api_session, api_base, firewall_info['firewall_generation'], users, target_numbers)
         update_routine_results(routine_results, firewall, 'totp_unbind', totp_result)
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: INFO: TOTP unbind logic is disabled. Enable it with -ut or in the input CSV.")
@@ -4789,8 +4840,15 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     calculate_routine_statistics(routine_results, firewall)
 
     # Finalize routine (cleanup, write results, logout)
-    finalize_routine(api_session, api_base, firewall, firewall_info['firewall_generation'],
-                    sshport, username, password, target_numbers, firewall_info)
+    finalize_routine(api_session,
+                     api_base,
+                     firewall,
+                     firewall_info['firewall_generation'],
+                     sshport,
+                     username,
+                     password,
+                     target_numbers,
+                     firewall_info)
 
     print(f"Refer to ./{constants.START_TIMESTAMP_FOLDER}/{routine_results[firewall]['device_model'].replace(' ', '')}-{routine_results[firewall]['serial_number']}-summary.md for resources to address each of the findings above.")
     return "ROUTINE_COMPLETE", "Routine completed successfully."
@@ -4814,7 +4872,7 @@ if __name__ == "__main__":
         "  - Identifies configuration items requiring attention",
         "  - Generates a summary table of findings and recommended actions with resources for remediation",
         "  - Produces a detailed findings report for review",
-        "  - Optionally resets local user passwords to a specified temporary password with randomization",
+        "  - Optionally resets local user passwords to a specified temporary password or randomized passwords",
         "     - Users will also be forced to change the password at next login",
         "  - Optionally unbinds TOTP from all local users",
         "",
