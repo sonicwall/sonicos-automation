@@ -369,13 +369,29 @@ def get_check_severity(check_name: str) -> str:
 # Helper Functions for Routine Breakdown
 # =====================================
 
-def update_routine_results(routine_results: dict, firewall: str, section: str, data: dict):
-    """Centralized function to update the routine result dictionary."""
+def update_routine_results(routine_results: dict, firewall: str, section: str, data):
+    """Centralized function to update the routine result dictionary. If a firewall entry does not exist, it creates one.
+    Args:
+        routine_results (dict): The main results dictionary to update.
+        firewall (str): The firewall identifier (IP or hostname).
+        section (str): The section/key under which to store the data.
+        data (str, list, or dict): The data to store, can be a dictionary or any other type.
+    """
     if firewall not in routine_results:
         routine_results[firewall] = {}
 
+    # If data is a dictionary, merge it; if it's a list, extend it; otherwise, set it directly.
     if isinstance(data, dict):
         routine_results[firewall].update(data)
+
+    # Else if the section already exists and is a list, extend it; otherwise, create a new list.
+    elif isinstance(data, list):
+        if section in routine_results[firewall] and isinstance(routine_results[firewall][section], list):
+            routine_results[firewall][section].extend(data)
+        else:
+            routine_results[firewall][section] = data
+
+    # Otherwise, just set the data directly.
     else:
         routine_results[firewall][section] = data
 
@@ -1034,7 +1050,8 @@ def generate_summary_table(results: dict):
         console = Console()
 
         # Main summary table
-        table = Table(title="Remediation Playbook Summary",
+        sev_filter = f"(Severity Filter: {a.severity.upper()})" if a.severity != "all" else ""
+        table = Table(title=f"Remediation Playbook Summary {sev_filter}",
                       show_lines=False,
                       show_header=True,
                       header_style="bold magenta",
@@ -1070,474 +1087,513 @@ def generate_summary_table(results: dict):
             return 0
 
         # Authentication Servers - api/sonicos/user/tacacs/servers, /api/sonicos/user/radius/servers, /api/sonicos/user/ldap/servers
-        ldap_count = get_count(results.get('ldap_servers', {}))
-        if ldap_count > 0:
-            table.add_row("LDAP Servers", "Find configured LDAP servers", "Critical",
-                          "[green]Servers Configured[/green]", str(ldap_count), "[red]Update the LDAP bind credentials on the server and in SonicOS.[/red]")
-        else:
-            table.add_row("LDAP Servers", "Find configured LDAP servers", "Critical",
-                          "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('ldap_servers', a.severity):
+            ldap_count = get_count(results.get('ldap_servers', {}))
+            if ldap_count > 0:
+                table.add_row("LDAP Servers", "Find configured LDAP servers", "Critical",
+                              "[green]Servers Configured[/green]", str(ldap_count), "[red]Update the LDAP bind credentials on the server and in SonicOS.[/red]")
+            else:
+                table.add_row("LDAP Servers", "Find configured LDAP servers", "Critical",
+                              "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
-        radius_count = get_count(results.get('radius_servers', {}))
-        if radius_count > 0:
-            table.add_row("RADIUS Servers", "Find configured RADIUS servers", "Critical",
-                          "[green]Servers Configured[/green]", str(radius_count), "[red]Update the RADIUS shared secret on the server and in SonicOS.[/red]")
-        else:
-            table.add_row("RADIUS Servers", "Find configured RADIUS servers", "Critical",
-                          "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('radius_servers', a.severity):
+            radius_count = get_count(results.get('radius_servers', {}))
+            if radius_count > 0:
+                table.add_row("RADIUS Servers", "Find configured RADIUS servers", "Critical",
+                              "[green]Servers Configured[/green]", str(radius_count), "[red]Update the RADIUS shared secret on the server and in SonicOS.[/red]")
+            else:
+                table.add_row("RADIUS Servers", "Find configured RADIUS servers", "Critical",
+                              "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
-        tacacs_count = get_count(results.get('tacacs_servers', {}))
-        if tacacs_count > 0:
-            table.add_row("TACACS Servers", "Find configured TACACS servers", "Critical",
-                          "[green]Servers Configured[/green]", str(tacacs_count), "[red]Update the shared secret on the server and in SonicOS.[/red]")
-        else:
-            table.add_row("TACACS Servers", "Find configured TACACS servers", "Critical",
-                          "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('tacacs_servers', a.severity):
+            tacacs_count = get_count(results.get('tacacs_servers', {}))
+            if tacacs_count > 0:
+                table.add_row("TACACS Servers", "Find configured TACACS servers", "Critical",
+                              "[green]Servers Configured[/green]", str(tacacs_count), "[red]Update the shared secret on the server and in SonicOS.[/red]")
+            else:
+                table.add_row("TACACS Servers", "Find configured TACACS servers", "Critical",
+                              "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # VPN - /api/sonicos/vpn/policies/all
-        vpn_count = get_count(results.get('vpn', {}).get('policy', []))
-        if vpn_count > 0:
-            table.add_row("VPN Policies", "Find configured VPN policies", "Critical",
-                          "[green]Policies Found[/green]", str(vpn_count), "[red]Update the pre-shared secrets and/or encryption and authentication keys on each policy.[/red]")
-        else:
-            table.add_row("VPN Policies", "Find configured VPN policies", "Critical",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('vpn_policies', a.severity):
+            vpn_count = get_count(results.get('vpn', {}).get('policy', []))
+            if vpn_count > 0:
+                table.add_row("VPN Policies", "Find configured VPN policies", "Critical",
+                              "[green]Policies Found[/green]", str(vpn_count), "[red]Update the pre-shared secrets and/or encryption and authentication keys on each policy.[/red]")
+            else:
+                table.add_row("VPN Policies", "Find configured VPN policies", "Critical",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # WAN Interfaces (PPPoE/PPTP/L2TP) - /api/sonicos/interfaces/ipv4
-        interesting_wans = results.get('interesting_wan_list', [])
-        if len(interesting_wans) > 0:
-            table.add_row("WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
-                          "[green]Interfaces Found[/green]", str(len(interesting_wans)),
-                          "[red]Update the credentials with your ISP, then in SonicOS.[/red]")
-            table.add_row("", "", "", "", "", "[red] - Interface(s): " + ", ".join(interesting_wans) + "[/red]")
-        else:
-            table.add_row("WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('wan_interfaces', a.severity):
+            interesting_wans = results.get('interesting_wan_list', [])
+            if len(interesting_wans) > 0:
+                table.add_row("WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
+                              "[green]Interfaces Found[/green]", str(len(interesting_wans)),
+                              "[red]Update the credentials with your ISP, then in SonicOS.[/red]")
+                table.add_row("", "", "", "", "", "[red] - Interface(s): " + ", ".join(interesting_wans) + "[/red]")
+            else:
+                table.add_row("WAN Interfaces", "Looks for PPPoE/PPTP/L2TP WAN interfaces", "Critical",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # AWS API - /api/sonicos/log/aws
-        aws_enabled = results.get('log', {}).get('aws', {}).get('enable', False)
-        if aws_enabled:
-            table.add_row("AWS API Logging", "Check the AWS API integration status", "Critical",
-                          "[green]Enabled[/green]", "", "[red]Update the secret key on the AWS Console, then in SonicOS.[/red]")
-        else:
-            table.add_row("AWS API Logging", "Check the AWS API integration status", "Critical",
-                          "[dim]Not Enabled[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('aws_api', a.severity):
+            aws_enabled = results.get('log', {}).get('aws', {}).get('enable', False)
+            if aws_enabled:
+                table.add_row("AWS API Logging", "Check the AWS API integration status", "Critical",
+                              "[green]Enabled[/green]", "", "[red]Update the secret key on the AWS Console, then in SonicOS.[/red]")
+            else:
+                table.add_row("AWS API Logging", "Check the AWS API integration status", "Critical",
+                              "[dim]Not Enabled[/dim]", "", "[dim]No action required[/dim]")
 
         # Network Services - Dynamic DNS - /api/sonicos/dynamic-dns/profiles/ipv6 and /api/sonicos/dynamic-dns/profiles/ipv4
-        ddns_v4 = get_count(results.get('ddns_services_v4', []))
-        ddns_v6 = get_count(results.get('ddns_services_v6', []))
-        total_ddns = ddns_v4 + ddns_v6
-        if total_ddns > 0:
-            table.add_row("Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
-                          "[green]Profiles Found[/green]", str(total_ddns),
-                          "[red]Update the credentials at the DDNS provider's website, then in SonicOS.[/red]")
-        else:
-            table.add_row("Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
-                          "[dim]No profiles found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('ddns_services', a.severity):
+            ddns_v4 = get_count(results.get('ddns_services_v4', []))
+            ddns_v6 = get_count(results.get('ddns_services_v6', []))
+            total_ddns = ddns_v4 + ddns_v6
+            if total_ddns > 0:
+                table.add_row("Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
+                              "[green]Profiles Found[/green]", str(total_ddns),
+                              "[red]Update the credentials at the DDNS provider's website, then in SonicOS.[/red]")
+            else:
+                table.add_row("Dynamic DNS", "Looks for IPv4/IPv6 DDNS entries", "High",
+                              "[dim]No profiles found[/dim]", "", "[dim]No action required[/dim]")
 
         # Cloud Secure Edge - /api/sonicos/cloud-secure-edge/base
-        cse_enabled = results.get('cloud_secure_edge', {}).get('created', False)
-        if cse_enabled:
-            table.add_row("Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
-                          "[green]Enabled[/green]", "", "[red]Reset the CSE connector's API token.[/red]")
-        else:
-            table.add_row("Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
-                          "[dim]Not Enabled[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('cloud_secure_edge', a.severity):
+            cse_enabled = results.get('cloud_secure_edge', {}).get('created', False)
+            if cse_enabled:
+                table.add_row("Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
+                              "[green]Enabled[/green]", "", "[red]Reset the CSE connector's API token.[/red]")
+            else:
+                table.add_row("Cloud Secure Edge", "Checks Cloud Secure Edge (CSE) status", "Critical",
+                              "[dim]Not Enabled[/dim]", "", "[dim]No action required[/dim]")
 
         # Email Logging - /api/sonicos/log/automation
-        email_logging_data = results.get('log_automation_data', {})
-        if email_logging_data:
-            if (
-                    email_logging_data.get('pop3_flag', False) or
-                    email_logging_data.get('smtp_flag', False) or
-                    email_logging_data.get('ftp_flag', False)
-            ):
-                table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
-                              "[green]Configured[/green]", "", "[red]Update the email credentials on the server and in SonicOS.[/red]")
-            if email_logging_data.get('pop3_flag', False):
-                table.add_row("", "", "", "", "", "[red] - POP3: Update the email credentials on the server and in SonicOS.[/red]")
-            if email_logging_data.get('smtp_flag', False):
-                table.add_row("", "", "", "", "", "[red] - SMTP: Update the email credentials on the server and in SonicOS.[/red]")
-            if email_logging_data.get('ftp_flag', False):
-                table.add_row("", "", "", "", "", "[red] - FTP: Update the email credentials on the server and in SonicOS.[/red]")
-            if (
-                    email_logging_data.get('pop3_flag', False) is False and
-                    email_logging_data.get('smtp_flag', False) is False and
-                    email_logging_data.get('ftp_flag', False) is False
-            ):
+        if should_run_check('email_logging', a.severity):
+            email_logging_data = results.get('log_automation_data', {})
+            if email_logging_data:
+                if (
+                        email_logging_data.get('pop3_flag', False) or
+                        email_logging_data.get('smtp_flag', False) or
+                        email_logging_data.get('ftp_flag', False)
+                ):
+                    table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
+                                  "[green]Configured[/green]", "", "[red]Update the email credentials on the server and in SonicOS.[/red]")
+                if email_logging_data.get('pop3_flag', False):
+                    table.add_row("", "", "", "", "", "[red] - POP3: Update the email credentials on the server and in SonicOS.[/red]")
+                if email_logging_data.get('smtp_flag', False):
+                    table.add_row("", "", "", "", "", "[red] - SMTP: Update the email credentials on the server and in SonicOS.[/red]")
+                if email_logging_data.get('ftp_flag', False):
+                    table.add_row("", "", "", "", "", "[red] - FTP: Update the email credentials on the server and in SonicOS.[/red]")
+                if (
+                        email_logging_data.get('pop3_flag', False) is False and
+                        email_logging_data.get('smtp_flag', False) is False and
+                        email_logging_data.get('ftp_flag', False) is False
+                ):
+                    table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
+                                  "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+            else:
                 table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
                               "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
-        else:
-            table.add_row("Email Logging", "Checks for Log Automation config", "Medium",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Packet Monitor FTP Logging - /api/sonicos/packet-monitor/base
-        pktmon_flagged = results.get('packet_monitor_ftp_set', False)
-        if pktmon_flagged:
-            table.add_row("Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
-                          "[green]Configured[/green]", "", "[red]Update the FTP credentials on the server and in SonicOS.[/red]")
-        else:
-            table.add_row("Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('packet_monitor_ftp', a.severity):
+            pktmon_flagged = results.get('packet_monitor_ftp_set', False)
+            if pktmon_flagged:
+                table.add_row("Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
+                              "[green]Configured[/green]", "", "[red]Update the FTP credentials on the server and in SonicOS.[/red]")
+            else:
+                table.add_row("Packet Monitor FTP Logging", "Checks for FTP logging configuration", "Medium",
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Settings/TSR Scheduled Exports - /api/sonicos/ftp/base
-        export_enabled = results.get('scheduled_exports_ftp_set', False)
-        if export_enabled:
-            table.add_row("TSR/EXP Scheduled Exports", "Checks for FTP configuration", "Medium",
-                          "[green]Configured[/green]", "", "[red]Update the FTP credentials on the server and in SonicOS.[/red]")
-        else:
-            table.add_row("TSR Scheduled Exports", "Checks for FTP configuration", "Medium",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('scheduled_exports', a.severity):
+            export_enabled = results.get('scheduled_exports_ftp_set', False)
+            if export_enabled:
+                table.add_row("TSR/EXP Scheduled Exports", "Checks for FTP configuration", "Medium",
+                              "[green]Configured[/green]", "", "[red]Update the FTP credentials on the server and in SonicOS.[/red]")
+            else:
+                table.add_row("TSR Scheduled Exports", "Checks for FTP configuration", "Medium",
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # SNMP - /api/sonicos/snmp/users
-        snmp_count = get_count(results.get('snmp', {}).get('user', []))
-        if snmp_count > 0:
-            table.add_row("SNMPv3 Users", "Find configured SNMP user entries", "High",
-                          "[green]Users Found[/green]", str(snmp_count), "[red]Update the password of each SNMP user.[/red]")
-        else:
-            table.add_row("SNMPv3 Users", "Find configured SNMP user entries", "High",
-                          "[dim]No users found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('snmp_users', a.severity):
+            snmp_count = get_count(results.get('snmp', {}).get('user', []))
+            if snmp_count > 0:
+                table.add_row("SNMPv3 Users", "Find configured SNMP user entries", "High",
+                              "[green]Users Found[/green]", str(snmp_count), "[red]Update the password of each SNMP user.[/red]")
+            else:
+                table.add_row("SNMPv3 Users", "Find configured SNMP user entries", "High",
+                              "[dim]No users found[/dim]", "", "[dim]No action required[/dim]")
 
         # Clearpass/NAC - /api/sonicos/network-access-control/clearpass/base
         # /api/sonicos/network-access-control/clearpass/servers
-        clearpass_enabled = results.get('clearpass_enabled', False)
-        clearpass_count = get_count(results.get('clearpass_servers', {}.get('clearpass_servers', [])))
-        if clearpass_enabled or clearpass_count > 0:
-            table.add_row("Clearpass/Network Access Control", "Finds configured servers", "High",
-                          f"[green]{'Servers Found' if clearpass_count > 0 else 'Enabled'}[/green]", str(clearpass_count), "[red]Update the shared secret on the server and in SonicOS.[/red]")
-            if clearpass_count == 0:
-                table.add_row("", "", "", "", "", "[red] - Feature is enabled but no servers are configured.[/red]")
-        else:
-            table.add_row("Clearpass/Network Access Control", "Finds configured servers", "High",
-                          "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('clearpass_nac', a.severity):
+            clearpass_enabled = results.get('clearpass_enabled', False)
+            clearpass_count = get_count(results.get('clearpass_servers', {}.get('clearpass_servers', [])))
+            if clearpass_enabled or clearpass_count > 0:
+                table.add_row("Clearpass/Network Access Control", "Finds configured servers", "High",
+                              f"[green]{'Servers Found' if clearpass_count > 0 else 'Enabled'}[/green]", str(clearpass_count), "[red]Update the shared secret on the server and in SonicOS.[/red]")
+                if clearpass_count == 0:
+                    table.add_row("", "", "", "", "", "[red] - Feature is enabled but no servers are configured.[/red]")
+            else:
+                table.add_row("Clearpass/Network Access Control", "Finds configured servers", "High",
+                              "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # Cellular WWAN - /api/sonicos/reporting/wwan
-        cell_attached = results.get('cellular_data', {}).get('wwan_attached', False)
-        if cell_attached:
-            table.add_row("Cellular WWAN", "Checks for an attached modem", "High",
-                          "[green]Modem Attached[/green]", "", "[red]Update the credentials with the cellular provider and in SonicOS.[/red]")
-        else:
-            table.add_row("Cellular WWAN", "Checks for an attached modem", "High",
-                          "[dim]Modem not found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('cellular_wwan', a.severity):
+            cell_attached = results.get('cellular_data', {}).get('wwan_attached', False)
+            if cell_attached:
+                table.add_row("Cellular WWAN", "Checks for an attached modem", "High",
+                              "[green]Modem Attached[/green]", "", "[red]Update the credentials with the cellular provider and in SonicOS.[/red]")
+            else:
+                table.add_row("Cellular WWAN", "Checks for an attached modem", "High",
+                              "[dim]Modem not found[/dim]", "", "[dim]No action required[/dim]")
 
         # Zone Objects: Wireless Guest Services External Guest Authentication (Message Authentication)
-        guest_message_auth = [i['zone'] for i in results.get('guest_zone_data', []) if i['guest_auth_ext_enabled']]
-        guest_message_count = len(guest_message_auth)
-        if guest_message_count > 0:
-            table.add_row("Guest Services External Auth", "Finds Message Authentication config", "Medium",
-                          "[green]Zones Found[/green]", str(guest_message_count), "[red]Update the Message Authentication password.[/red]")
-            for g in guest_message_auth:
-                table.add_row("", "", "", "", "", f"[red] - {str(g)}: Guest Services Message Authentication enabled. Update the Message Authentication password.[/red]")
-        else:
-            table.add_row("Guest Services External Auth", "Finds Message Authentication config", "Medium",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('guest_services_auth', a.severity):
+            guest_message_auth = [i['zone'] for i in results.get('guest_zone_data', []) if i['guest_auth_ext_enabled']]
+            guest_message_count = len(guest_message_auth)
+            if guest_message_count > 0:
+                table.add_row("Guest Services External Auth", "Finds Message Authentication config", "Medium",
+                              "[green]Zones Found[/green]", str(guest_message_count), "[red]Update the Message Authentication password.[/red]")
+                for g in guest_message_auth:
+                    table.add_row("", "", "", "", "", f"[red] - {str(g)}: Guest Services Message Authentication enabled. Update the Message Authentication password.[/red]")
+            else:
+                table.add_row("Guest Services External Auth", "Finds Message Authentication config", "Medium",
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Zone Objects: WLAN RADIUS Servers - /api/sonicos/zones
-        zone_data = results.get('wlan_zone_data', [])
-        zone_radius_count = len(zone_data)
-        if zone_radius_count > 0:
-            table.add_row("Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
-                          "[green]Zones Found[/green]", str(zone_radius_count), "[red]Update the RADIUS shared secret and/or LDAP password.[/red]")
-            for z in zone_data:
-                if z['radius_server_enabled']:
-                    table.add_row("", "", "", "", "", f"[red] - {z['zone']}: Local RADIUS server enabled. Update the RADIUS server shared secret.[/red]")
-                if z['ldap_server_enabled'] or z['ldap_server_host']:
-                    table.add_row("", "", "", "", "", f"[red] - {z['zone']}: LDAP server enabled. Update the LDAP server password.[/red]")
-        else:
-            table.add_row("Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('wlan_radius_servers', a.severity):
+            zone_data = results.get('wlan_zone_data', [])
+            zone_radius_count = len(zone_data)
+            if zone_radius_count > 0:
+                table.add_row("Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
+                              "[green]Zones Found[/green]", str(zone_radius_count), "[red]Update the RADIUS shared secret and/or LDAP password.[/red]")
+                for z in zone_data:
+                    if z['radius_server_enabled']:
+                        table.add_row("", "", "", "", "", f"[red] - {z['zone']}: Local RADIUS server enabled. Update the RADIUS server shared secret.[/red]")
+                    if z['ldap_server_enabled'] or z['ldap_server_host']:
+                        table.add_row("", "", "", "", "", f"[red] - {z['zone']}: LDAP server enabled. Update the LDAP server password.[/red]")
+            else:
+                table.add_row("Local RADIUS Server", "Finds WLAN RADIUS/LDAP config", "Medium",
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Internal Wireless - Radio - /api/sonicos/wireless/radio
-        radio_radius = results.get('internal_wlan', {}).get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
-        radio_psk = results.get('internal_wlan', {}).get('wireless', {}).get('wpa', {}).get('passphrase', None)
-        if radio_radius or radio_psk:
-            table.add_row("Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
-                          "[green]Configured[/green]", "", "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
-            if radio_radius:
-                table.add_row("", "", "", "", "", "[red] - Update the RADIUS and/or RADIUS Accounting secrets on the server, then in SonicOS.[/red]")
-            if radio_psk:
-                table.add_row("", "", "", "", "", "[red] - Update the pre-shared keys on the server, then in SonicOS.[/red]")
-        else:
-            table.add_row("Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('internal_wlan_radio', a.severity):
+            radio_radius = results.get('internal_wlan', {}).get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+            radio_psk = results.get('internal_wlan', {}).get('wireless', {}).get('wpa', {}).get('passphrase', None)
+            if radio_radius or radio_psk:
+                table.add_row("Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
+                              "[green]Configured[/green]", "", "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
+                if radio_radius:
+                    table.add_row("", "", "", "", "", "[red] - Update the RADIUS and/or RADIUS Accounting secrets on the server, then in SonicOS.[/red]")
+                if radio_psk:
+                    table.add_row("", "", "", "", "", "[red] - Update the pre-shared keys on the server, then in SonicOS.[/red]")
+            else:
+                table.add_row("Internal WLAN Radio", "Looks for built-in WLAN config", "Medium",
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Internal Wireless - Virtual Access Point Objects - /api/sonicos/wireless/virtual-access-point/objects
-        vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
-        vap_data = results.get('internal_wlan_vap_data', [])
-        if vap_count > 0:
-            table.add_row("Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
-                          "[green]Found[/green]", str(vap_count), "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
-            for p in vap_data:
-                if p['radius']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
-                if p['accounting']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
-        else:
-            table.add_row("Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('internal_wlan_vaps', a.severity):
+            vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
+            vap_data = results.get('internal_wlan_vap_data', [])
+            if vap_count > 0:
+                table.add_row("Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
+                              "[green]Found[/green]", str(vap_count), "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
+                for p in vap_data:
+                    if p['radius']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
+                    if p['accounting']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
+            else:
+                table.add_row("Internal WLAN VAP Objects", "Checks for PSK/RADIUS in VAP objects", "Medium",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Internal Wireless - Virtual Access Point Profiles - /api/sonicos/wireless/virtual-access-point/profiles
-        vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
-        profile_data = results.get('internal_wlan_vap_profile_data', [])
-        if vap_profile_count > 0:
-            table.add_row("Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
-                          "[green]Found[/green]", str(vap_profile_count), "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
-            for p in profile_data:
-                if p['radius']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
-                if p['accounting']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
-        else:
-            table.add_row("Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('internal_wlan_vap_profiles', a.severity):
+            vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
+            profile_data = results.get('internal_wlan_vap_profile_data', [])
+            if vap_profile_count > 0:
+                table.add_row("Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
+                              "[green]Found[/green]", str(vap_profile_count), "[red]Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS[/red]")
+                for p in profile_data:
+                    if p['radius']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    if p['accounting']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+            else:
+                table.add_row("Internal WLAN VAP Profiles", "Checks for PSK/RADIUS in VAP profiles", "Medium",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Access Point Objects - /api/sonicos/sonicpoint/sonicpoints
-        ap_count = get_count(results.get('sonicpoint_objects', {}).get('sonicpoint', {}).get('sonicpoint', []))
-        ap_data = results.get('sonicpoint_object_data', [])
+        if should_run_check('sonicpoint_objects', a.severity):
+            ap_count = get_count(results.get('sonicpoint_objects', {}).get('sonicpoint', {}).get('sonicpoint', []))
+            ap_data = results.get('sonicpoint_object_data', [])
 
-        if ap_count > 0:
-            table.add_row("SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
-                          "[green]Objects Found[/green]", str(ap_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
-            for p in ap_data:
-                if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
-                if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
-                if p['sslvpn_user'] or p['sslvpn_server']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
-                if p['administrator']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
-        else:
-            table.add_row("SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+            if ap_count > 0:
+                table.add_row("SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
+                              "[green]Objects Found[/green]", str(ap_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
+                for p in ap_data:
+                    if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+                    if p['sslvpn_user'] or p['sslvpn_server']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
+                    if p['administrator']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
+            else:
+                table.add_row("SonicPoint/SonicWave Objects", "Checks for PSK/RADIUS (AP objects)", "Medium",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Access Point Profiles - /api/sonicos/sonicpoint/profiles
-        profile_count = len(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
-        profile_data = results.get('sonicpoint_profile_data', [])
-        if profile_count > 0:
-            table.add_row("SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
-                          "[green]Profiles Found[/green]", str(profile_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
-            for p in profile_data:
-                if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
-                if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
-                if p['sslvpn_user'] or p['sslvpn_server']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
-                if p['administrator']:
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
-        else:
-            table.add_row("SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('sonicpoint_profiles', a.severity):
+            profile_count = len(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
+            profile_data = results.get('sonicpoint_profile_data', [])
+            if profile_count > 0:
+                table.add_row("SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
+                              "[green]Profiles Found[/green]", str(profile_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
+                for p in profile_data:
+                    if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+                    if p['sslvpn_user'] or p['sslvpn_server']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the SSLVPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}.")
+                    if p['administrator']:
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the administrator password.")
+            else:
+                table.add_row("SonicPoint/SonicWave Profiles", "Checks for PSK/RADIUS (AP profiles)", "Medium",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Virtual Access Points - /api/sonicos/sonicpoint/virtual-access-point/objects
-        vap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
-        vap_data = results.get('sonicpoint_vap_data', [])
-        if vap_count > 0:
-            table.add_row("SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
-                          "[green]Objects Found[/green]", str(vap_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
-            for p in vap_data:
-                if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
-                if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
-        else:
-            table.add_row("SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('sonicpoint_vaps', a.severity):
+            vap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
+            vap_data = results.get('sonicpoint_vap_data', [])
+            if vap_count > 0:
+                table.add_row("SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
+                              "[green]Objects Found[/green]", str(vap_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
+                for p in vap_data:
+                    if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS server shared secret.")
+                    if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}, SSID: {p['ssid']}: Update the RADIUS Accounting server shared secret.")
+            else:
+                table.add_row("SonicPoint/SonicWave VAP Objects", "Checks for PSK/RADIUS (VAP objects)", "Medium",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SonicPoint/SonicWave Virtual Access Point Profiles - /api/sonicos/sonicpoint/virtual-access-point/profiles
-        vap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
-        profile_data = results.get('sonicpoint_vap_profile_data', [])
-        if vap_profile_count > 0:
-            table.add_row("SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
-                          "[green]Profiles Found[/green]", str(vap_profile_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
-            for p in profile_data:
-                if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
-                if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
-        else:
-            table.add_row("SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('sonicpoint_vap_profiles', a.severity):
+            vap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
+            profile_data = results.get('sonicpoint_vap_profile_data', [])
+            if vap_profile_count > 0:
+                table.add_row("SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
+                              "[green]Profiles Found[/green]", str(vap_profile_count), "[red]Update the pre-shared keys and RADIUS/RADIUS Accounting secrets on the server, then in SonicOS[/red]")
+                for p in profile_data:
+                    if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS server shared secret.")
+                    if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
+                        table.add_row("", "", "", "", "", f"[red] - {p['name']}: Update the RADIUS Accounting server shared secret.")
+            else:
+                table.add_row("SonicPoint/SonicWave VAP Profiles", "Checks for PSK/RADIUS (VAP profiles)", "Medium",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Dynamic External Address Objects - /api/sonicos/dynamic-external-objects
-        deao_count = results.get('dynamic_ao_count', 0)
-        deao_data = results.get('dynamic_ao_data', [])
-        ftp_deaos = [d for d in deao_data if d['protocol'] == 'ftp']
-        http_deaos = [d for d in deao_data if d['protocol'] == 'https']
-        if deao_count > 0:
-            table.add_row("Dynamic External Address Objects", "Finds configured objects", "High",
-                          "[green]Objects Found[/green]", str(deao_count), "[red]Update the credentials at the server, then in SonicOS.[/red]")
-            if len(ftp_deaos) > 0:
-                table.add_row("", "", "", "", "", f"[red] - {str(len(ftp_deaos))} object(s) using FTP. Update the credentials at the server, then in SonicOS.[/red]")
-            if len(http_deaos) > 0:
-                table.add_row("", "", "", "", "", f"[red] - {str(len(http_deaos))} object(s) using HTTPS. Update the credentials at the server, then in SonicOS.[/red]")
-        else:
-            table.add_row("Dynamic External Address Objects", "Finds configured objects", "High",
-                          "[dim]No objects found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('dynamic_address_objects', a.severity):
+            deao_count = results.get('dynamic_ao_count', 0)
+            deao_data = results.get('dynamic_ao_data', [])
+            ftp_deaos = [d for d in deao_data if d['protocol'] == 'ftp']
+            http_deaos = [d for d in deao_data if d['protocol'] == 'https']
+            if deao_count > 0:
+                table.add_row("Dynamic External Address Objects", "Finds configured objects", "High",
+                              "[green]Objects Found[/green]", str(deao_count), "[red]Update the credentials at the server, then in SonicOS.[/red]")
+                if len(ftp_deaos) > 0:
+                    table.add_row("", "", "", "", "", f"[red] - {str(len(ftp_deaos))} object(s) using FTP. Update the credentials at the server, then in SonicOS.[/red]")
+                if len(http_deaos) > 0:
+                    table.add_row("", "", "", "", "", f"[red] - {str(len(http_deaos))} object(s) using HTTPS. Update the credentials at the server, then in SonicOS.[/red]")
+            else:
+                table.add_row("Dynamic External Address Objects", "Finds configured objects", "High",
+                              "[dim]No objects found[/dim]", "", "[dim]No action required[/dim]")
 
-        # Dynamic Botnet Server List - /api/sonicos/botnet/base
-        botnet_data = results.get('botnet_data', {})
-        if botnet_data:
-            if botnet_data['protocol'] == 'ftp':
-                table.add_row("Botnet Server List (FTP)", "Checks Botnet server list protocol", "Low",
-                              "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
-            elif botnet_data['protocol'] == 'https':
-                table.add_row("Botnet Server List (HTTP)", "Checks Botnet server list protocol", "Low",
-                              "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
+        # Dynamic Botnet List Server - /api/sonicos/botnet/base
+        if should_run_check('dynamic_botnet_list_server', a.severity):
+            botnet_data = results.get('botnet_data', {})
+            if botnet_data:
+                if botnet_data['protocol'] == 'ftp':
+                    table.add_row("Botnet Server List (FTP)", "Checks Botnet server list protocol", "Low",
+                                  "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
+                elif botnet_data['protocol'] == 'https':
+                    table.add_row("Botnet Server List (HTTP)", "Checks Botnet server list protocol", "Low",
+                                  "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
+                else:
+                    table.add_row("Botnet Server List", "Checks Botnet server list protocol", "Low",
+                                  "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
             else:
                 table.add_row("Botnet Server List", "Checks Botnet server list protocol", "Low",
-                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
-        else:
-            table.add_row("Botnet Server List", "Checks Botnet server list protocol", "Low",
-                          "[dim]No configuration found[/dim]", "", "[dim]No action required[/dim]")
+                              "[dim]No configuration found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switches
-        switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
-        if switch_count > 0:
-            table.add_row("Extended Switches", "Checks for connected switches", "Low",
-                          "[green]Switches Found[/green]", str(switch_count), "[red]Update the password for any extended switches.[/red]")
-        else:
-            table.add_row("Extended Switches", "Checks for connected switches", "Low",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('extended_switches', a.severity):
+            switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
+            if switch_count > 0:
+                table.add_row("Extended Switches", "Checks for connected switches", "Low",
+                              "[green]Switches Found[/green]", str(switch_count), "[red]Update the password for any extended switches.[/red]")
+            else:
+                table.add_row("Extended Switches", "Checks for connected switches", "Low",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switch Users
-        switch_user_count = get_count(results.get('extended_switch_users', []))
-        if switch_user_count > 0:
-            table.add_row("External Switch Users", "Looks for users in switch config", "Low",
-                          "[green]Users Found[/green]", str(switch_user_count), "[red]Update each user's password in the switch configuration.[/red]")
-        else:
-            table.add_row("External Switch Users", "Looks for users in switch config", "Low",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('extended_switch_users', a.severity):
+            switch_user_count = get_count(results.get('extended_switch_users', []))
+            if switch_user_count > 0:
+                table.add_row("External Switch Users", "Looks for users in switch config", "Low",
+                              "[green]Users Found[/green]", str(switch_user_count), "[red]Update each user's password in the switch configuration.[/red]")
+            else:
+                table.add_row("External Switch Users", "Looks for users in switch config", "Low",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switch RADIUS Servers
-        switch_radius_count = get_count(results.get('switch_controller', {}).get('radius', []))
-        if switch_radius_count > 0:
-            table.add_row("External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
-                          "[green]Servers Found[/green]", str(switch_radius_count), "[red]Update the RADIUS shared secret on each server and in the switch configuration.[/red]")
-        else:
-            table.add_row("External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('extended_switch_radius', a.severity):
+            switch_radius_count = get_count(results.get('switch_controller', {}).get('radius', []))
+            if switch_radius_count > 0:
+                table.add_row("External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
+                              "[green]Servers Found[/green]", str(switch_radius_count), "[red]Update the RADIUS shared secret on each server and in the switch configuration.[/red]")
+            else:
+                table.add_row("External Switch RADIUS Servers", "Looks for RADIUS server config", "Low",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # SSO Agents - /api/sonicos/user/sso/agents
-        sso_count = get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))
-        if sso_count > 0:
-            table.add_row("Single Sign On Agents", "Finds configured SSO Agents", "Low",
-                          "[green]Agents Found[/green]", str(sso_count), "[red]Update the shared secrets on each agent.[/red]")
-        else:
-            table.add_row("Single Sign On Agents", "Finds configured SSO Agents", "Low",
-                          "[dim]No agents found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('sso_agents', a.severity):
+            sso_count = get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))
+            if sso_count > 0:
+                table.add_row("Single Sign On Agents", "Finds configured SSO Agents", "Low",
+                              "[green]Agents Found[/green]", str(sso_count), "[red]Update the shared secrets on each agent.[/red]")
+            else:
+                table.add_row("Single Sign On Agents", "Finds configured SSO Agents", "Low",
+                              "[dim]No agents found[/dim]", "", "[dim]No action required[/dim]")
 
         # TS Agents - /api/sonicos/user/sso/terminal-services-agents
-        tsa_count = get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))
-        if tsa_count > 0:
-            table.add_row("Terminal Services Agents", "Finds configured TS Agents", "Low",
-                          "[green]Agents Found[/green]", str(tsa_count), "[red]Update the shared secrets on each agent.[/red]")
-        else:
-            table.add_row("Terminal Services Agents", "Finds configured TS Agents", "Low",
-                          "[dim]No agents found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('ts_agents', a.severity):
+            tsa_count = get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))
+            if tsa_count > 0:
+                table.add_row("Terminal Services Agents", "Finds configured TS Agents", "Low",
+                              "[green]Agents Found[/green]", str(tsa_count), "[red]Update the shared secrets on each agent.[/red]")
+            else:
+                table.add_row("Terminal Services Agents", "Finds configured TS Agents", "Low",
+                              "[dim]No agents found[/dim]", "", "[dim]No action required[/dim]")
 
         # SSO RADIUS Accounting Clients - /api/sonicos/user/sso/radius-accounting-clients
-        sso_radius_count = get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))
-        if sso_radius_count > 0:
-            table.add_row("SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
-                          "[green]RA Clients Found[/green]", str(sso_radius_count), "[red]Update the shared secrets on each client and in SonicOS.[/red]")
-        else:
-            table.add_row("SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
-                          "[dim]No RA clients found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('sso_radius_clients', a.severity):
+            sso_radius_count = get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))
+            if sso_radius_count > 0:
+                table.add_row("SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
+                              "[green]RA Clients Found[/green]", str(sso_radius_count), "[red]Update the shared secrets on each client and in SonicOS.[/red]")
+            else:
+                table.add_row("SSO RADIUS Accounting Clients", "Finds configured SSO RA Clients", "Low",
+                              "[dim]No RA clients found[/dim]", "", "[dim]No action required[/dim]")
 
         # SSO 3rd Party API - /api/sonicos/user/sso/third-party-api/clients
-        sso_api_count = get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))
-        if sso_api_count > 0:
-            table.add_row("SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
-                          "[green]API Clients Found[/green]", str(sso_api_count), "[red]Update the shared secrets on each client and in SonicOS.[/red]")
-        else:
-            table.add_row("SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
-                          "[dim]No API clients found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('sso_api_clients', a.severity):
+            sso_api_count = get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))
+            if sso_api_count > 0:
+                table.add_row("SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
+                              "[green]API Clients Found[/green]", str(sso_api_count), "[red]Update the shared secrets on each client and in SonicOS.[/red]")
+            else:
+                table.add_row("SSO 3rd Party API Clients", "Finds SSO API Client entries", "Low",
+                              "[dim]No API clients found[/dim]", "", "[dim]No action required[/dim]")
 
         # RADIUS Accounting Servers - /api/sonicos/user/radius/accounting/servers
-        acct_count = get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))
-        if acct_count > 0:
-            table.add_row("RADIUS Accounting Servers", "Finds configured RA servers", "Low",
-                          "[green]RA Servers Found[/green]", str(acct_count), "[red]Update the shared secrets on each server and in SonicOS.[/red]")
-        else:
-            table.add_row("RADIUS Accounting Servers", "Finds configured RA servers", "Low",
-                          "[dim]No RA servers found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('radius_accounting_servers', a.severity):
+            acct_count = get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))
+            if acct_count > 0:
+                table.add_row("RADIUS Accounting Servers", "Finds configured RA servers", "Low",
+                              "[green]RA Servers Found[/green]", str(acct_count), "[red]Update the shared secrets on each server and in SonicOS.[/red]")
+            else:
+                table.add_row("RADIUS Accounting Servers", "Finds configured RA servers", "Low",
+                              "[dim]No RA servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # TACACS Accounting Servers - /api/sonicos/user/tacacs/accounting/servers
-        tacacs_acct_count = get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))
-        if tacacs_acct_count > 0:
-            table.add_row("TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
-                          "[green]Servers Found[/green]", str(tacacs_acct_count), "[red]Update the shared secrets on each server and in SonicOS.[/red]")
-        else:
-            table.add_row("TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
-                          "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('tacacs_accounting_servers', a.severity):
+            tacacs_acct_count = get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))
+            if tacacs_acct_count > 0:
+                table.add_row("TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
+                              "[green]Servers Found[/green]", str(tacacs_acct_count), "[red]Update the shared secrets on each server and in SonicOS.[/red]")
+            else:
+                table.add_row("TACACS Accounting Servers", "Finds configured TACACS Acct servers", "Low",
+                              "[dim]No servers found[/dim]", "", "[dim]No action required[/dim]")
 
         # AppFlow SFR Mailing - /api/sonicos/appflow/sfr-mailing/base
-        sfr_smtp_configured = results.get('sfr_data', {}).get('smtp_configured', False)
-        sfr_pop_configured = results.get('sfr_data', {}).get('pop_configured', False)
-        if sfr_smtp_configured or sfr_pop_configured:
-            table.add_row("AppFlow SFR Mailing", f"Checks for SMTP/POP configuration", "Low",
-                          "[green]Configured[/green]", "", "[red]Update the email server credentials in SonicOS.[/red]")
-        else:
-            table.add_row("AppFlow SFR Mailing", "Checks for SMTP/POP configuration", "Low",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('sfr_reporting', a.severity):
+            sfr_smtp_configured = results.get('sfr_data', {}).get('smtp_configured', False)
+            sfr_pop_configured = results.get('sfr_data', {}).get('pop_configured', False)
+            if sfr_smtp_configured or sfr_pop_configured:
+                table.add_row("AppFlow SFR Mailing", f"Checks for SMTP/POP configuration", "Low",
+                              "[green]Configured[/green]", "", "[red]Update the email server credentials in SonicOS.[/red]")
+            else:
+                table.add_row("AppFlow SFR Mailing", "Checks for SMTP/POP configuration", "Low",
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Custom NTP Servers - /api/sonicos/time/ntp-servers
-        ntp_count = get_count(results.get('ntp_data', []))
-        if ntp_count > 0:
-            table.add_row("Custom NTP Servers", "Finds NTP entries with auth", "Low",
-                          "[green]Entries Found[/green]", str(ntp_count), "[red]Update the credentials on each NTP server and in SonicOS.[/red]")
-        else:
-            table.add_row("Custom NTP Servers", "Finds NTP entries with auth", "Low",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('ntp_servers', a.severity):
+            ntp_count = get_count(results.get('ntp_data', []))
+            if ntp_count > 0:
+                table.add_row("Custom NTP Servers", "Finds NTP entries with auth", "Low",
+                              "[green]Entries Found[/green]", str(ntp_count), "[red]Update the credentials on each NTP server and in SonicOS.[/red]")
+            else:
+                table.add_row("Custom NTP Servers", "Finds NTP entries with auth", "Low",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Security Services Signature Proxy - /api/sonicos/security-services/base
-        sig_proxy_auth = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
-        sig_proxy_username = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', '')
-        if sig_proxy_auth or sig_proxy_username:
-            table.add_row("Security Services Proxy", "Checks for proxy for signature downloads", "Low",
-                          "[green]Configured[/green]", "", "[red]Update the credentials on the proxy server and in SonicOS.[/red]")
-        else:
-            table.add_row("Security Services Proxy", "Checks for proxy for signature downloads", "Low",
-                          "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+        if should_run_check('security_services_proxy', a.severity):
+            sig_proxy_auth = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
+            sig_proxy_username = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', '')
+            if sig_proxy_auth or sig_proxy_username:
+                table.add_row("Security Services Proxy", "Checks for proxy for signature downloads", "Low",
+                              "[green]Configured[/green]", "", "[red]Update the credentials on the proxy server and in SonicOS.[/red]")
+            else:
+                table.add_row("Security Services Proxy", "Checks for proxy for signature downloads", "Low",
+                              "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
-        # GMS IPSec Manaagement Tunnel - /api/sonicos/administration/global
-        gms_conf = results.get('gms', {}).get('ipsec_tunnel', False)
-        if gms_conf:
-            table.add_row("GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
-                            "[green]Configured[/green]", "", "[red]Update the encryption/authentication keys.")
+        # GMS IPSec Management Tunnel - /api/sonicos/administration/global
+        if should_run_check('gms_ipsec_tunnel', a.severity):
+            gms_conf = results.get('gms', {}).get('ipsec_tunnel', False)
+            if gms_conf:
+                table.add_row("GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
+                                "[green]Configured[/green]", "", "[red]Update the encryption/authentication keys.")
 
-        else:
-            table.add_row("GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
-                            "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
+            else:
+                table.add_row("GMS IPSec Management Tunnel", "Checks for GMS IPSec Management Tunnel", "Low",
+                                "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
 
         # Advanced Routing - /api/sonicos/dynamic-file/getAdvancedRoutingData.json
-        adv_routing = results.get('routing_data', [])
-        any_rip = [i for i in results.get('routing_data', []) if i.get('flag_rip', False)]
-        any_ospf = [i for i in results.get('routing_data', []) if i.get('flag_ospfv2', False)]
-        any_bgp = [i for i in results.get('routing_data', []) if i.get('flag_bgp', False)]
-        adv_routing_count = len(any_rip) + len(any_ospf) + len(any_bgp)
-        # rip_ints = [f"{i.get('interface', '')} ({i.get('zone', '')})" for i in any_rip]
-        rip_ints = [i.get('interface', '') for i in any_rip]
-        rip_ints = ", ".join(rip_ints)
-        ospf_ints = [i.get('interface', '') for i in any_ospf]
-        ospf_ints = ", ".join(ospf_ints)
-        bgp_ints = [i.get('interface', '') for i in any_bgp]
-        bgp_ints = ", ".join(bgp_ints)
+        if should_run_check('advanced_routing', a.severity):
+            adv_routing = results.get('routing_data', [])
+            any_rip = [i for i in results.get('routing_data', []) if i.get('flag_rip', False)]
+            any_ospf = [i for i in results.get('routing_data', []) if i.get('flag_ospfv2', False)]
+            any_bgp = [i for i in results.get('routing_data', []) if i.get('flag_bgp', False)]
+            adv_routing_count = len(any_rip) + len(any_ospf) + len(any_bgp)
+            # rip_ints = [f"{i.get('interface', '')} ({i.get('zone', '')})" for i in any_rip]
+            rip_ints = [i.get('interface', '') for i in any_rip]
+            rip_ints = ", ".join(rip_ints)
+            ospf_ints = [i.get('interface', '') for i in any_ospf]
+            ospf_ints = ", ".join(ospf_ints)
+            bgp_ints = [i.get('interface', '') for i in any_bgp]
+            bgp_ints = ", ".join(bgp_ints)
 
-        if adv_routing_count > 0:
-            table.add_row("Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
-                          "[green]Configured[/green]", str(adv_routing_count), "[red]Update the credentials on each routing peer and in SonicOS.[/red]")
-            if any_rip:
-                table.add_row("", "", "", "", "", f"[red] - RIP on {rip_ints}: Update the RIP password on the routing peer and in SonicOS.[/red]")
-            if any_ospf:
-                table.add_row("", "", "", "", "", f"[red] - OSPFv2 on {ospf_ints}: Update the OSPFv2 authentication on the routing peer and in SonicOS.[/red]")
-            if any_bgp:
-                table.add_row("", "", "", "", "", f"[red] - BGP on {bgp_ints}: Update the BGP password on the routing peer and in SonicOS.[/red]")
-        else:
-            table.add_row("Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
-                          "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
+            if adv_routing_count > 0:
+                table.add_row("Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
+                              "[green]Configured[/green]", str(adv_routing_count), "[red]Update the credentials on each routing peer and in SonicOS.[/red]")
+                if any_rip:
+                    table.add_row("", "", "", "", "", f"[red] - RIP on {rip_ints}: Update the RIP password on the routing peer and in SonicOS.[/red]")
+                if any_ospf:
+                    table.add_row("", "", "", "", "", f"[red] - OSPFv2 on {ospf_ints}: Update the OSPFv2 authentication on the routing peer and in SonicOS.[/red]")
+                if any_bgp:
+                    table.add_row("", "", "", "", "", f"[red] - BGP on {bgp_ints}: Update the BGP password on the routing peer and in SonicOS.[/red]")
+            else:
+                table.add_row("Advanced Routing Protocols", "Checks for RIP/OSPFv/BGP config", "Low",
+                              "[dim]None found[/dim]", "", "[dim]No action required[/dim]")
 
         # Blank row for spacing
         table.add_row("", "", "", "", "", "")
@@ -1574,6 +1630,11 @@ def generate_summary_table(results: dict):
 
         console.print("\n")
         console.print(table)
+
+        if a.severity != 'all':
+            console.print(f"[yellow]Severity Filter: {a.severity.upper()} - Skipped {len(results.get('skipped_checks', []))} checks due to the set severity filter.[/yellow]")
+            console.print("[yellow]Force Password Change and Reset TOTP Binding actions are always shown regardless of severity filter.[/yellow]")
+
         console.print("\n")
 
         return table
@@ -1588,7 +1649,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     try:
         # Header
-        md_lines.append(f"# Remediation Playbook Summary Report")
+        sev_filter = f"(Severity Filter: {a.severity.upper()})" if a.severity != "all" else ""
+        md_lines.append(f"# Remediation Playbook Summary Report {sev_filter}")
         md_lines.append(f"")
         md_lines.append(f"- **Firewall:** {firewall}")
         md_lines.append(f"- **Device Model:** {firewall_info.get('device_model', 'Unknown')}")
@@ -1658,244 +1720,290 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
             print(f"Error getting count from '{data}': {e}")
             return 0
 
-    # LDAP  Servers
-    if get_count(results.get('ldap_servers', {})) > 0:
-        action_items.append(f"| Critical | {get_count(results.get('ldap_servers', {}))} Server(s) Configured | LDAP server(s) require bind password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_LDAP_Authentication) |")
+    # LDAP Servers
+    if should_run_check('ldap_servers', a.severity):
+        if get_count(results.get('ldap_servers', {})) > 0:
+            action_items.append(f"| Critical | {get_count(results.get('ldap_servers', {}))} Server(s) Configured | LDAP server(s) require bind password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_LDAP_Authentication) |")
 
     # RADIUS/TACACS Servers
-    if get_count(results.get('radius_servers', {})) > 0:
-        action_items.append(f"| Critical | {get_count(results.get('radius_servers', {}))} Server(s) Configured | RADIUS server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Authentication) |")
+    if should_run_check('radius_servers', a.severity):
+        if get_count(results.get('radius_servers', {})) > 0:
+            action_items.append(f"| Critical | {get_count(results.get('radius_servers', {}))} Server(s) Configured | RADIUS server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Authentication) |")
 
     # TACACS Servers
-    if get_count(results.get('tacacs_servers', {})) > 0:
-        action_items.append(f"| Critical | {get_count(results.get('tacacs_servers', {}))} Server(s) Configured | TACACS server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication) |")
+    if should_run_check('tacacs_servers', a.severity):
+        if get_count(results.get('tacacs_servers', {})) > 0:
+            action_items.append(f"| Critical | {get_count(results.get('tacacs_servers', {}))} Server(s) Configured | TACACS server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication) |")
 
     # VPN Policies
-    if get_count(results.get('vpn', {}).get('policy', [])) > 0:
-        action_items.append(f"| Critical | {get_count(results.get('vpn', {}).get('policy', []))} Policies Found | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
+    if should_run_check('vpn_policies', a.severity):
+        if get_count(results.get('vpn', {}).get('policy', [])) > 0:
+            # Counts the number of GroupVPN, Site-to-Site, and Tunnel Interface policies
+            s2s_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('name')])
+            s2s_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+            groupvpn_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('name')])
+            groupvpn_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+            tunnelint_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('name')])
+            tunnelint_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
+            action_items.append(f"| Critical | {get_count(results.get('vpn', {}).get('policy', []))} Policies Found<br>- {groupvpn_count} GroupVPN, {groupvpn_disabled_count} Disabled<br> - {s2s_count} Site-to-Site, {s2s_disabled_count} Disabled<br>- {tunnelint_count} Tunnel Interface, {tunnelint_disabled_count} Disabled | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
 
     # Dynamic DNS
-    ddns_v4 = get_count(results.get('ddns_services_v4', []))
-    ddns_v6 = get_count(results.get('ddns_services_v6', []))
-    if ddns_v4 + ddns_v6 > 0:
-        action_items.append(f"| High | {ddns_v4 + ddns_v6} Profile(s) | Dynamic DNS profile(s) require credential updates | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835) |")
+    if should_run_check('ddns_services', a.severity):
+        ddns_v4 = get_count(results.get('ddns_services_v4', []))
+        ddns_v6 = get_count(results.get('ddns_services_v6', []))
+        if ddns_v4 + ddns_v6 > 0:
+            action_items.append(f"| High | {ddns_v4 + ddns_v6} Profile(s) | Dynamic DNS profile(s) require credential updates | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835) |")
 
     # WAN Interfaces (L2TP/PPPoE/PPTP)
-    interesting_wan_ints = [i for i in results.get('interesting_wan_list', [])]
-    if len(interesting_wan_ints) > 0:
-        action_items.append(f"| Critical | {len(interesting_wan_ints)} WAN interface(s) | {', '.join(interesting_wan_ints)} require credential updates for L2TP/PPPoE/PPTP connections | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
+    if should_run_check('wan_interfaces', a.severity):
+        interesting_wan_ints = [i for i in results.get('interesting_wan_list', [])]
+        if len(interesting_wan_ints) > 0:
+            action_items.append(f"| Critical | {len(interesting_wan_ints)} WAN interface(s) | {', '.join(interesting_wan_ints)} require credential updates for L2TP/PPPoE/PPTP connections | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
 
     # AWS API Logging
-    if results.get('log', {}).get('aws', {}).get('enable', False):
-        action_items.append(f"| Critical | Enabled | AWS API Logging is enabled - Update the secret key in the AWS Console | [Link](https://www.sonicwall.com/support/knowledge-base/aws-integration-with-sonicwall-sonicos-6-5-x/181024232124532) |")
+    if should_run_check('aws_api', a.severity):
+        if results.get('log', {}).get('aws', {}).get('enable', False):
+            action_items.append(f"| Critical | Enabled | AWS API Logging is enabled - Update the secret key in the AWS Console | [Link](https://www.sonicwall.com/support/knowledge-base/aws-integration-with-sonicwall-sonicos-6-5-x/181024232124532) |")
 
     # Cloud Secure Edge
-    if results.get('cloud_secure_edge', {}).get('created', False):
-        action_items.append(f"| Critical | Enabled | Cloud Secure Edge is enabled - Reset the CSE connector's API token | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE) |")
+    if should_run_check('cloud_secure_edge', a.severity):
+        if results.get('cloud_secure_edge', {}).get('created', False):
+            action_items.append(f"| Critical | Enabled | Cloud Secure Edge is enabled - Reset the CSE connector's API token | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE) |")
 
     # Email logging actions
-    email_logging = results.get('log_automation_data', {})
-    email_actions = []
-    if email_logging.get('pop3_flag'):
-        email_actions.append("POP3")
-    if email_logging.get('smtp_flag'):
-        email_actions.append("SMTP")
-    if email_logging.get('ftp_flag'):
-        email_actions.append("FTP")
-    if email_actions:
-        action_items.append(f"| Medium | Configured | Email logging credentials require updates for the following protocols: {', '.join(email_actions)} | [Link](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038) |")
+    if should_run_check('email_logging', a.severity):
+        email_logging = results.get('log_automation_data', {})
+        email_actions = []
+        if email_logging.get('pop3_flag'):
+            email_actions.append("POP3")
+        if email_logging.get('smtp_flag'):
+            email_actions.append("SMTP")
+        if email_logging.get('ftp_flag'):
+            email_actions.append("FTP")
+        if email_actions:
+            action_items.append(f"| Medium | Configured | Email logging credentials require updates for the following protocols: {', '.join(email_actions)} | [Link](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038) |")
 
-    try:
-        # Packet Monitor FTP action
-        if results.get('packet_monitor_ftp_set', False):
-            action_items.append(f"| Medium | Configured | Packet Monitor FTP credentials require updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password) |")
-    except Exception as e:
-        print(f"Error checking packet monitor FTP setting: {e}")
+    if should_run_check('packet_monitor_ftp', a.severity):
+        try:
+            # Packet Monitor FTP action
+            if results.get('packet_monitor_ftp_set', False):
+                action_items.append(f"| Medium | Configured | Packet Monitor FTP credentials require updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password) |")
+        except Exception as e:
+            print(f"Error checking packet monitor FTP setting: {e}")
 
-    try:
-        # Scheduled Exports FTP action
-        if results.get('scheduled_exports_ftp_set', False):
-            action_items.append(f"| Medium | Configured | TSR/EXP Scheduled Exports credentials require updates | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm) |")
-    except Exception as e:
-        print(f"Error checking scheduled exports FTP setting: {e}")
+    if should_run_check('scheduled_exports', a.severity):
+        try:
+            # Scheduled Exports FTP action
+            if results.get('scheduled_exports_ftp_set', False):
+                action_items.append(f"| Medium | Configured | TSR/EXP Scheduled Exports credentials require updates | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm) |")
+        except Exception as e:
+            print(f"Error checking scheduled exports FTP setting: {e}")
 
     # SNMPv3 Users
-    if get_count(results.get('snmp', {}).get('user', [])) > 0:
-        action_items.append(f"| High | {get_count(results.get('snmp', {}).get('user', []))} Users Found | SNMPv3 user(s) require authentication/privacy password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP) |")
+    if should_run_check('snmp_users', a.severity):
+        if get_count(results.get('snmp', {}).get('user', [])) > 0:
+            action_items.append(f"| High | {get_count(results.get('snmp', {}).get('user', []))} Users Found | SNMPv3 user(s) require authentication/privacy password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP) |")
 
     # ClearPass/Network Access Control (NAC)
-    try:
-        if results.get('clearpass_enabled', False):
-            clearpass_server_count = len(results.get('clearpass_servers', []))
-            action_items.append(f"| High | Enabled ({clearpass_server_count} Servers) | ClearPass/Network Access Control (NAC) is enabled with {clearpass_server_count} server(s) - {'update the shared secret on each configured entry' if clearpass_server_count > 0 else 'configure NAC entries or disable the feature if not in use'} | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440) |")
-    except Exception as e:
-        print(f"Error checking ClearPass setting: {e}")
+    if should_run_check('clearpass_nac', a.severity):
+        try:
+            if results.get('clearpass_enabled', False):
+                clearpass_server_count = len(results.get('clearpass_servers', []))
+                action_items.append(f"| High | Enabled ({clearpass_server_count} Servers) | ClearPass/Network Access Control (NAC) is enabled with {clearpass_server_count} server(s) - {'update the shared secret on each configured entry' if clearpass_server_count > 0 else 'configure NAC entries or disable the feature if not in use'} | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440) |")
+        except Exception as e:
+            print(f"Error checking ClearPass setting: {e}")
 
     # Cellular WWAN
-    if results.get('cellular_data', {}).get('wwan_attached', False):
-        action_items.append(f"| High | Modem Found | Cellular WWAN is enabled - Update the cellular provider credentials | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
+    if should_run_check('cellular_wwan', a.severity):
+        if results.get('cellular_data', {}).get('wwan_attached', False):
+            action_items.append(f"| High | Modem Found | Cellular WWAN is enabled - Update the cellular provider credentials | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
 
     # Wireless: Guest Services External Authentication
-    try:
-        guest_auth = results.get('guest_zone_data', [])
-        if guest_auth:
-            action_items.append(f"| Medium | {len(guest_auth)} Zone(s) Found | Wireless Guest Services External Authentication is enabled - Update the shared secret on each configured entry | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=more%20information.-,Guest%20Services,-Reset%20the%20shared) |")
-    except Exception as e:
-        print(f"Error checking Wireless Guest Services setting: {e}")
+    if should_run_check('guest_services_auth', a.severity):
+        try:
+            guest_auth = results.get('guest_zone_data', [])
+            if guest_auth:
+                action_items.append(f"| Medium | {len(guest_auth)} Zone(s) Found | Wireless Guest Services External Authentication is enabled - Update the shared secret on each configured entry | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=more%20information.-,Guest%20Services,-Reset%20the%20shared) |")
+        except Exception as e:
+            print(f"Error checking Wireless Guest Services setting: {e}")
 
     # Wireless: Local RADIUS Servers on Wireless type Zones
-    try:
-        wireless_radius_count = get_count(results.get('wlan_zone_data', []))
-        if wireless_radius_count > 0:
-            action_items.append(f"| Medium | {wireless_radius_count} Zone(s) Found | {wireless_radius_count} Wireless Zone(s) configured with Local RADIUS Servers - Update the shared secret on each configured entry | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-access_points/Content/Access_Points_Settings/access-point-settings-about-local-radius-servers.htm) |")
-    except Exception as e:
-        print(f"Error checking Wireless Local RADIUS Servers: {e}")
+    if should_run_check('wlan_radius_servers', a.severity):
+        try:
+            wireless_radius_count = get_count(results.get('wlan_zone_data', []))
+            if wireless_radius_count > 0:
+                action_items.append(f"| Medium | {wireless_radius_count} Zone(s) Found | {wireless_radius_count} Wireless Zone(s) configured with Local RADIUS Servers - Update the shared secret on each configured entry | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-access_points/Content/Access_Points_Settings/access-point-settings-about-local-radius-servers.htm) |")
+        except Exception as e:
+            print(f"Error checking Wireless Local RADIUS Servers: {e}")
 
     # Wireless: Internal WLAN Radio
-    try:
-        radio_radius = results.get('internal_wlan', {}).get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
-        radio_psk = results.get('internal_wlan', {}).get('wireless', {}).get('wpa', {}).get('passphrase', None)
-        if radio_radius or radio_psk:
-            action_items.append(f"| Medium | Configured | Internal WLAN Radio is enabled - Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
-    except Exception as e:
-        print(f"Error checking Internal WLAN Radio setting: {e}")
+    if should_run_check('internal_wlan_radio', a.severity):
+        try:
+            radio_radius = results.get('internal_wlan', {}).get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+            radio_psk = results.get('internal_wlan', {}).get('wireless', {}).get('wpa', {}).get('passphrase', None)
+            if radio_radius or radio_psk:
+                action_items.append(f"| Medium | Configured | Internal WLAN Radio is enabled - Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
+        except Exception as e:
+            print(f"Error checking Internal WLAN Radio setting: {e}")
 
     # Wireless: Internal WLAN Virtual Access Points (VAPs) Objects
-    try:
-        vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
-        if vap_count > 0:
-            action_items.append(f"| Medium | {vap_count} Internal WLAN Virtual Access Point(s) Found | Update the WLAN password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
-    except Exception as e:
-        print(f"Error checking Internal WLAN VAPs: {e}")
+    if should_run_check('internal_wlan_vaps', a.severity):
+        try:
+            vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
+            if vap_count > 0:
+                action_items.append(f"| Medium | {vap_count} Internal WLAN Virtual Access Point(s) Found | Update the WLAN password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
+        except Exception as e:
+            print(f"Error checking Internal WLAN VAPs: {e}")
 
     # Wireless: Internal WLAN Virtual Access Points (VAPs) Profiles
-    try:
-        vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
-        if vap_profile_count > 0:
-            action_items.append(f"| Medium | {vap_profile_count} Profile(s) Found | Update the WLAN Virtual Access Point Profile(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
-    except Exception as e:
-        print(f"Error checking Internal WLAN VAP Profiles: {e}")
+    if should_run_check('internal_wlan_vap_profiles', a.severity):
+        try:
+            vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
+            if vap_profile_count > 0:
+                action_items.append(f"| Medium | {vap_profile_count} Profile(s) Found | Update the WLAN Virtual Access Point Profile(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
+        except Exception as e:
+            print(f"Error checking Internal WLAN VAP Profiles: {e}")
 
     # Wireless: SonicPoint/SonicWave Access Point Objects
-    try:
-        ap_count = get_count(results.get('sonicpoint_objects', {}).get('sonicpoint', {}).get('sonicpoint', []))
-        if ap_count > 0:
-            action_items.append(f"| Medium | {ap_count} Ojects Found | Update the WLAN SonicPoint/SonicWave Access Point(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
-    except Exception as e:
-        print(f"Error checking SonicPoint/SonicWave Access Points: {e}")
+    if should_run_check('sonicpoint_objects', a.severity):
+        try:
+            ap_count = get_count(results.get('sonicpoint_objects', {}).get('sonicpoint', {}).get('sonicpoint', []))
+            if ap_count > 0:
+                action_items.append(f"| Medium | {ap_count} Ojects Found | Update the WLAN SonicPoint/SonicWave Access Point(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
+        except Exception as e:
+            print(f"Error checking SonicPoint/SonicWave Access Points: {e}")
 
     # Wireless: SonicPoint/SonicWave Access Point Profiles
-    try:
-        ap_profile_count = len(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
-        if ap_profile_count > 0:
-            action_items.append(f"| Medium | {ap_profile_count} Profile(s) Found | Update the WLAN SonicPoint/SonicWave Access Point Profile(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
-    except Exception as e:
-        print(f"Error checking SonicPoint/SonicWave Access Point Profiles: {e}")
+    if should_run_check('sonicpoint_profiles', a.severity):
+        try:
+            ap_profile_count = len(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
+            if ap_profile_count > 0:
+                action_items.append(f"| Medium | {ap_profile_count} Profile(s) Found | Update the WLAN SonicPoint/SonicWave Access Point Profile(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
+        except Exception as e:
+            print(f"Error checking SonicPoint/SonicWave Access Point Profiles: {e}")
 
     # Wireless: SonicPoint/SonicWave Virtual Access Points (VAPs) Objects
-    try:
-        sp_vap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
-        if sp_vap_count > 0:
-            action_items.append(f"| Medium | {sp_vap_count} Objects Found | Update the WLAN SonicPoint/SonicWave Virtual Access Point(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
-    except Exception as e:
-        print(f"Error checking SonicPoint/SonicWave VAPs: {e}")
+    if should_run_check('sonicpoint_vaps', a.severity):
+        try:
+            sp_vap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
+            if sp_vap_count > 0:
+                action_items.append(f"| Medium | {sp_vap_count} Objects Found | Update the WLAN SonicPoint/SonicWave Virtual Access Point(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
+        except Exception as e:
+            print(f"Error checking SonicPoint/SonicWave VAPs: {e}")
 
     # Wireless: SonicPoint/SonicWave Virtual Access Points (VAPs) Profiles
-    try:
-        sp_vap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
-        if sp_vap_profile_count > 0:
-            action_items.append(f"| Medium | {sp_vap_profile_count} Profile(s) Found | Update the WLAN SonicPoint/SonicWave Virtual Access Point Profile(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
-    except Exception as e:
-        print(f"Error checking SonicPoint/SonicWave VAP Profiles: {e}")
+    if should_run_check('sonicpoint_vap_profiles', a.severity):
+        try:
+            sp_vap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
+            if sp_vap_profile_count > 0:
+                action_items.append(f"| Medium | {sp_vap_profile_count} Profile(s) Found | Update the WLAN SonicPoint/SonicWave Virtual Access Point Profile(s) password(s) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi) |")
+        except Exception as e:
+            print(f"Error checking SonicPoint/SonicWave VAP Profiles: {e}")
 
     # Dynamic External Address Objects
-    try:
-        dynamic_address_count = get_count(results.get('dynamic_ao_count', 0))
-        if dynamic_address_count > 0:
-            action_items.append(f"| High | {dynamic_address_count} Object(s) Found | Review and update credentials for Dynamic External Address Object(s) | [Link](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280) |")
-    except Exception as e:
-        print(f"Error checking Dynamic External Address Objects: {e}")
+    if should_run_check('dynamic_address_objects', a.severity):
+        try:
+            dynamic_address_count = get_count(results.get('dynamic_ao_count', 0))
+            if dynamic_address_count > 0:
+                action_items.append(f"| High | {dynamic_address_count} Object(s) Found | Review and update credentials for Dynamic External Address Object(s) | [Link](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280) |")
+        except Exception as e:
+            print(f"Error checking Dynamic External Address Objects: {e}")
 
     # Dynamic Botnet List Server (FTP/HTTPS)
-    try:
-        botnet_data = results.get('botnet_data', {})
-        if botnet_data.get('protocol', False):
-            action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm) |")
-    except Exception as e:
-        print(f"Error checking Dynamic Botnet List Server: {e}")
+    if should_run_check('dynamic_botnet_list_server', a.severity):
+        try:
+            botnet_data = results.get('botnet_data', {})
+            if botnet_data.get('protocol', False):
+                action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm) |")
+        except Exception as e:
+            print(f"Error checking Dynamic Botnet List Server: {e}")
 
     # Extended Switches
-    try:
-        ext_switch_count = get_count(results.get('extended_switches', []))
-        if ext_switch_count > 0:
-            action_items.append(f"| Low | {ext_switch_count} Extended Switch(es) Found | Review and update credentials on the switch(es) | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-change-the-password-for-sonicwall-switch/200607142015373) |")
-    except Exception as e:
-        print(f"Error checking Extended Switches: {e}")
+    if should_run_check('extended_switches', a.severity):
+        try:
+            ext_switch_count = get_count(results.get('extended_switches', []))
+            if ext_switch_count > 0:
+                action_items.append(f"| Low | {ext_switch_count} Extended Switch(es) Found | Review and update credentials on the switch(es) | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-change-the-password-for-sonicwall-switch/200607142015373) |")
+        except Exception as e:
+            print(f"Error checking Extended Switches: {e}")
 
     # Extended Switch Users
-    try:
-        ext_switch_user_count = get_count(results.get('extended_switch_users', []))
-        if ext_switch_user_count > 0:
-            action_items.append(f"| Low | {ext_switch_user_count} Extended Switch User(s) Found | Review and update credentials on the switch(es) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password) |")
-    except Exception as e:
-        print(f"Error checking Extended Switch Users: {e}")
+    if should_run_check('extended_switch_users', a.severity):
+        try:
+            ext_switch_user_count = get_count(results.get('extended_switch_users', []))
+            if ext_switch_user_count > 0:
+                action_items.append(f"| Low | {ext_switch_user_count} Extended Switch User(s) Found | Review and update credentials on the switch(es) | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password) |")
+        except Exception as e:
+            print(f"Error checking Extended Switch Users: {e}")
 
     # Extended Switch RADIUS Servers
-    try:
-        ext_switch_radius_count = get_count(results.get('extended_switch_radius_servers', []))
-        if ext_switch_radius_count > 0:
-            action_items.append(f"| Low | {ext_switch_radius_count} Extended Switch RADIUS Server(s) Found | Review and update shared secrets on the switch(es) and in SonicOS | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password) |")
-    except Exception as e:
-        print(f"Error checking Extended Switch RADIUS Servers: {e}")
+    if should_run_check('extended_switch_radius', a.severity):
+        try:
+            ext_switch_radius_count = get_count(results.get('extended_switch_radius_servers', []))
+            if ext_switch_radius_count > 0:
+                action_items.append(f"| Low | {ext_switch_radius_count} Extended Switch RADIUS Server(s) Found | Review and update shared secrets on the switch(es) and in SonicOS | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password) |")
+        except Exception as e:
+            print(f"Error checking Extended Switch RADIUS Servers: {e}")
 
     # SSO Agents
-    if get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))} Agents Found | SSO agent(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
+    if should_run_check('sso_agents', a.severity):
+        if get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', [])) > 0:
+            action_items.append(f"| Low | {get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))} Agents Found | SSO agent(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
 
     # Terminal Services Agents
-    if get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))} Agents Found | Terminal Services agent(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
+    if should_run_check('ts_agents', a.severity):
+        if get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', [])) > 0:
+            action_items.append(f"| Low | {get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))} Agents Found | Terminal Services agent(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
 
     # RADIUS Accounting Clients
-    if get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))} RA Clients Found | SSO RADIUS Accounting client(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
+    if should_run_check('sso_radius_clients', a.severity):
+        if get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', [])) > 0:
+            action_items.append(f"| Low | {get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))} RA Clients Found | SSO RADIUS Accounting client(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
 
     # 3rd Party API Clients
-    if get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))} API Clients Found | SSO 3rd Party API client(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
+    if should_run_check('sso_api_clients', a.severity):
+        if get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', [])) > 0:
+            action_items.append(f"| Low | {get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))} API Clients Found | SSO 3rd Party API client(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets) |")
 
     # RADIUS Accounting Servers
-    if get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))} Servers Found | RADIUS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries) |")
+    if should_run_check('radius_accounting_servers', a.severity):
+        if get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', [])) > 0:
+            action_items.append(f"| Low | {get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))} Servers Found | RADIUS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries) |")
 
     # TACACS Accounting Servers
-    if get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))} Servers Found | TACACS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries) |")
+    if should_run_check('tacacs_accounting_servers', a.severity):
+        if get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', [])) > 0:
+            action_items.append(f"| Low | {get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))} Servers Found | TACACS Accounting server(s) require shared secret updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries) |")
 
     # AppFlow SFR Mailing
-    if results.get('sfr_data', {}).get('smtp_configured', False) or results.get('sfr_data', {}).get('pop_configured', False):
-        action_items.append(f"| Low | Configured | AppFlow SFR Mailing is configured - Update the email server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-appflow_device/Content/appflow-d-flow-reporting-sfr-mailing.htm) |")
+    if should_run_check('sfr_reporting', a.severity):
+        if results.get('sfr_data', {}).get('smtp_configured', False) or results.get('sfr_data', {}).get('pop_configured', False):
+            action_items.append(f"| Low | Configured | AppFlow SFR Mailing is configured - Update the email server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-appflow_device/Content/appflow-d-flow-reporting-sfr-mailing.htm) |")
 
     # Custom NTP Servers
-    if get_count(results.get('ntp_data', [])) > 0:
-        action_items.append(f"| Low | {get_count(results.get('ntp_data', []))} Servers Found | Custom NTP server(s) require authentication password updates | [Link](https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777) |")
+    if should_run_check('ntp_servers', a.severity):
+        if get_count(results.get('ntp_data', [])) > 0:
+            action_items.append(f"| Low | {get_count(results.get('ntp_data', []))} Servers Found | Custom NTP server(s) require authentication password updates | [Link](https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777) |")
 
     # Security Services Signature Proxy
-    if results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False) or results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', ''):
-        action_items.append(f"| Low | Configured | Security Services Proxy is configured - Update the proxy server credentials | [Link](https://www.sonicwall.com/support/knowledge-base/signature-downloads-through-a-proxy-server/170503292286520) |")
+    if should_run_check('security_services_proxy', a.severity):
+        if results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False) or results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', ''):
+            action_items.append(f"| Low | Configured | Security Services Proxy is configured - Update the proxy server credentials | [Link](https://www.sonicwall.com/support/knowledge-base/signature-downloads-through-a-proxy-server/170503292286520) |")
 
     # GMS IPSec Management Tunnel
-    if results.get('gms', {}).get('ipsec_tunnel', False):
-        action_items.append(f"| Low | Configured | GMS IPSec Management Tunnel is configured - Update the encryption/authentication keys | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
+    if should_run_check('gms_ipsec_tunnel', a.severity):
+        if results.get('gms', {}).get('ipsec_tunnel', False):
+            action_items.append(f"| Low | Configured | GMS IPSec Management Tunnel is configured - Update the encryption/authentication keys | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
 
     # Advanced Routing Protocols
-    adv_routing = results.get('routing_data', [])
-    any_rip = [i for i in results.get('routing_data', []) if i.get('flag_rip', False)]
-    any_ospf = [i for i in results.get('routing_data', []) if i.get('flag_ospfv2', False)]
-    any_bgp = [i for i in results.get('routing_data', []) if i.get('flag_bgp', False)]
-    adv_routing_count = len(any_rip) + len(any_ospf) + len(any_bgp)
-    if adv_routing_count > 0:
-        action_items.append(f"| Low | RIP {len(any_rip)}, OSPFv2 {len(any_ospf)}, BGP {len(any_bgp)} | Routing configuration requires authentication/password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used) |")
+    if should_run_check('advanced_routing', a.severity):
+        adv_routing = results.get('routing_data', [])
+        any_rip = [i for i in results.get('routing_data', []) if i.get('flag_rip', False)]
+        any_ospf = [i for i in results.get('routing_data', []) if i.get('flag_ospfv2', False)]
+        any_bgp = [i for i in results.get('routing_data', []) if i.get('flag_bgp', False)]
+        adv_routing_count = len(any_rip) + len(any_ospf) + len(any_bgp)
+        if adv_routing_count > 0:
+            action_items.append(f"| Low | RIP {len(any_rip)}, OSPFv2 {len(any_ospf)}, BGP {len(any_bgp)} | Routing configuration requires authentication/password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used) |")
 
     # Force Password Change
     try:
@@ -1963,7 +2071,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     md_lines.append(f"")
 
     # Detailed Findings
-    md_lines.append(f"## Detailed Findings")
+    md_lines.append(f"## Detailed Findings {sev_filter}")
     md_lines.append(f"The following sections provide detailed information on the findings and actions taken during the remediation playbook execution.")
     md_lines.append(f"")
 
@@ -1972,522 +2080,562 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     md_lines.append(f"")
 
     # LDAP Servers
-    try:
-        ldap_count = get_count(results.get('ldap_servers', {}))
-        md_lines.append(f"- **LDAP Servers:** {ldap_count}")
-        if ldap_count > 0:
-            md_lines.append(f"  - **Action:** Update bind password on the LDAP server(s), then update in SonicOS")
-            md_lines.append(f"  - **Priority:** Critical")
-            md_lines.append(f"  - **Reference:** [LDAP Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_LDAP_Authentication)")
-    except Exception as e:
-        print(f"Error processing LDAP servers: {e}")
-        md_lines.append(f"- **LDAP Servers:** Error retrieving count")
+    if should_run_check('ldap_servers', a.severity):
+        try:
+            ldap_count = get_count(results.get('ldap_servers', {}))
+            md_lines.append(f"- **LDAP Servers:** {ldap_count}")
+            if ldap_count > 0:
+                md_lines.append(f"  - **Action:** Update bind password on the LDAP server(s), then update in SonicOS")
+                md_lines.append(f"  - **Priority:** Critical")
+                md_lines.append(f"  - **Reference:** [LDAP Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_LDAP_Authentication)")
+        except Exception as e:
+            print(f"Error processing LDAP servers: {e}")
+            md_lines.append(f"- **LDAP Servers:** Error retrieving count")
 
     # RADIUS Servers
-    try:
-        radius_count = get_count(results.get('radius_servers', {}))
-        md_lines.append(f"- **RADIUS Servers:** {radius_count}")
-        if radius_count > 0:
-            md_lines.append(f"  - **Action:** Update RADIUS shared secrets on the RADIUS server(s), then update in SonicOS")
-            md_lines.append(f"  - **Priority:** Critical")
-            md_lines.append(f"  - **Reference:** [RADIUS Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Authentication)")
-    except Exception as e:
-        print(f"Error processing RADIUS servers: {e}")
-        md_lines.append(f"- **RADIUS Servers:** Error retrieving count")
+    if should_run_check('radius_servers', a.severity):
+        try:
+            radius_count = get_count(results.get('radius_servers', {}))
+            md_lines.append(f"- **RADIUS Servers:** {radius_count}")
+            if radius_count > 0:
+                md_lines.append(f"  - **Action:** Update RADIUS shared secrets on the RADIUS server(s), then update in SonicOS")
+                md_lines.append(f"  - **Priority:** Critical")
+                md_lines.append(f"  - **Reference:** [RADIUS Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Authentication)")
+        except Exception as e:
+            print(f"Error processing RADIUS servers: {e}")
+            md_lines.append(f"- **RADIUS Servers:** Error retrieving count")
 
     # TACACS Servers
-    try:
-        tacacs_count = get_count(results.get('tacacs_servers', {}))
-        md_lines.append(f"- **TACACS Servers:** {tacacs_count}")
-        if tacacs_count > 0:
-            md_lines.append(f"  - **Action:** Update TACACS+ shared secrets")
-            md_lines.append(f"  - **Priority:** Critical")
-            md_lines.append(f"  - **Reference:** [TACACS+ Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication)")
-    except Exception as e:
-        print(f"Error processing TACACS servers: {e}")
-        md_lines.append(f"- **TACACS Servers:** Error retrieving count")
+    if should_run_check('tacacs_servers', a.severity):
+        try:
+            tacacs_count = get_count(results.get('tacacs_servers', {}))
+            md_lines.append(f"- **TACACS Servers:** {tacacs_count}")
+            if tacacs_count > 0:
+                md_lines.append(f"  - **Action:** Update TACACS+ shared secrets")
+                md_lines.append(f"  - **Priority:** Critical")
+                md_lines.append(f"  - **Reference:** [TACACS+ Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication)")
+        except Exception as e:
+            print(f"Error processing TACACS servers: {e}")
+            md_lines.append(f"- **TACACS Servers:** Error retrieving count")
 
     # SSO Agents
-    try:
-        sso_count = get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))
-        md_lines.append(f"- **SSO Agents:** {sso_count}")
-        if sso_count > 0:
-            md_lines.append(f"  - **Action:** Update shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SSO Shared Secret Update](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
-    except Exception as e:
-        print(f"Error generating SSO section: {e}")
-        md_lines.append(f"- **SSO Agents:** Error retrieving information")
+    if should_run_check('sso_agents', a.severity):
+        try:
+            sso_count = get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))
+            md_lines.append(f"- **SSO Agents:** {sso_count}")
+            if sso_count > 0:
+                md_lines.append(f"  - **Action:** Update shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SSO Shared Secret Update](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
+        except Exception as e:
+            print(f"Error generating SSO section: {e}")
+            md_lines.append(f"- **SSO Agents:** Error retrieving information")
 
     # Terminal Services Agents
-    try:
-        ts_count = get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))
-        md_lines.append(f"- **Terminal Services Agents:** {ts_count}")
-        if ts_count > 0:
-            md_lines.append(f"  - **Action:** Update shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SSO Shared Secret Update](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
-    except Exception as e:
-        print(f"Error generating Terminal Services section: {e}")
-        md_lines.append(f"- **Terminal Services Agents:** Error retrieving information")
+    if should_run_check('ts_agents', a.severity):
+        try:
+            ts_count = get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))
+            md_lines.append(f"- **Terminal Services Agents:** {ts_count}")
+            if ts_count > 0:
+                md_lines.append(f"  - **Action:** Update shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SSO Shared Secret Update](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
+        except Exception as e:
+            print(f"Error generating Terminal Services section: {e}")
+            md_lines.append(f"- **Terminal Services Agents:** Error retrieving information")
 
     # RADIUS Accounting Clients
-    try:
-        radius_acct_count = get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))
-        md_lines.append(f"- **RADIUS Accounting Clients:** {radius_acct_count}")
-        if radius_acct_count > 0:
-            md_lines.append(f"  - **Action:** Update shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [RADIUS Accounting Clients](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
-    except Exception as e:
-        print(f"Error generating RADIUS Accounting section: {e}")
-        md_lines.append(f"- **RADIUS Accounting Clients:** Error retrieving information")
+    if should_run_check('sso_radius_clients', a.severity):
+        try:
+            radius_acct_count = get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))
+            md_lines.append(f"- **RADIUS Accounting Clients:** {radius_acct_count}")
+            if radius_acct_count > 0:
+                md_lines.append(f"  - **Action:** Update shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [RADIUS Accounting Clients](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
+        except Exception as e:
+            print(f"Error generating RADIUS Accounting section: {e}")
+            md_lines.append(f"- **RADIUS Accounting Clients:** Error retrieving information")
 
     # 3rd Party API Clients
-    try:
-        api_client_count = get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))
-        md_lines.append(f"- **3rd Party API Clients:** {api_client_count}")
-        if api_client_count > 0:
-            md_lines.append(f"  - **Action:** Update shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [3rd Party API Clients](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
-    except Exception as e:
-        print(f"Error generating 3rd Party API Clients section: {e}")
-        md_lines.append(f"- **3rd Party API Clients:** Error retrieving information")
+    if should_run_check('sso_api_clients', a.severity):
+        try:
+            api_client_count = get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))
+            md_lines.append(f"- **3rd Party API Clients:** {api_client_count}")
+            if api_client_count > 0:
+                md_lines.append(f"  - **Action:** Update shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [3rd Party API Clients](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets)")
+        except Exception as e:
+            print(f"Error generating 3rd Party API Clients section: {e}")
+            md_lines.append(f"- **3rd Party API Clients:** Error retrieving information")
 
     # RADIUS Accounting Servers
-    try:
-        radius_acct_server_count = get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))
-        md_lines.append(f"- **RADIUS Accounting Servers:** {radius_acct_server_count}")
-        if radius_acct_server_count > 0:
-            md_lines.append(f"  - **Action:** Update shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [RADIUS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries)")
-    except Exception as e:
-        print(f"Error generating RADIUS Accounting Servers section: {e}")
-        md_lines.append(f"- **RADIUS Accounting Servers:** Error retrieving information")
+    if should_run_check('radius_accounting_servers', a.severity):
+        try:
+            radius_acct_server_count = get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))
+            md_lines.append(f"- **RADIUS Accounting Servers:** {radius_acct_server_count}")
+            if radius_acct_server_count > 0:
+                md_lines.append(f"  - **Action:** Update shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [RADIUS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries)")
+        except Exception as e:
+            print(f"Error generating RADIUS Accounting Servers section: {e}")
+            md_lines.append(f"- **RADIUS Accounting Servers:** Error retrieving information")
 
     # TACACS Accounting Servers
-    try:
-        tacacs_acct_server_count = get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))
-        md_lines.append(f"- **TACACS Accounting Servers:** {tacacs_acct_server_count}")
-        if tacacs_acct_server_count > 0:
-            md_lines.append(f"  - **Action:** Update shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [TACACS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries)")
-    except Exception as e:
-        print(f"Error generating TACACS Accounting Servers section: {e}")
-        md_lines.append(f"- **TACACS Accounting Servers:** Error retrieving information")
-    md_lines.append(f"")
+    if should_run_check('tacacs_accounting_servers', a.severity):
+        try:
+            tacacs_acct_server_count = get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))
+            md_lines.append(f"- **TACACS Accounting Servers:** {tacacs_acct_server_count}")
+            if tacacs_acct_server_count > 0:
+                md_lines.append(f"  - **Action:** Update shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [TACACS Accounting Servers](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries)")
+        except Exception as e:
+            print(f"Error generating TACACS Accounting Servers section: {e}")
+            md_lines.append(f"- **TACACS Accounting Servers:** Error retrieving information")
+        md_lines.append(f"")
 
     # VPN Configuration
-    md_lines.append(f"### VPN")
-    md_lines.append(f"")
-    try:
-        vpn_count = get_count(results.get('vpn', {}).get('policy', []))
-        md_lines.append(f"- **VPN Policies:** {vpn_count}")
-        if vpn_count > 0:
-            md_lines.append(f"  - **Action:** Review and update pre-shared keys and authentication/encryption keys")
-            md_lines.append(f"  - **Priority:** Critical")
-            md_lines.append(f"  - **Reference:** [IPSec VPN pre-shared keys](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
-            md_lines.append(f"  - **Policy List:**")
-        for policy in results.get('vpn', {}).get('policy', []):
-            policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
-            policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
-            md_lines.append(f"    - **{policy_name}** {'policy is enabled' if policy_status else 'policy is disabled'}")
-    except Exception as e:
-        print(f"Error processing VPN policies: {e}")
-        md_lines.append(f"- **VPN Policies:** Error retrieving count")
-    md_lines.append(f"")
+    if should_run_check('vpn_policies', a.severity):
+        md_lines.append(f"### VPN")
+        md_lines.append(f"")
+        try:
+            vpn_count = get_count(results.get('vpn', {}).get('policy', []))
+            md_lines.append(f"- **VPN Policies:** {vpn_count}")
+            if vpn_count > 0:
+                md_lines.append(f"  - **Action:** Review and update pre-shared keys and authentication/encryption keys")
+                md_lines.append(f"  - **Priority:** Critical")
+                md_lines.append(f"  - **Reference:** [IPSec VPN pre-shared keys](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
+            md_lines.append(f"  - **Enabled Policies:**")
+            for policy in results.get('vpn', {}).get('policy', []):
+                policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
+                policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
+                if policy_status:
+                    md_lines.append(f"    - **{policy_name}**")
+            md_lines.append(f"  - **Disabled Policies:**")
+            for policy in results.get('vpn', {}).get('policy', []):
+                policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
+                policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
+                if not policy_status:
+                    md_lines.append(f"    - **{policy_name}**")
+        except Exception as e:
+            print(f"Error processing VPN policies: {e}")
+            md_lines.append(f"- **VPN Policies:** Error retrieving count")
+        md_lines.append(f"")
 
     # Network Services
     md_lines.append(f"### Network Services")
     md_lines.append(f"")
 
     # WAN Interfaces (PPPoE/PPTP/L2TP)
-    try:
-        interesting_wans = results.get('interesting_wan_list', [])
-        wan_interface_count = get_count(interesting_wans)
-        md_lines.append(f"- **PPPoE/PPTP/L2TP WAN Interfaces:** {wan_interface_count}")
-        if wan_interface_count > 0:
-            md_lines.append(f"  - **Action:** Update the username and password for each WAN interface configured with PPPoE, PPTP, or L2TP")
-            md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [PPPoE Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
-            md_lines.append(f"  - **Interface List:**")
-        for interface in interesting_wans:
-            md_lines.append(f"    - **{interface}**")
-    except Exception as e:
-        print(f"Error processing WAN interfaces: {e}")
-        md_lines.append(f"- **WAN Interfaces (PPPoE/PPTP/L2TP):** Error retrieving count")
+    if should_run_check('wan_interfaces', a.severity):
+        try:
+            interesting_wans = results.get('interesting_wan_list', [])
+            wan_interface_count = get_count(interesting_wans)
+            md_lines.append(f"- **PPPoE/PPTP/L2TP WAN Interfaces:** {wan_interface_count}")
+            if wan_interface_count > 0:
+                md_lines.append(f"  - **Action:** Update the username and password for each WAN interface configured with PPPoE, PPTP, or L2TP")
+                md_lines.append(f"  - **Priority:** High")
+                md_lines.append(f"  - **Reference:** [PPPoE Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
+                md_lines.append(f"  - **Interface List:**")
+            for interface in interesting_wans:
+                md_lines.append(f"    - **{interface}**")
+        except Exception as e:
+            print(f"Error processing WAN interfaces: {e}")
+            md_lines.append(f"- **WAN Interfaces (PPPoE/PPTP/L2TP):** Error retrieving count")
 
     # Cellular WWAN
-    try:
-        wwan_attached = results.get('cellular_attached', 0)
-        if wwan_attached != 0:
-            md_lines.append(f"- **Cellular WWAN Model Detected:** {wwan_attached}")
-            md_lines.append(f"  - **Action:** Update cellular provider credentials at the provider's website, then update in SonicOS")
-            md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [Cellular WWAN Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
-    except Exception as e:
-        print(f"Error processing Cellular WWAN: {e}")
-        md_lines.append(f"- **Cellular WWAN Interfaces:** Error retrieving information")
+    if should_run_check('cellular_wwan', a.severity):
+        try:
+            wwan_attached = results.get('cellular_attached', 0)
+            if wwan_attached != 0:
+                md_lines.append(f"- **Cellular WWAN Model Detected:** {wwan_attached}")
+                md_lines.append(f"  - **Action:** Update cellular provider credentials at the provider's website, then update in SonicOS")
+                md_lines.append(f"  - **Priority:** High")
+                md_lines.append(f"  - **Reference:** [Cellular WWAN Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
+        except Exception as e:
+            print(f"Error processing Cellular WWAN: {e}")
+            md_lines.append(f"- **Cellular WWAN Interfaces:** Error retrieving information")
 
     # Dynamic DNS
-    md_lines.append(f"- **Dynamic DNS (IPv4) Profiles:** {ddns_v4}")
-    md_lines.append(f"- **Dynamic DNS (IPv6) Profiles:** {ddns_v6}")
-    if ddns_v4 + ddns_v6 > 0:
-        md_lines.append(f"  - **Action:** Update DDNS provider credentials for each configured entry at the provider's website, then update in SonicOS")
-        md_lines.append(f"  - **Priority:** High")
-        md_lines.append(f"  - **Reference:** [Dynamic DNS Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835)")
+    if should_run_check('ddns_services', a.severity):
+        md_lines.append(f"- **Dynamic DNS (IPv4) Profiles:** {ddns_v4}")
+        md_lines.append(f"- **Dynamic DNS (IPv6) Profiles:** {ddns_v6}")
+        if ddns_v4 + ddns_v6 > 0:
+            md_lines.append(f"  - **Action:** Update DDNS provider credentials for each configured entry at the provider's website, then update in SonicOS")
+            md_lines.append(f"  - **Priority:** High")
+            md_lines.append(f"  - **Reference:** [Dynamic DNS Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835)")
 
     # ClearPass/NAC
-    try:
-        clearpass_enabled = results.get('clearpass_enabled', False)
-        clearpass_server_count = len(results.get('clearpass_servers', []))
+    if should_run_check('clearpass_nac', a.severity):
+        try:
+            clearpass_enabled = results.get('clearpass_enabled', False)
+            clearpass_server_count = len(results.get('clearpass_servers', []))
 
-        if clearpass_enabled:
-            md_lines.append(f"- **ClearPass/NAC:** Enabled with {clearpass_server_count} server(s)")
-            md_lines.append(f"  - **Action:** Update shared secrets on ClearPass servers")
-            md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [ClearPass/NAC Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440)")
-        else:
-            md_lines.append(f"- **ClearPass/NAC:** Not enabled")
-    except Exception as e:
-        print(f"Error generating ClearPass section: {e}")
-        md_lines.append(f"- **ClearPass/NAC:** Error retrieving information")
+            if clearpass_enabled:
+                md_lines.append(f"- **ClearPass/NAC:** Enabled with {clearpass_server_count} server(s)")
+                md_lines.append(f"  - **Action:** Update shared secrets on ClearPass servers")
+                md_lines.append(f"  - **Priority:** High")
+                md_lines.append(f"  - **Reference:** [ClearPass/NAC Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440)")
+            else:
+                md_lines.append(f"- **ClearPass/NAC:** Not enabled")
+        except Exception as e:
+            print(f"Error generating ClearPass section: {e}")
+            md_lines.append(f"- **ClearPass/NAC:** Error retrieving information")
 
     # Dynamic External Address Objects
-    try:
-        dynamic_address_count = results.get('dynamic_ao_count', 0)
-        deao_data = results.get('dynamic_ao_data', [])
-        ftp_deaos = [d for d in deao_data if d['protocol'] == 'ftp']
-        http_deaos = [d for d in deao_data if d['protocol'] == 'https']
+    if should_run_check('dynamic_address_objects', a.severity):
+        try:
+            dynamic_address_count = results.get('dynamic_ao_count', 0)
+            deao_data = results.get('dynamic_ao_data', [])
+            ftp_deaos = [d for d in deao_data if d['protocol'] == 'ftp']
+            http_deaos = [d for d in deao_data if d['protocol'] == 'https']
 
-        md_lines.append(f"- **Dynamic External Address Objects:** {dynamic_address_count}")
-        if dynamic_address_count > 0:
-            md_lines.append(f"  - **Action:** Review and update credentials for Dynamic External Address Object(s)")
-            md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [Dynamic External Address Objects](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280)")
-            if len(ftp_deaos) > 0:
-                md_lines.append(f"  - **FTP-based DEAOs:** {len(ftp_deaos)}")
-                for obj in ftp_deaos:
-                    md_lines.append(f"    - **{obj.get('name', 'Unnamed Object')}** (Server: {obj.get('server', 'Unknown')})")
-            if len(http_deaos) > 0:
-                md_lines.append(f"  - **HTTPS-based DEAOs:** {len(http_deaos)}")
-                for obj in http_deaos:
-                    md_lines.append(f"    - **{obj.get('name', 'Unnamed Object')}** (URL: {obj.get('url', 'Unknown')})")
-    except Exception as e:
-        print(f"Error processing Dynamic External Address Objects: {e}")
-        md_lines.append(f"- **Dynamic External Address Objects:** Error retrieving count")
+            md_lines.append(f"- **Dynamic External Address Objects:** {dynamic_address_count}")
+            if dynamic_address_count > 0:
+                md_lines.append(f"  - **Action:** Review and update credentials for Dynamic External Address Object(s)")
+                md_lines.append(f"  - **Priority:** High")
+                md_lines.append(f"  - **Reference:** [Dynamic External Address Objects](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280)")
+                if len(ftp_deaos) > 0:
+                    md_lines.append(f"  - **FTP-based DEAOs:** {len(ftp_deaos)}")
+                    for obj in ftp_deaos:
+                        md_lines.append(f"    - **{obj.get('name', 'Unnamed Object')}** (Server: {obj.get('server', 'Unknown')})")
+                if len(http_deaos) > 0:
+                    md_lines.append(f"  - **HTTPS-based DEAOs:** {len(http_deaos)}")
+                    for obj in http_deaos:
+                        md_lines.append(f"    - **{obj.get('name', 'Unnamed Object')}** (URL: {obj.get('url', 'Unknown')})")
+        except Exception as e:
+            print(f"Error processing Dynamic External Address Objects: {e}")
+            md_lines.append(f"- **Dynamic External Address Objects:** Error retrieving count")
 
     # Dynamic Botnet Server List
-    try:
-        botnet_data = results.get('botnet_data', {})
-        if botnet_data.get('protocol', False):
-            md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {botnet_data.get('protocol', '').upper()}")
-            md_lines.append(f"  - **Action:** Review and update Dynamic Botnet List Server credentials")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Dynamic Botnet List Server](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm)")
-        else:
-            md_lines.append(f"- **Dynamic Botnet List Server:** Not configured")
-    except Exception as e:
-        print(f"Error processing Dynamic Botnet List Server: {e}")
-        md_lines.append(f"- **Dynamic Botnet List Server:** Error retrieving information")
+    if should_run_check('dynamic_botnet_list_server', a.severity):
+        try:
+            botnet_data = results.get('botnet_data', {})
+            if botnet_data.get('protocol', False):
+                md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {botnet_data.get('protocol', '').upper()}")
+                md_lines.append(f"  - **Action:** Review and update Dynamic Botnet List Server credentials")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [Dynamic Botnet List Server](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm)")
+            else:
+                md_lines.append(f"- **Dynamic Botnet List Server:** Not configured")
+        except Exception as e:
+            print(f"Error processing Dynamic Botnet List Server: {e}")
+            md_lines.append(f"- **Dynamic Botnet List Server:** Error retrieving information")
 
     # Custom NTP Servers
-    try:
-        ntp_count = get_count(results.get('ntp_data', []))
-        md_lines.append(f"- **Custom NTP Servers:** {ntp_count}")
-        if ntp_count > 0:
-            md_lines.append(f"  - **Action:** Update authentication passwords on each NTP server and in SonicOS")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [NTP Configuration](https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777)")
-    except Exception as e:
-        print(f"Error processing NTP servers: {e}")
-        md_lines.append(f"- **Custom NTP Servers:** Error retrieving count")
+    if should_run_check('ntp_servers', a.severity):
+        try:
+            ntp_count = get_count(results.get('ntp_data', []))
+            md_lines.append(f"- **Custom NTP Servers:** {ntp_count}")
+            if ntp_count > 0:
+                md_lines.append(f"  - **Action:** Update authentication passwords on each NTP server and in SonicOS")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [NTP Configuration](https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777)")
+        except Exception as e:
+            print(f"Error processing NTP servers: {e}")
+            md_lines.append(f"- **Custom NTP Servers:** Error retrieving count")
 
     # Security Services Proxy
-    try:
-        sig_proxy_auth = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
-        sig_proxy_username = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', '')
-        if sig_proxy_auth or sig_proxy_username:
-            md_lines.append(f"- **Security Services Proxy:** Configured")
-            md_lines.append(f"  - **Action:** Update the proxy server credentials in SonicOS")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Signature Downloads Through a Proxy Server](https://www.sonicwall.com/support/knowledge-base/signature-downloads-through-a-proxy-server/170503292286520)")
-        else:
-            md_lines.append(f"- **Security Services Proxy:** Not configured")
-    except Exception as e:
-        print(f"Error processing Security Services Proxy: {e}")
-        md_lines.append(f"- **Security Services Proxy:** Error retrieving information")
-    md_lines.append(f"")
+    if should_run_check('security_services_proxy', a.severity):
+        try:
+            sig_proxy_auth = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False)
+            sig_proxy_username = results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', '')
+            if sig_proxy_auth or sig_proxy_username:
+                md_lines.append(f"- **Security Services Proxy:** Configured")
+                md_lines.append(f"  - **Action:** Update the proxy server credentials in SonicOS")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [Signature Downloads Through a Proxy Server](https://www.sonicwall.com/support/knowledge-base/signature-downloads-through-a-proxy-server/170503292286520)")
+            else:
+                md_lines.append(f"- **Security Services Proxy:** Not configured")
+        except Exception as e:
+            print(f"Error processing Security Services Proxy: {e}")
+            md_lines.append(f"- **Security Services Proxy:** Error retrieving information")
+        md_lines.append(f"")
 
     # Wireless
     md_lines.append(f"### Wireless Configuration")
     md_lines.append(f"")
 
     # Wireless: Guest Services External Authentication (Message Auth)
-    try:
-        guest_zones = results.get('guest_zone_data', [])
-        md_lines.append(f"- **Guest Services External Authentication (Message Authentication):** {len(guest_zones)} Zone(s) configured")
-        if len(guest_zones) > 0:
-            md_lines.append(f"  - **Action:** Update shared secrets on each server and in SonicOS")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Guest Services External Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=more%20information.-,Guest%20Services,-Reset%20the%20shared)")
-            md_lines.append(f"  - **Zones with External Guest Auth with Message Authentication:**")
-            for zone in guest_zones:
-                md_lines.append(f"    - **{zone.get('zone', 'Unnamed Zone')}** Zone")
-    except Exception as e:
-        print(f"Error processing Guest Services External Authentication: {e}")
-        md_lines.append(f"- **Guest Services External Authentication Servers:** Error retrieving count")
+    if should_run_check('guest_services_auth', a.severity):
+        try:
+            guest_zones = results.get('guest_zone_data', [])
+            md_lines.append(f"- **Guest Services External Authentication (Message Authentication):** {len(guest_zones)} Zone(s) configured")
+            if len(guest_zones) > 0:
+                md_lines.append(f"  - **Action:** Update shared secrets on each server and in SonicOS")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [Guest Services External Authentication](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=more%20information.-,Guest%20Services,-Reset%20the%20shared)")
+                md_lines.append(f"  - **Zones with External Guest Auth with Message Authentication:**")
+                for zone in guest_zones:
+                    md_lines.append(f"    - **{zone.get('zone', 'Unnamed Zone')}** Zone")
+        except Exception as e:
+            print(f"Error processing Guest Services External Authentication: {e}")
+            md_lines.append(f"- **Guest Services External Authentication Servers:** Error retrieving count")
 
     # Wireless: WLAN Local RADIUS Server
-    try:
-        wlan_radius_zones = results.get('wlan_zone_data', [])
-        md_lines.append(f"- **WLAN Local RADIUS Server:** {len(wlan_radius_zones)} Zone(s) configured")
-        if len(wlan_radius_zones) > 0:
-            md_lines.append(f"  - **Action:** Update the RADIUS shared secrets and LDAP server password in SonicOS")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [WLAN Local RADIUS Servers](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-access_points/Content/Access_Points_Settings/access-point-settings-about-local-radius-servers.htm)")
-            for zone in wlan_radius_zones:
-                md_lines.append(f"    - **{zone.get('zone', 'Unnamed Zone')}** Zone")
-                if zone['radius_server_enabled']:
-                    md_lines.append(f"      - Local RADIUS Server is enabled. Update the RADIUS shared secret.")
-                if zone['ldap_server_enabled'] or zone['ldap_server_host']:
-                    md_lines.append(f"      - LDAP Server is enabled. Update the LDAP server password.")
-    except Exception as e:
-        print(f"Error processing WLAN Local RADIUS Servers: {e}")
-        md_lines.append(f"- **WLAN Local RADIUS Servers:** Error retrieving count")
+    if should_run_check('wlan_radius_servers', a.severity):
+        try:
+            wlan_radius_zones = results.get('wlan_zone_data', [])
+            md_lines.append(f"- **WLAN Local RADIUS Server:** {len(wlan_radius_zones)} Zone(s) configured")
+            if len(wlan_radius_zones) > 0:
+                md_lines.append(f"  - **Action:** Update the RADIUS shared secrets and LDAP server password in SonicOS")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [WLAN Local RADIUS Servers](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-access_points/Content/Access_Points_Settings/access-point-settings-about-local-radius-servers.htm)")
+                for zone in wlan_radius_zones:
+                    md_lines.append(f"    - **{zone.get('zone', 'Unnamed Zone')}** Zone")
+                    if zone['radius_server_enabled']:
+                        md_lines.append(f"      - Local RADIUS Server is enabled. Update the RADIUS shared secret.")
+                    if zone['ldap_server_enabled'] or zone['ldap_server_host']:
+                        md_lines.append(f"      - LDAP Server is enabled. Update the LDAP server password.")
+        except Exception as e:
+            print(f"Error processing WLAN Local RADIUS Servers: {e}")
+            md_lines.append(f"- **WLAN Local RADIUS Servers:** Error retrieving count")
 
     # Wireless: Internal WLAN Radio
-    try:
-        radio_radius = results.get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
-        radio_psk = results.get('wireless', {}).get('wpa', {}).get('passphrase', None)
-        md_lines.append(f"- **Internal WLAN Radio:** {'Configured' if radio_radius or radio_psk else 'Not Configured'}")
-        if radio_radius or radio_psk:
-            md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Internal WLAN Radio Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
-            if radio_radius:
-                md_lines.append(f"    - RADIUS Server is configured. Update the RADIUS shared secret.")
-            if radio_psk:
-                md_lines.append(f"    - Pre-shared key is configured. Update the pre-shared key.")
-    except Exception as e:
-        print(f"Error processing Internal WLAN Radios: {e}")
-        md_lines.append(f"- **Internal WLAN Radios:** Error retrieving count")
+    if should_run_check('internal_wlan_radio', a.severity):
+        try:
+            radio_radius = results.get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
+            radio_psk = results.get('wireless', {}).get('wpa', {}).get('passphrase', None)
+            md_lines.append(f"- **Internal WLAN Radio:** {'Configured' if radio_radius or radio_psk else 'Not Configured'}")
+            if radio_radius or radio_psk:
+                md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [Internal WLAN Radio Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
+                if radio_radius:
+                    md_lines.append(f"    - RADIUS Server is configured. Update the RADIUS shared secret.")
+                if radio_psk:
+                    md_lines.append(f"    - Pre-shared key is configured. Update the pre-shared key.")
+        except Exception as e:
+            print(f"Error processing Internal WLAN Radios: {e}")
+            md_lines.append(f"- **Internal WLAN Radios:** Error retrieving count")
 
     # Wireless: Internal WLAN Virtual Access Point Objects
-    try:
-        vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
-        vap_data = results.get('internal_wlan_vap_data', [])
-        md_lines.append(f"- **Internal WLAN Virtual Access Points:** {vap_count} Object(s) configured")
-        if vap_count > 0:
-            md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
-            for vap in vap_data:
-                md_lines.append(f"    - **{vap.get('name', 'Unnamed VAP')}** Virtual Access Point")
-                if vap.get('radius', False):
-                    md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
-                if vap.get('accounting', False) or vap.get('wpa_passphrase', None):
-                    md_lines.append(f"      - Pre-shared key is enabled. Update the pre-shared key.")
-    except Exception as e:
-        print(f"Error processing Internal WLAN Virtual Access Points: {e}")
-        md_lines.append(f"- **Internal WLAN Virtual Access Points:** Error retrieving count")
+    if should_run_check('internal_wlan_vaps', a.severity):
+        try:
+            vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
+            vap_data = results.get('internal_wlan_vap_data', [])
+            md_lines.append(f"- **Internal WLAN Virtual Access Points:** {vap_count} Object(s) configured")
+            if vap_count > 0:
+                md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
+                for vap in vap_data:
+                    md_lines.append(f"    - **{vap.get('name', 'Unnamed VAP')}** Virtual Access Point")
+                    if vap.get('radius', False):
+                        md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
+                    if vap.get('accounting', False) or vap.get('wpa_passphrase', None):
+                        md_lines.append(f"      - Pre-shared key is enabled. Update the pre-shared key.")
+        except Exception as e:
+            print(f"Error processing Internal WLAN Virtual Access Points: {e}")
+            md_lines.append(f"- **Internal WLAN Virtual Access Points:** Error retrieving count")
 
     # Wireless: Internal WLAN Virtual Access Point Profiles
-    try:
-        vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
-        vap_profile_data = results.get('internal_wlan_vap_profile_data', [])
-        md_lines.append(f"- **Internal WLAN Virtual Access Point Profiles:** {vap_profile_count} Profile(s) configured")
-        if vap_profile_count > 0:
-            md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
-            md_lines.append(f"  - **Profile List:**")
-            for profile in vap_profile_data:
-                md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
-                if profile.get('radius', False):
-                    md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
-                if profile.get('accounting', False):
-                    md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
-    except Exception as e:
-        print(f"Error processing Internal WLAN Virtual Access Point Profiles: {e}")
-        md_lines.append(f"- **Internal WLAN Virtual Access Point Profiles:** Error retrieving count")
+    if should_run_check('internal_wlan_vap_profiles', a.severity):
+        try:
+            vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
+            vap_profile_data = results.get('internal_wlan_vap_profile_data', [])
+            md_lines.append(f"- **Internal WLAN Virtual Access Point Profiles:** {vap_profile_count} Profile(s) configured")
+            if vap_profile_count > 0:
+                md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [Internal WLAN Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
+                md_lines.append(f"  - **Profile List:**")
+                for profile in vap_profile_data:
+                    md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
+                    if profile.get('radius', False):
+                        md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
+                    if profile.get('accounting', False):
+                        md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
+        except Exception as e:
+            print(f"Error processing Internal WLAN Virtual Access Point Profiles: {e}")
+            md_lines.append(f"- **Internal WLAN Virtual Access Point Profiles:** Error retrieving count")
 
     # Wireless: SonicPoint/SonicWave Access Point Objects
-    try:
-        ap_count = get_count(results.get('sonicpoint_objects', {}).get('sonicpoint', {}).get('sonicpoint', []))
-        ap_data = results.get('sonicpoint_object_data', [])
-        md_lines.append(f"- **SonicPoint/SonicWave Access Points:** {ap_count} Object(s) configured")
-        if ap_count > 0:
-            md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
-            for p in ap_data:
-                md_lines.append(f"    - **{p.get('name', 'Unnamed AP')}** Access Point")
-                if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
-                    md_lines.append(f"      - Update the RADIUS server shared secret.")
-                if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
-                    md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
-                if p['sslvpn_user']  or p['sslvpn_server']:
-                    md_lines.append(f"      - Update the SSL VPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}")
-                if p['administrator']:
-                    md_lines.append(f"      - Update the Access Point administrator password.")
-    except Exception as e:
-        print(f"Error processing SonicPoint/SonicWave Access Points: {e}")
-        md_lines.append(f"- **SonicPoint/SonicWave Access Points:** Error retrieving count")
+    if should_run_check('sonicpoint_objects', a.severity):
+        try:
+            ap_count = get_count(results.get('sonicpoint_objects', {}).get('sonicpoint', {}).get('sonicpoint', []))
+            ap_data = results.get('sonicpoint_object_data', [])
+            md_lines.append(f"- **SonicPoint/SonicWave Access Points:** {ap_count} Object(s) configured")
+            if ap_count > 0:
+                md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
+                for p in ap_data:
+                    md_lines.append(f"    - **{p.get('name', 'Unnamed AP')}** Access Point")
+                    if p['radius'] and (p['radius'] != '' and p['radius'] != '0.0.0.0'):
+                        md_lines.append(f"      - Update the RADIUS server shared secret.")
+                    if p['accounting'] and (p['accounting'] != '' and p['accounting'] != '0.0.0.0'):
+                        md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
+                    if p['sslvpn_user']  or p['sslvpn_server']:
+                        md_lines.append(f"      - Update the SSL VPN credentials {p['sslvpn_user']}@{p['sslvpn_server']}")
+                    if p['administrator']:
+                        md_lines.append(f"      - Update the Access Point administrator password.")
+        except Exception as e:
+            print(f"Error processing SonicPoint/SonicWave Access Points: {e}")
+            md_lines.append(f"- **SonicPoint/SonicWave Access Points:** Error retrieving count")
 
     # Wireless: SonicPoint/SonicWave Access Point Profiles
-    try:
-        ap_profile_count = get_count(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
-        ap_profile_data = results.get('sonicpoint_profile_data', [])
-        md_lines.append(f"- **SonicPoint/SonicWave Access Point Provisioning Profiles:** {ap_profile_count} Profile(s) configured")
-        if ap_profile_count > 0:
-            md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS/RADIUS Accounting shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
-            md_lines.append(f"  - **Profile List:**")
-            for profile in ap_profile_data:
-                md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
-                md_lines.append(f"      - Update the pre-shared keys.")
-                if profile.get('radius', False) and (profile.get('radius', '') != '' and profile.get('radius', '0.0.0.0') != '0.0.0.0'):
-                    md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
-                if profile.get('accounting', False) and (profile.get('accounting', '') != '' and profile.get('accounting', '0.0.0.0') != '0.0.0.0'):
-                    md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
-                if profile.get('sslvpn_user', False) or profile.get('sslvpn_server', False):
-                    md_lines.append(f"      - Update the SSL VPN credentials {profile.get('sslvpn_user', 'Unknown User')}@{profile.get('sslvpn_server', 'Unknown Server')}")
-                if profile.get('administrator', False):
-                    md_lines.append(f"      - Update the Access Point administrator password.")
-    except Exception as e:
-        print(f"Error processing SonicPoint/SonicWave Access Point Profiles: {e}")
-        md_lines.append(f"- **SonicPoint/SonicWave Access Point Profiles:** Error retrieving count")
+    if should_run_check('sonicpoint_profiles', a.severity):
+        try:
+            ap_profile_count = get_count(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
+            ap_profile_data = results.get('sonicpoint_profile_data', [])
+            md_lines.append(f"- **SonicPoint/SonicWave Access Point Provisioning Profiles:** {ap_profile_count} Profile(s) configured")
+            if ap_profile_count > 0:
+                md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS/RADIUS Accounting shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
+                md_lines.append(f"  - **Profile List:**")
+                for profile in ap_profile_data:
+                    md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
+                    md_lines.append(f"      - Update the pre-shared keys.")
+                    if profile.get('radius', False) and (profile.get('radius', '') != '' and profile.get('radius', '0.0.0.0') != '0.0.0.0'):
+                        md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
+                    if profile.get('accounting', False) and (profile.get('accounting', '') != '' and profile.get('accounting', '0.0.0.0') != '0.0.0.0'):
+                        md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
+                    if profile.get('sslvpn_user', False) or profile.get('sslvpn_server', False):
+                        md_lines.append(f"      - Update the SSL VPN credentials {profile.get('sslvpn_user', 'Unknown User')}@{profile.get('sslvpn_server', 'Unknown Server')}")
+                    if profile.get('administrator', False):
+                        md_lines.append(f"      - Update the Access Point administrator password.")
+        except Exception as e:
+            print(f"Error processing SonicPoint/SonicWave Access Point Profiles: {e}")
+            md_lines.append(f"- **SonicPoint/SonicWave Access Point Profiles:** Error retrieving count")
 
     # Wireless: SonicPoint/SonicWave Virtual Access Point Objects
-    try:
-        spvap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
-        spvap_data = results.get('sonicpoint_vap_data', [])
-        md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Points:** {spvap_count} VAP Object(s) configured")
-        if spvap_count > 0:
-            md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
-            md_lines.append(f"  - **Virtual Access Point Object List:**")
-            for vap in spvap_data:
-                md_lines.append(f"    - **{vap.get('name', 'Unnamed VAP')}**")
-                md_lines.append(f"      - Update the pre-shared keys.")
-                if vap.get('radius', False) and (vap.get('radius', '') != '' and vap.get('radius', '0.0.0.0') != '0.0.0.0'):
-                    md_lines.append(f"      - Update the RADIUS server shared secret.")
-                if vap.get('accounting', False) and (vap.get('accounting', '') != '' and vap.get('accounting', '0.0.0.0') != '0.0.0.0'):
-                    md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
-    except Exception as e:
-        print(f"Error processing SonicPoint/SonicWave Virtual Access Points: {e}")
-        md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Points:** Error retrieving count")
+    if should_run_check('sonicpoint_vaps', a.severity):
+        try:
+            spvap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
+            spvap_data = results.get('sonicpoint_vap_data', [])
+            md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Points:** {spvap_count} VAP Object(s) configured")
+            if spvap_count > 0:
+                md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Points](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
+                md_lines.append(f"  - **Virtual Access Point Object List:**")
+                for vap in spvap_data:
+                    md_lines.append(f"    - **{vap.get('name', 'Unnamed VAP')}**")
+                    md_lines.append(f"      - Update the pre-shared keys.")
+                    if vap.get('radius', False) and (vap.get('radius', '') != '' and vap.get('radius', '0.0.0.0') != '0.0.0.0'):
+                        md_lines.append(f"      - Update the RADIUS server shared secret.")
+                    if vap.get('accounting', False) and (vap.get('accounting', '') != '' and vap.get('accounting', '0.0.0.0') != '0.0.0.0'):
+                        md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
+        except Exception as e:
+            print(f"Error processing SonicPoint/SonicWave Virtual Access Points: {e}")
+            md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Points:** Error retrieving count")
 
     # Wireless: SonicPoint/SonicWave Virtual Access Point Profiles
-    try:
-        spvap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
-        spvap_profile_data = results.get('sonicpoint_vap_profile_data', [])
-        md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Point Profiles:** {spvap_profile_count} VAP Profile(s) configured")
-        if spvap_profile_count > 0:
-            md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
-            md_lines.append(f"  - **Virtual Access Point Profile List:**")
-            for profile in spvap_profile_data:
-                md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
-                md_lines.append(f"      - Update the pre-shared keys.")
-                if profile.get('radius', False) and (profile.get('radius', '') != '' and profile.get('radius', '0.0.0.0' ) != '0.0.0.0'):
-                    md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
-                if profile.get('accounting', False) and (profile.get('accounting', '') != '' and profile.get('accounting', '0.0.0.0') != '0.0.0.0'):
-                    md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
-    except Exception as e:
-        print(f"Error processing SonicPoint/SonicWave Virtual Access Point Profiles: {e}")
-        md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Point Profiles:** Error retrieving count")
+    if should_run_check('sonicpoint_vap_profiles', a.severity):
+        try:
+            spvap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
+            spvap_profile_data = results.get('sonicpoint_vap_profile_data', [])
+            md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Point Profiles:** {spvap_profile_count} VAP Profile(s) configured")
+            if spvap_profile_count > 0:
+                md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SonicPoint/SonicWave Virtual Access Point Profiles](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi)")
+                md_lines.append(f"  - **Virtual Access Point Profile List:**")
+                for profile in spvap_profile_data:
+                    md_lines.append(f"    - **{profile.get('name', 'Unnamed Profile')}**")
+                    md_lines.append(f"      - Update the pre-shared keys.")
+                    if profile.get('radius', False) and (profile.get('radius', '') != '' and profile.get('radius', '0.0.0.0' ) != '0.0.0.0'):
+                        md_lines.append(f"      - RADIUS Server is enabled. Update the RADIUS shared secret.")
+                    if profile.get('accounting', False) and (profile.get('accounting', '') != '' and profile.get('accounting', '0.0.0.0') != '0.0.0.0'):
+                        md_lines.append(f"      - Update the RADIUS Accounting server shared secret.")
+        except Exception as e:
+            print(f"Error processing SonicPoint/SonicWave Virtual Access Point Profiles: {e}")
+            md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Point Profiles:** Error retrieving count")
 
     md_lines.append(f"")
 
     # Extended Infrastructure
     md_lines.append(f"### Infrastructure")
     md_lines.append(f"")
-    try:
-        switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
-        md_lines.append(f"- **Extended Switches:** {switch_count}")
-        if switch_count > 0:
-            md_lines.append(f"  - **Action:** Update the password for any connected switches")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/how-to-change-the-password-for-sonicwall-switch/200607142015373)")
-    except Exception as e:
-        print(f"Error processing extended switches: {e}")
-        md_lines.append(f"- **Extended Switches:** Error retrieving information")
+
+    if should_run_check('extended_switches', a.severity):
+        try:
+            switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
+            md_lines.append(f"- **Extended Switches:** {switch_count}")
+            if switch_count > 0:
+                md_lines.append(f"  - **Action:** Update the password for any connected switches")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/how-to-change-the-password-for-sonicwall-switch/200607142015373)")
+        except Exception as e:
+            print(f"Error processing extended switches: {e}")
+            md_lines.append(f"- **Extended Switches:** Error retrieving information")
 
     # Extended Switch Users
-    try:
-        switch_user_count = get_count(results.get('extended_switch_users', []))
-        md_lines.append(f"- **Extended Switch Users:** {switch_user_count}")
-        if switch_user_count > 0:
-            md_lines.append(f"  - **Action:** Update each user's password in the switch configuration")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password)")
-    except Exception as e:
-        print(f"Error processing extended switch users: {e}")
-        md_lines.append(f"- **Extended Switch Users:** Error retrieving information")
+    if should_run_check('extended_switch_users', a.severity):
+        try:
+            switch_user_count = get_count(results.get('extended_switch_users', []))
+            md_lines.append(f"- **Extended Switch Users:** {switch_user_count}")
+            if switch_user_count > 0:
+                md_lines.append(f"  - **Action:** Update each user's password in the switch configuration")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password)")
+        except Exception as e:
+            print(f"Error processing extended switch users: {e}")
+            md_lines.append(f"- **Extended Switch Users:** Error retrieving information")
 
     # Extended Switch RADIUS Servers
-    try:
-        switch_radius_count = get_count(results.get('switch_controller', {}).get('radius', []))
-        md_lines.append(f"- **Extended Switch RADIUS Servers:** {switch_radius_count}")
-        if switch_radius_count > 0:
-            md_lines.append(f"  - **Action:** Update the shared secret on each server and in the switch configuration")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password)")
-    except Exception as e:
-        print(f"Error processing extended switch RADIUS servers: {e}")
-        md_lines.append(f"- **Extended Switch RADIUS Servers:** Error retrieving information")
+    if should_run_check('extended_switch_radius', a.severity):
+        try:
+            switch_radius_count = get_count(results.get('switch_controller', {}).get('radius', []))
+            md_lines.append(f"- **Extended Switch RADIUS Servers:** {switch_radius_count}")
+            if switch_radius_count > 0:
+                md_lines.append(f"  - **Action:** Update the shared secret on each server and in the switch configuration")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [SonicWall Switch Password Change](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password)")
+        except Exception as e:
+            print(f"Error processing extended switch RADIUS servers: {e}")
+            md_lines.append(f"- **Extended Switch RADIUS Servers:** Error retrieving information")
 
     # GMS IPSec Management Tunnel
-    try:
-        gms_ipsec = results.get('gms', {}).get('ipsec_tunnel', False)
-        if gms_ipsec:
-            md_lines.append(f"- **GMS IPSec Management Tunnel Detected:**")
-            md_lines.append(f"  - **Action:** Update the authentication/encryption keys")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [GMS IPSec Management Tunnel](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
-    except Exception as e:
-        print(f"Error processing GMS IPSec Management Tunnels: {e}")
-        md_lines.append(f"- **GMS IPSec Management Tunnels:** Error retrieving information")
+    if should_run_check('gms_ipsec_tunnel', a.severity):
+        try:
+            gms_ipsec = results.get('gms', {}).get('ipsec_tunnel', False)
+            if gms_ipsec:
+                md_lines.append(f"- **GMS IPSec Management Tunnel Detected:**")
+                md_lines.append(f"  - **Action:** Update the authentication/encryption keys")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [GMS IPSec Management Tunnel](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
+        except Exception as e:
+            print(f"Error processing GMS IPSec Management Tunnels: {e}")
+            md_lines.append(f"- **GMS IPSec Management Tunnels:** Error retrieving information")
 
     # Advanced Routing Protocols (RIP/OSPFv2/BGP)
-    try:
-        any_rip = [i for i in results.get('routing_data', []) if i.get('flag_rip', False)]
-        any_ospf = [i for i in results.get('routing_data', []) if i.get('flag_ospfv2', False)]
-        any_bgp = [i for i in results.get('routing_data', []) if i.get('flag_bgp', False)]
-        adv_routing_count = len(any_rip) + len(any_ospf) + len(any_bgp)
-        # rip_ints = [f"{i.get('interface', '')} ({i.get('zone', '')})" for i in any_rip]
-        rip_ints = [i.get('interface', '') for i in any_rip]
-        rip_ints = ", ".join(rip_ints)
-        ospf_ints = [i.get('interface', '') for i in any_ospf]
-        ospf_ints = ", ".join(ospf_ints)
-        bgp_ints = [i.get('interface', '') for i in any_bgp]
-        bgp_ints = ", ".join(bgp_ints)
+    if should_run_check('advanced_routing', a.severity):
+        try:
+            any_rip = [i for i in results.get('routing_data', []) if i.get('flag_rip', False)]
+            any_ospf = [i for i in results.get('routing_data', []) if i.get('flag_ospfv2', False)]
+            any_bgp = [i for i in results.get('routing_data', []) if i.get('flag_bgp', False)]
+            adv_routing_count = len(any_rip) + len(any_ospf) + len(any_bgp)
+            # rip_ints = [f"{i.get('interface', '')} ({i.get('zone', '')})" for i in any_rip]
+            rip_ints = [i.get('interface', '') for i in any_rip]
+            rip_ints = ", ".join(rip_ints)
+            ospf_ints = [i.get('interface', '') for i in any_ospf]
+            ospf_ints = ", ".join(ospf_ints)
+            bgp_ints = [i.get('interface', '') for i in any_bgp]
+            bgp_ints = ", ".join(bgp_ints)
 
-        if adv_routing_count > 0:
-            if any_rip or any_ospf or any_bgp:
-                md_lines.append(f"- **Advanced Routing Protocols Enabled:**")
-                if any_rip:
-                    md_lines.append(f"  - **RIP:** Enabled on {len(any_rip)} interface(s) ({rip_ints})")
-                if any_ospf:
-                    md_lines.append(f"  - **OSPFv2:** Enabled on {len(any_ospf)} interface(s) ({ospf_ints})")
-                if any_bgp:
-                    md_lines.append(f"  - **BGP:** Enabled on {len(any_bgp)} interface(s) ({bgp_ints})")
-                md_lines.append(f"  - **Action:** Update authentication keys for each enabled protocol")
-                md_lines.append(f"  - **Priority:** Low")
-                md_lines.append(f"  - **Reference:** [Advanced Routing Protocols](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used)")
-        else:
-            md_lines.append(f"- **Advanced Routing Protocols:** None enabled")
-    except Exception as e:
-        print(f"Error processing advanced routing protocols: {e}")
-        md_lines.append(f"- **Advanced Routing Protocols:** Error retrieving information")
+            if adv_routing_count > 0:
+                if any_rip or any_ospf or any_bgp:
+                    md_lines.append(f"- **Advanced Routing Protocols Enabled:**")
+                    if any_rip:
+                        md_lines.append(f"  - **RIP:** Enabled on {len(any_rip)} interface(s) ({rip_ints})")
+                    if any_ospf:
+                        md_lines.append(f"  - **OSPFv2:** Enabled on {len(any_ospf)} interface(s) ({ospf_ints})")
+                    if any_bgp:
+                        md_lines.append(f"  - **BGP:** Enabled on {len(any_bgp)} interface(s) ({bgp_ints})")
+                    md_lines.append(f"  - **Action:** Update authentication keys for each enabled protocol")
+                    md_lines.append(f"  - **Priority:** Low")
+                    md_lines.append(f"  - **Reference:** [Advanced Routing Protocols](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used)")
+            else:
+                md_lines.append(f"- **Advanced Routing Protocols:** None enabled")
+        except Exception as e:
+            print(f"Error processing advanced routing protocols: {e}")
+            md_lines.append(f"- **Advanced Routing Protocols:** Error retrieving information")
 
     md_lines.append(f"")
 
@@ -2496,112 +2644,118 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     md_lines.append(f"")
 
     # SNMPv3 Users
-    try:
-        snmp_count = get_count(results.get('snmp', {}).get('user', []))
-        md_lines.append(f"- **SNMPv3 Users:** {snmp_count}")
-        if snmp_count > 0:
-            md_lines.append(f"  - **Action:** Update authentication and privacy passwords")
-            md_lines.append(f"  - **Priority:** High")
-            md_lines.append(f"  - **Reference:** [SNMPv3 User Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP)")
-    except Exception as e:
-        print(f"Error generating SNMP section: {e}")
-        md_lines.append(f"- **SNMPv3 Users:** Error retrieving information")
+    if should_run_check('snmp_users', a.severity):
+        try:
+            snmp_count = get_count(results.get('snmp', {}).get('user', []))
+            md_lines.append(f"- **SNMPv3 Users:** {snmp_count}")
+            if snmp_count > 0:
+                md_lines.append(f"  - **Action:** Update authentication and privacy passwords")
+                md_lines.append(f"  - **Priority:** High")
+                md_lines.append(f"  - **Reference:** [SNMPv3 User Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP)")
+        except Exception as e:
+            print(f"Error generating SNMP section: {e}")
+            md_lines.append(f"- **SNMPv3 Users:** Error retrieving information")
 
     # Email Logging
-    try:
-        email_logging = results.get('log_automation_data', {})
-        email_services = []
-        if email_logging.get('pop3_flag'):
-            email_services.append("POP3")
-        if email_logging.get('smtp_flag'):
-            email_services.append("SMTP")
-        if email_logging.get('ftp_flag'):
-            email_services.append("FTP")
+    if should_run_check('email_logging', a.severity):
+        try:
+            email_logging = results.get('log_automation_data', {})
+            email_services = []
+            if email_logging.get('pop3_flag'):
+                email_services.append("POP3")
+            if email_logging.get('smtp_flag'):
+                email_services.append("SMTP")
+            if email_logging.get('ftp_flag'):
+                email_services.append("FTP")
 
-        if email_services:
-            md_lines.append(f"- **Email Logging:** {len(email_services)} service(s) configured ({', '.join(email_services)})")
-            md_lines.append(f"  - Action: Update email server credentials")
-            md_lines.append(f"  - Priority: Medium")
-            md_lines.append(f"  - Reference: [Email Logging Configuration](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038)")
-        else:
-            md_lines.append(f"- **Email Logging:** Not configured")
-    except Exception as e:
-        print(f"Error generating Email Logging section: {e}")
-        md_lines.append(f"- **Email Logging:** Error retrieving information")
+            if email_services:
+                md_lines.append(f"- **Email Logging:** {len(email_services)} service(s) configured ({', '.join(email_services)})")
+                md_lines.append(f"  - Action: Update email server credentials")
+                md_lines.append(f"  - Priority: Medium")
+                md_lines.append(f"  - Reference: [Email Logging Configuration](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038)")
+            else:
+                md_lines.append(f"- **Email Logging:** Not configured")
+        except Exception as e:
+            print(f"Error generating Email Logging section: {e}")
+            md_lines.append(f"- **Email Logging:** Error retrieving information")
 
     # Packet Monitor FTP
-    try:
-        if results.get('packet_monitor_ftp_set', False):
-            md_lines.append(f"- **Packet Monitor FTP:** Configured")
-            md_lines.append(f"  - Action: Update FTP server credentials")
-            md_lines.append(f"  - Priority: Medium")
-            md_lines.append(f"  - Reference: [Packet Monitor Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password)")
-        else:
-            md_lines.append(f"- **Packet Monitor FTP:** Not configured")
-    except Exception as e:
-        print(f"Error generating Packet Monitor section: {e}")
-        md_lines.append(f"- **Packet Monitor FTP:** Error retrieving information")
+    if should_run_check('packet_monitor_ftp', a.severity):
+        try:
+            if results.get('packet_monitor_ftp_set', False):
+                md_lines.append(f"- **Packet Monitor FTP:** Configured")
+                md_lines.append(f"  - Action: Update FTP server credentials")
+                md_lines.append(f"  - Priority: Medium")
+                md_lines.append(f"  - Reference: [Packet Monitor Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password)")
+            else:
+                md_lines.append(f"- **Packet Monitor FTP:** Not configured")
+        except Exception as e:
+            print(f"Error generating Packet Monitor section: {e}")
+            md_lines.append(f"- **Packet Monitor FTP:** Error retrieving information")
 
     # TSR/EXP Scheduled Exports
-    try:
-        if results.get('scheduled_exports_ftp_set', False):
-            md_lines.append(f"- **TSR/EXP Scheduled Exports:** Configured")
-            md_lines.append(f"  - Action: Update FTP server credentials")
-            md_lines.append(f"  - Priority: Medium")
-            md_lines.append(f"  - Reference: [TSR/EXP Scheduled Exports](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm)")
-        else:
-            md_lines.append(f"- **TSR/EXP Scheduled Exports:** Not configured")
-    except Exception as e:
-        print(f"Error generating Scheduled Exports section: {e}")
-        md_lines.append(f"- **TSR/EXP Scheduled Exports:** Error retrieving information")
+    if should_run_check('scheduled_exports', a.severity):
+        try:
+            if results.get('scheduled_exports_ftp_set', False):
+                md_lines.append(f"- **TSR/EXP Scheduled Exports:** Configured")
+                md_lines.append(f"  - Action: Update FTP server credentials")
+                md_lines.append(f"  - Priority: Medium")
+                md_lines.append(f"  - Reference: [TSR/EXP Scheduled Exports](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm)")
+            else:
+                md_lines.append(f"- **TSR/EXP Scheduled Exports:** Not configured")
+        except Exception as e:
+            print(f"Error generating Scheduled Exports section: {e}")
+            md_lines.append(f"- **TSR/EXP Scheduled Exports:** Error retrieving information")
 
     # AppFlow SFR Mailing
-    try:
-        sfr_smtp = results.get('sfr_data', {}).get('smtp_configured', False)
-        sfr_pop = results.get('sfr_data', {}).get('pop_configured', False)
-        if sfr_smtp or sfr_pop:
-            md_lines.append(f"- **AppFlow SFR Mailing:** Configured")
-            md_lines.append(f"  - **Action:** Update email server credentials")
-            md_lines.append(f"  - **Priority:** Low")
-            md_lines.append(f"  - **Reference:** [AppFlow SFR Email Configuration](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-appflow_device/Content/appflow-d-flow-reporting-sfr-mailing.htm)")
-            if sfr_smtp:
-                md_lines.append(f"  - **SMTP Server:** Configured")
-            if sfr_pop:
-                md_lines.append(f"  - **POP3 Server:** Configured")
-        else:
-            md_lines.append(f"- **AppFlow SFR Mailing:** Not configured")
-    except Exception as e:
-        print(f"Error generating AppFlow SFR Mailing section: {e}")
-        md_lines.append(f"- **AppFlow SFR Mailing:** Error retrieving information")
+    if should_run_check('sfr_reporting', a.severity):
+        try:
+            sfr_smtp = results.get('sfr_data', {}).get('smtp_configured', False)
+            sfr_pop = results.get('sfr_data', {}).get('pop_configured', False)
+            if sfr_smtp or sfr_pop:
+                md_lines.append(f"- **AppFlow SFR Mailing:** Configured")
+                md_lines.append(f"  - **Action:** Update email server credentials")
+                md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Reference:** [AppFlow SFR Email Configuration](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-appflow_device/Content/appflow-d-flow-reporting-sfr-mailing.htm)")
+                if sfr_smtp:
+                    md_lines.append(f"  - **SMTP Server:** Configured")
+                if sfr_pop:
+                    md_lines.append(f"  - **POP3 Server:** Configured")
+            else:
+                md_lines.append(f"- **AppFlow SFR Mailing:** Not configured")
+        except Exception as e:
+            print(f"Error generating AppFlow SFR Mailing section: {e}")
+            md_lines.append(f"- **AppFlow SFR Mailing:** Error retrieving information")
 
     md_lines.append(f"")
     md_lines.append(f"### Cloud & Integrations")
     md_lines.append(f"")
 
     # AWS API Logging
-    try:
-        aws_enabled = results.get('log', {}).get('aws', {}).get('enable', False)
-        md_lines.append(f"- **AWS API Logging:** {'Enabled' if aws_enabled else 'Not Enabled'}")
-        if aws_enabled:
-            md_lines.append(f"  - **Action:** Update the AWS secret key on the AWS console and in SonicOS")
-            md_lines.append(f"  - **Priority:** Critical")
-            md_lines.append(f"  - **Reference:** [AWS Integration with SonicWall](https://www.sonicwall.com/support/knowledge-base/aws-integration-with-sonicwall-sonicos-6-5-x/181024232124532)")
-    except Exception as e:
-        print(f"Error processing AWS API logging: {e}")
-        md_lines.append(f"- **AWS API Logging:** Error retrieving information")
+    if should_run_check('aws_api', a.severity):
+        try:
+            aws_enabled = results.get('log', {}).get('aws', {}).get('enable', False)
+            md_lines.append(f"- **AWS API Logging:** {'Enabled' if aws_enabled else 'Not Enabled'}")
+            if aws_enabled:
+                md_lines.append(f"  - **Action:** Update the AWS secret key on the AWS console and in SonicOS")
+                md_lines.append(f"  - **Priority:** Critical")
+                md_lines.append(f"  - **Reference:** [AWS Integration with SonicWall](https://www.sonicwall.com/support/knowledge-base/aws-integration-with-sonicwall-sonicos-6-5-x/181024232124532)")
+        except Exception as e:
+            print(f"Error processing AWS API logging: {e}")
+            md_lines.append(f"- **AWS API Logging:** Error retrieving information")
 
     # Cloud Secure Edge
-    try:
-        cse_enabled = results.get('cloud_secure_edge', {}).get('created', False)
-        md_lines.append(f"- **Cloud Secure Edge:** {'Enabled' if cse_enabled else 'Not Enabled'}")
-        if cse_enabled:
-            md_lines.append(f"  - **Action:** Reset Cloud Secure Edge connector authentication key")
-            md_lines.append(f"  - **Priority:** Critical")
-            md_lines.append(f"  - **Reference:** [Cloud Secure Edge](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE)")
-    except Exception as e:
-        print(f"Error processing Cloud Secure Edge: {e}")
-        md_lines.append(f"- **Cloud Secure Edge:** Error retrieving information")
-
+    if should_run_check('cloud_secure_edge', a.severity):
+        try:
+            cse_enabled = results.get('cloud_secure_edge', {}).get('created', False)
+            md_lines.append(f"- **Cloud Secure Edge:** {'Enabled' if cse_enabled else 'Not Enabled'}")
+            if cse_enabled:
+                md_lines.append(f"  - **Action:** Reset Cloud Secure Edge connector authentication key")
+                md_lines.append(f"  - **Priority:** Critical")
+                md_lines.append(f"  - **Reference:** [Cloud Secure Edge](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE)")
+        except Exception as e:
+            print(f"Error processing Cloud Secure Edge: {e}")
+            md_lines.append(f"- **Cloud Secure Edge:** Error retrieving information")
 
     md_lines.append(f"")
 
@@ -2897,6 +3051,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving LDAP servers: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping LDAP server check  (severity: {get_check_severity('ldap_servers')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['ldap_servers'])
 
     if not silent:
         print()
@@ -2945,6 +3100,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
             print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving RADIUS servers: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping RADIUS server check (severity: {get_check_severity('radius_servers')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['radius_servers'])
 
     if not silent:
         print()
@@ -3000,6 +3156,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TACACS servers: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping TACACS server check (severity: {get_check_severity('tacacs_servers')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['tacacs_servers'])
 
     if not silent:
         print()
@@ -3080,6 +3237,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving VPN policies: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping VPN policy check (severity: {get_check_severity('vpn_policies')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['vpn_policies'])
 
     if not silent:
         print()
@@ -3135,6 +3293,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving interfaces: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping WAN interface check (severity: {get_check_severity('wan_interfaces')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['wan_interfaces'])
 
     if not silent:
         print()
@@ -3195,6 +3354,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving AWS API information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping AWS API check (severity: {get_check_severity('aws_api')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['aws_api'])
 
     if not silent:
         print()
@@ -3296,6 +3456,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving IPv6 dynamic DNS services: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping dynamic DNS service check (severity: {get_check_severity('ddns_services')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['ddns_services'])
 
     if not silent:
         print()
@@ -3347,6 +3508,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Clearpass/NAC information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Clearpass/NAC check (severity: {get_check_severity('clearpass_nac')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['clearpass_nac'])
 
     if not silent:
         print()
@@ -3402,6 +3564,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SNMP users: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SNMP user check (severity: {get_check_severity('snmp_users')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['snmp_users'])
 
     if not silent:
         print()
@@ -3436,6 +3599,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving CSE information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Cloud Secure Edge (CSE) check (severity: {get_check_severity('cloud_secure_edge')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['cloud_secure_edge'])
 
     if not silent:
         print()
@@ -3499,6 +3663,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving log automation information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping email logging check (severity: {get_check_severity('email_logging')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['email_logging'])
 
     if not silent:
         print()
@@ -3538,6 +3703,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Packet Monitor information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Packet Monitor FTP check (severity: {get_check_severity('packet_monitor_ftp')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['packet_monitor_ftp'])
 
     if not silent:
         print()
@@ -3575,6 +3741,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving settings/TSR scheduled exports information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping settings/TSR scheduled exports check (severity: {get_check_severity('scheduled_exports')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['scheduled_exports'])
 
     if not silent:
         print()
@@ -3648,6 +3815,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic address objects: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Dynamic Address Objects check (severity: {get_check_severity('dynamic_address_objects')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['dynamic_address_objects'])
 
     if not silent:
         print()
@@ -3703,6 +3871,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic botnet list information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Dynamic Botnet List Server check (severity: {get_check_severity('dynamic_botnet_list_server')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['dynamic_botnet_list_server'])
 
     if not silent:
         print()
@@ -3757,6 +3926,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switches: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Extended Switches check (severity: {get_check_severity('extended_switches')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['extended_switches'])
 
     if not silent:
         print()
@@ -3809,6 +3979,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switch users: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Extended Switch Users check (severity: {get_check_severity('extended_switch_users')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['extended_switch_users'])
 
     if not silent:
         print()
@@ -3860,6 +4031,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving extended switch RADIUS servers: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Extended Switch RADIUS Servers check (severity: {get_check_severity('extended_switch_radius')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['extended_switch_radius'])
 
     if not silent:
         print()
@@ -3909,6 +4081,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving zone objects: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping WLAN RADIUS Servers check (severity: {get_check_severity('wlan_radius_servers')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['wlan_radius_servers'])
 
     if not silent:
         print()
@@ -3947,6 +4120,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving zone objects for Guest Services: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Guest Services External Guest Authentication check (severity: {get_check_severity('guest_services_auth')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['guest_services_auth'])
 
     if not silent:
         print()
@@ -3997,6 +4171,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO Agents: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SSO Agents check (severity: {get_check_severity('sso_agents')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sso_agents'])
 
     if not silent:
         print()
@@ -4047,6 +4222,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TSA agents: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Terminal Server Agents check (severity: {get_check_severity('ts_agents')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['ts_agents'])
 
     if not silent:
         print()
@@ -4095,6 +4271,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO RADIUS clients: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SSO RADIUS Clients check (severity: {get_check_severity('sso_radius_clients')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sso_radius_clients'])
 
     if not silent:
         print()
@@ -4152,6 +4329,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SSO API clients: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping 3rd Party SSO API Clients check (severity: {get_check_severity('sso_api_clients')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sso_api_clients'])
 
     if not silent:
         print()
@@ -4202,6 +4380,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving RADIUS accounting servers: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping RADIUS Accounting Servers check (severity: {get_check_severity('radius_accounting_servers')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['radius_accounting_servers'])
 
     if not silent:
         print()
@@ -4258,6 +4437,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving TACACS+ servers: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping TACACS+ Servers check (severity: {get_check_severity('tacacs_accounting_servers')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['tacacs_accounting_servers'])
 
     if not silent:
         print()
@@ -4309,6 +4489,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving AppFlow SFR reporting information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping AppFlow SFR Reporting check (severity: {get_check_severity('sfr_reporting')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sfr_reporting'])
 
     if not silent:
         print()
@@ -4364,6 +4545,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving NTP servers: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping NTP Servers check (severity: {get_check_severity('ntp_servers')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['ntp_servers'])
 
     if not silent:
         print()
@@ -4398,6 +4580,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Security Services Signature Proxy information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Security Services Signature Proxy check (severity: {get_check_severity('security_services_proxy')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['security_services_proxy'])
 
     if not silent:
         print()
@@ -4426,6 +4609,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving GMS IPsec Management Tunnel information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping GMS IPsec Management Tunnel check (severity: {get_check_severity('gms_ipsec_tunnel')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['gms_ipsec_tunnel'])
 
     if not silent:
         print()
@@ -4512,6 +4696,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print()
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Advanced Routing Protocols check (severity: {get_check_severity('advanced_routing')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['advanced_routing'])
 
     if not silent:
         print()
@@ -4553,6 +4738,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving WWAN modem information: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Cellular WWAN check (severity: {get_check_severity('cellular_wwan')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['cellular_wwan'])
 
     if not silent:
         print()
@@ -4594,6 +4780,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Radios: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Internal Wireless Radio check (severity: {get_check_severity('internal_wlan_radio')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['internal_wlan_radio'])
 
     if not silent:
         print()
@@ -4657,6 +4844,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Points: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Internal Wireless Virtual Access Points check (severity: {get_check_severity('internal_wlan_vaps')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['internal_wlan_vaps'])
 
     if not silent:
         print()
@@ -4717,6 +4905,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Internal Wireless Virtual Access Point Profiles: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping Internal Wireless Virtual Access Point Profiles check (severity: {get_check_severity('internal_wlan_vap_profiles')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['internal_wlan_vap_profiles'])
 
     if not silent:
         print()
@@ -4782,6 +4971,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Virtual Access Points: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SonicPoint/SonicWave Virtual Access Points check (severity: {get_check_severity('sonicpoint_vaps')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sonicpoint_vaps'])
 
     if not silent:
         print()
@@ -4842,6 +5032,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Virtual Access Point Profiles: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SonicPoint/SonicWave Virtual Access Point Profiles check (severity: {get_check_severity('sonicpoint_vap_profiles')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sonicpoint_vap_profiles'])
 
     if not silent:
         print()
@@ -4915,6 +5106,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Profiles: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SonicPoint/SonicWave Profiles check (severity: {get_check_severity('sonicpoint_profiles')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sonicpoint_profiles'])
 
     if not silent:
         print()
@@ -4987,11 +5179,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SonicPoint/SonicWave Objects: {e}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SonicPoint/SonicWave Objects check (severity: {get_check_severity('sonicpoint_objects')}, filter: {a.severity})")
+        update_routine_results(routine_results, firewall, 'skipped_checks', data=['sonicpoint_objects'])
 
     # REMEDIATION CHECKS END
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Completed remediation playbook checks.")
 
-    # TODO: Add a summary of skipped and completed checks here.
     if not silent:
         print()
 
