@@ -1436,7 +1436,10 @@ def generate_summary_table(results: dict):
 
         # Extended Switches
         if should_run_check('extended_switches', a.severity):
-            switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
+            if results['firewall_generation'] == 6:
+                switch_count = get_count(results.get('switch_controller', {}).get('switch', []))
+            else:
+                switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
             if switch_count > 0:
                 table.add_row("Extended Switches", "Checks for connected switches", "Low",
                               "[green]Switches Found[/green]", str(switch_count), "[red]Update the password for any extended switches.[/red]")
@@ -1921,7 +1924,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     # Extended Switches
     if should_run_check('extended_switches', a.severity):
         try:
-            ext_switch_count = get_count(results.get('extended_switches', []))
+            if firewall_info['firewall_generation'] == 6:
+                ext_switch_count = get_count(results.get('switch_controller', {}).get('switch', []))
+            else:
+                ext_switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
             if ext_switch_count > 0:
                 action_items.append(f"| Low | {ext_switch_count} Extended Switch(es) Found | Review and update credentials on the switch(es) | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-change-the-password-for-sonicwall-switch/200607142015373) |")
         except Exception as e:
@@ -2557,7 +2563,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     if should_run_check('extended_switches', a.severity):
         try:
-            switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
+            if firewall_info['firewall_generation'] == 6:
+                switch_count = get_count(results.get('switch_controller', {}).get('switch', []))
+            else:
+                switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
             md_lines.append(f"- **Extended Switches:** {switch_count}")
             if switch_count > 0:
                 md_lines.append(f"  - **Action:** Update the password for any connected switches")
