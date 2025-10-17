@@ -1043,10 +1043,6 @@ class Login:
             print("Failed to retrieve advanced routing settings.")
             return None
 
-    # TODO: Create a function to get the Extended Switches, Switch Users, and Switch RADIUS Servers.
-
-
-
 
 # Test
 if __name__ == "__main__":

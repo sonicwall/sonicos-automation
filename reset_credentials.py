@@ -3884,17 +3884,18 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # Extended Switches
     if should_run_check('extended_switches', a.severity):
         try:
-            # TODO: No API endpoint or CLI config path available on Gen 6 firewalls
             if firewall_info['firewall_generation'] == 6:
-                ext_switches = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Extended Switch API endpoints are not available on SonicOS Gen 6 firewalls.")
+                ext_switches = get_request(api_base, api_session, '/api/sonicos/switch-controller/switch', silent=silent)
             else:
                 ext_switches = get_request(api_base, api_session, '/api/sonicos/switch-controller/switch-info', silent=silent)
 
             if ext_switches:
                 ext_switch_count = 0
                 try:
-                    ext_switch_key = ext_switches.get('switch_controller', {}).get('switch_info', {})
+                    if firewall_info['firewall_generation'] == 6:
+                        ext_switch_key = ext_switches.get('switch_controller', {}).get('switch', {})
+                    else:
+                        ext_switch_key = ext_switches.get('switch_controller', {}).get('switch_info', {})
                     if isinstance(ext_switch_key, list):
                         ext_switch_count = len(ext_switch_key)
                     elif isinstance(ext_switch_key, dict) and ext_switch_count == {}:
@@ -3909,13 +3910,22 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                     if not silent:
                         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {ext_switch_count} extended switches configured.")
                         print("Extended Switches:")
-                    for switch in ext_switches.get('switch_controller', {}).get('switch_info', []):
-                        switch_id = switch.get('id', None)
-                        switch_name = switch.get('name', '')
-                        switch_serial = switch.get('serial', '')
-                        if switch_id:
-                            if not silent:
-                                print(f"  - {switch_name} ({switch_serial})")
+                    if firewall_info['firewall_generation'] == 6:
+                        for switch in ext_switches.get('switch_controller', {}).get('switch', []):
+                            switch_id = switch.get('id', None)
+                            switch_name = switch.get('switch_name', '')
+                            switch_serial = switch.get('serial_number', '')
+                            if switch_id:
+                                if not silent:
+                                    print(f"  - {switch_name} ({switch_serial})")
+                    else:
+                        for switch in ext_switches.get('switch_controller', {}).get('switch_info', []):
+                            switch_id = switch.get('id', None)
+                            switch_name = switch.get('name', '')
+                            switch_serial = switch.get('serial', '')
+                            if switch_id:
+                                if not silent:
+                                    print(f"  - {switch_name} ({switch_serial})")
                 else:
                     if not silent:
                         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No extended switches found.")
@@ -3940,8 +3950,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     if should_run_check('extended_switch_users', a.severity):
         try:
             if firewall_info['firewall_generation'] == 6:
-                switch_users = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Extended Switch API endpoints are not available on SonicOS Gen 6 firewalls.")
+                switch_users = get_request(api_base, api_session, '/api/sonicos/switch-controller/user', silent=silent)
             else:
                 switch_users = get_request(api_base, api_session, '/api/sonicos/switch-controller/user', silent=silent)
 
@@ -3993,8 +4002,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     if should_run_check('extended_switch_radius', a.severity):
         try:
             if firewall_info['firewall_generation'] == 6:
-                switch_radius = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Extended Switch API endpoints are not available on SonicOS Gen 6 firewalls.")
+                switch_radius = get_request(api_base, api_session, '/api/sonicos/switch-controller/radius', silent=silent)
             else:
                 switch_radius = get_request(api_base, api_session, '/api/sonicos/switch-controller/radius', silent=silent)
 
