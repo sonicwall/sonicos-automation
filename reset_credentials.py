@@ -1243,7 +1243,7 @@ def generate_summary_table(results: dict):
 
         # Cellular WWAN - /api/sonicos/reporting/wwan
         if should_run_check('cellular_wwan', a.severity):
-            cell_attached = results.get('cellular_data', {}).get('wwan_attached', False)
+            cell_attached = results.get('cellular_attached', False)
             if cell_attached:
                 table.add_row("Cellular WWAN", "Checks for an attached modem", "High",
                               "[green]Modem Attached[/green]", "", "[red]Update the credentials with the cellular provider and in SonicOS.[/red]")
@@ -1815,7 +1815,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
 
     # Cellular WWAN
     if should_run_check('cellular_wwan', a.severity):
-        if results.get('cellular_data', {}).get('wwan_attached', False):
+        if results.get('cellular_attached', False):
             action_items.append(f"| High | Modem Found | Cellular WWAN is enabled - Update the cellular provider credentials | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
 
     # Wireless: Guest Services External Authentication
@@ -1903,7 +1903,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     # Dynamic External Address Objects
     if should_run_check('dynamic_address_objects', a.severity):
         try:
-            dynamic_address_count = get_count(results.get('dynamic_ao_count', 0))
+            dynamic_address_count = results.get('dynamic_ao_count', 0)
             if dynamic_address_count > 0:
                 action_items.append(f"| High | {dynamic_address_count} Object(s) Found | Review and update credentials for Dynamic External Address Object(s) | [Link](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280) |")
         except Exception as e:
@@ -2249,10 +2249,12 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict)
     # Cellular WWAN
     if should_run_check('cellular_wwan', a.severity):
         try:
-            wwan_attached = results.get('cellular_attached', 0)
-            if wwan_attached != 0:
-                md_lines.append(f"- **Cellular WWAN Model Detected:** {wwan_attached}")
+            wwan_attached = results.get('cellular_attached', False)
+            if wwan_attached:
+                md_lines.append(f"- **Cellular WWAN Model Detected:**")
                 md_lines.append(f"  - **Action:** Update cellular provider credentials at the provider's website, then update in SonicOS")
+                if firewall_info['firewall_generation'] == 6:
+                    md_lines.append(f"  - **GEN6 Notice:** For GEN6 firewalls, this check found cellular model connection profiles. Please ensure to update credentials for each profile as applicable.")
                 md_lines.append(f"  - **Priority:** High")
                 md_lines.append(f"  - **Reference:** [Cellular WWAN Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
         except Exception as e:
@@ -2997,6 +2999,32 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # https://www.sonicwall.com/support/knowledge-base/remediation-playbook/250916130050523
     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Starting Remediation Playbook checks...")
 
+    if firewall_info['firewall_generation'] == 6:
+        if not silent:
+            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Establishing an alternate API session.")
+
+        # Create a Login object and log into the firewall using the alternate API method
+        if a.verbose:
+            verbose_int = 1
+        else:
+            verbose_int = 0
+
+        alt_session = Login(
+            ipaddress=api_base,
+            userid=username,
+            passwd=password,
+            admin_mode="config",
+            http_type="https",
+            brwsr_cache=0,
+            verbose=verbose_int,
+            sessIdRef=0
+        )
+
+        logged_in, rmsg = alt_session.login2()
+        if logged_in == 1:
+            if not silent:
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Successfully logged into alternate API session for GEN6 firewall.")
+
     # List LDAP servers
     if should_run_check('ldap_servers', a.severity):
         try:
@@ -3083,7 +3111,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                         print("RADIUS Servers:")
                     for server in radius_servers:
                         server_host = server.get('host', '')
-                        server_port = server.get('port', '')
+                        server_port = server.get('port', {}).get('port_num', '')
                         server_status = server.get('enable', '')
                         if not silent:
                             print(f"  - {server_host}, port {server_port}: Status: {'enabled' if server_status else 'disabled'}")
@@ -3107,11 +3135,9 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     # List TACACS servers
     if should_run_check('tacacs_servers', a.severity):
-        # TODO: TACACS on GEN6. API endpoint does not exist. endpoint is incomplete.
         try:
             if firewall_info['firewall_generation'] == 6:
-                tacacs_servers = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: TACACS server listing not supported on GEN6 firewalls.")
+                tacacs_servers = alt_session.get_tacacs_servers()
             else:
                 tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/servers', silent=silent)
 
@@ -3254,9 +3280,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                         wan_interfaces.append(intf)
 
                 if len(wan_interfaces) > 0:
-                    if not silent:
-                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {len(wan_interfaces)} WAN interfaces configured.")
-                        print("WAN Interfaces:")
+                    # if not silent:
+                    #     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {len(wan_interfaces)} WAN interface(s) configured.")
                     for intf in wan_interfaces:
                         intf_name = intf.get('ipv4', {}).get('name', '')
                         intf_mode = intf.get('ipv4', {}).get('ip_assignment', {}).get('mode', None)
@@ -3275,11 +3300,19 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
                         if intf_type != 'Static' and intf_type != 'DHCP':
                             wan_list.append(intf_name)
-                            if not silent:
-                                print(f"  - {intf_name} ({intf_type})")
+                            # if not silent:
+                            #     print(f"  - {intf_name} ({intf_type})")
                 else:
                     if not silent:
                         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No WAN interfaces found.")
+
+                if len(wan_list) > 0:
+                    if not silent:
+                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {len(wan_interfaces)} PPPoE/PPTP/L2TP WAN interface(s) configured.")
+                        print(f"WAN Interfaces using PPPoE/PPTP/L2TP: {', '.join(wan_list)}")
+                else:
+                    if not silent:
+                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No PPPoE/PPTP/L2TP WAN interfaces found.")
 
                 wan_interfaces = {"interesting_wan_list": wan_list, "wan_interfaces": wan_interfaces}
                 update_routine_results(routine_results, firewall, 'wan_interfaces', wan_interfaces)
@@ -3302,35 +3335,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     if should_run_check('aws_api', a.severity):
         try:
             if firewall_info['firewall_generation'] == 6:
-                # TODO: Seems GEN6 does not have this endpoint or CLI path.
-                aws_api = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: AWS API endpoint is not available on GEN6 firewalls.")
-
-                # Create a Login object and log into the firewall using the alternate API method
-                # if a.verbose:
-                #     verbose_int = 1
-                # else:
-                #     verbose_int = 0
-                #
-                # alt_session = Login(
-                #     ipaddress=api_base,
-                #     userid=username,
-                #     passwd=password,
-                #     admin_mode="config",
-                #     http_type="https",
-                #     brwsr_cache=0,
-                #     verbose=verbose_int,
-                #     sessIdRef=0
-                # )
-                #
-                # logged_in, rmsg = alt_session.login2()
-                # if logged_in == 1:
-                #     if not silent:
-                #         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Successfully logged into alternate API session for GEN6 firewall.")
-                #     aws_api = alt_session.get_aws_logging()
-                #     alt_session.logout()
-                #
-                # exit()
+                aws_api = alt_session.get_aws_api()
             else:
                 aws_api = get_request(api_base, api_session, '/api/sonicos/log/aws', silent=silent)
 
@@ -3464,10 +3469,9 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # Check Clearpass/NAC status
     if should_run_check('clearpass_nac', a.severity):
         try:
-            # TODO: Endpoint is not available on GEN6.
             if firewall_info['firewall_generation'] == 6:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Clearpass/NAC API endpoint is not available on GEN6 firewalls.")
                 clearpass_base = None
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Clearpass/NAC is not available on Gen6 firewalls.")
             else:
                 clearpass_base = get_request(api_base, api_session, '/api/sonicos/network-access-control/clearpass/base', silent=silent)
 
@@ -3483,7 +3487,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 update_routine_results(routine_results, firewall, 'clearpass_base', clearpass_base)
 
             if firewall_info['firewall_generation'] == 6:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Clearpass/NAC API endpoint is not available on GEN6 firewalls.")
+                # print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Clearpass/NAC is not available on GEN6 firewalls.")
                 clearpass_servers = None
             else:
                 clearpass_servers = get_request(api_base, api_session, '/api/sonicos/network-access-control/clearpass/servers', silent=silent)
@@ -3501,8 +3505,11 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                 clearpass_servers['clearpass_servers'] = cp_servers
                 update_routine_results(routine_results, firewall, 'clearpass_servers', clearpass_servers)
             elif not clearpass_servers:
-                if not silent:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Clearpass/NAC is enabled but no servers found.")
+                if firewall_info['firewall_generation'] == 6:
+                    pass
+                else:
+                    if not silent:
+                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Clearpass/NAC is enabled but no servers found.")
         except Exception as e:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving Clearpass/NAC information: {e}")
@@ -3559,9 +3566,9 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
                     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No SNMP users found")
                     print(type(snmpv3_users), "->", snmpv3_users)
                     print()
-        except Exception as e:
+        except Exception as err:
             if not silent:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SNMP users: {e}")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving SNMP users: {err}")
     else:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping SNMP user check (severity: {get_check_severity('snmp_users')}, filter: {a.severity})")
         update_routine_results(routine_results, firewall, 'skipped_checks', data=['snmp_users'])
@@ -3572,9 +3579,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # Cloud Secure Edge (CSE)
     if should_run_check('cloud_secure_edge', a.severity):
         try:
-            # TODO: Endpoint is not available on GEN6.
             if firewall_info['firewall_generation'] == 6:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Cloud Secure Edge (CSE) API endpoint is not available on GEN6 firewalls.")
+                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Cloud Secure Edge (CSE) is not available on GEN6 firewalls.")
                 cse_info = None
             else:
                 cse_info = get_request(api_base, api_session, '/api/sonicos/cloud-secure-edge/base', silent=silent)
@@ -3590,10 +3596,13 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
                 update_routine_results(routine_results, firewall, 'cse_info', cse_info)
             else:
-                if not silent:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No CSE information found")
-                    print(type(cse_info), "->", cse_info)
-                    print()
+                if firewall_info['firewall_generation'] == 6:
+                    pass
+                else:
+                    if not silent:
+                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No CSE information found")
+                        print(type(cse_info), "->", cse_info)
+                        print()
         except Exception as e:
             if not silent:
                 print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving CSE information: {e}")
@@ -3711,11 +3720,9 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # Settings/TSR scheduled exports
     if should_run_check('scheduled_exports', a.severity):
         try:
-            # TODO: Need to confirm the endpoint on GEN6.
             if firewall_info['firewall_generation'] == 6:
                 # scheduled_exports = get_request(api_base, api_session, '/api/sonicos/ftp/', silent=silent)
-                scheduled_exports = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Settings/TSR scheduled exports API endpoint is not available on GEN6 firewalls.")
+                scheduled_exports = alt_session.get_scheduled_reports()
             else:
                 scheduled_exports = get_request(api_base, api_session, '/api/sonicos/ftp/base', silent=silent)
 
@@ -3747,12 +3754,10 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print()
 
     # Dynamic External Address Objects
-    # TODO: No API endpoint or CLI config path available on Gen 6 firewalls
     if should_run_check('dynamic_address_objects', a.severity):
         try:
             if firewall_info['firewall_generation'] == 6:
-                dynamic_address_objects = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Dynamic Address Objects are not available on SonicOS Gen 6 firewalls.")
+                dynamic_address_objects = alt_session.get_dynamic_external_address_objects()
             else:
                 dynamic_address_objects = get_request(api_base, api_session, '/api/sonicos/dynamic-external-objects', silent=silent)
 
@@ -4126,7 +4131,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print()
 
     # SSO Agents
-    if not should_run_check('sso_agents', a.severity):
+    if should_run_check('sso_agents', a.severity):
         try:
             sso_agents = get_request(api_base, api_session, '/api/sonicos/user/sso/agents', silent=silent)
             if sso_agents:
@@ -4279,10 +4284,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # 3rd Party SSO API Clients
     if should_run_check('sso_api_clients', a.severity):
         try:
-            # TODO: 3rd party SSO API does not have an API endpoint or CLI config path.
             if firewall_info['firewall_generation'] == 6:
-                sso_api_clients = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping 3rd Party SSO API Clients check on Gen 6 firewalls.")
+                sso_api_clients = alt_session.get_sso_api_clients()
             else:
                 sso_api_clients = get_request(api_base, api_session, '/api/sonicos/user/sso/third-party-api/clients', silent=silent)
 
@@ -4388,10 +4391,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # TACACS+ Servers (Users > Settings > Accounting > TACACS+)
     if should_run_check('tacacs_accounting_servers', a.severity):
         try:
-            # TODO: Endpoint does not exist on Gen 6 firewalls
             if firewall_info['firewall_generation'] == 6:
-                tacacs_servers = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping TACACS+ Servers check on Gen 6 firewalls.")
+                tacacs_servers = alt_session.get_tacacs_accounting_servers()
             else:
                 tacacs_servers = get_request(api_base, api_session, '/api/sonicos/user/tacacs/accounting/servers', silent=silent)
 
@@ -4446,12 +4447,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     if should_run_check('sfr_reporting', a.severity):
         try:
             if firewall_info['firewall_generation'] == 6:
-                # TODO: I have not found an endpoint that provides the SFR mailing settings on Gen 6 firewalls.
-                #   Additionally, there appears to be no CLI command to view or set these settings.
-                # sfr = get_request(api_base, api_session, '/api/sonicos/appflow/settings', silent=silent)
-                # print(sfr)
-                sfr = None
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: AppFlow SFR Mailing settings cannot be retrieved on Gen 6 firewalls at this time.")
+                sfr = alt_session.get_sfr_mailing_settings()
             else:
                 sfr = get_request(api_base, api_session, '/api/sonicos/appflow/sfr-mailing/base', silent=silent)
 
@@ -4615,18 +4611,22 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print()
 
     # Advanced Routing Protocols (RIP, OSPFv2, BGP)
-    # TODO: Seems there is no endpoint to get this data on Gen6.
     if should_run_check('advanced_routing', a.severity):
         if firewall_info['firewall_generation'] == 6:
-            routing_adv_data = None
-            print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Advanced Routing Protocols information cannot be retrieved on Gen 6 firewalls at this time.")
+            # The direct/cli endpoint won't work because SonicOS responds with a blank routing dictionary.
+            bgp_adv_data = post_request_direct_cli(api_base, api_session, 'show routing bgp', silent=silent)
+            bgp_adv_data = bgp_adv_data.get('routing', {}).get('bgp', False)
+
+            # Uses the alternate session instead.
+            routing_adv_data = alt_session.get_advanced_routing_settings()
         else:
             routing_adv_data = get_request(api_base, api_session, '/api/sonicos/dynamic-file/getAdvancedRoutingData.json', silent=silent)
+            bgp_adv_data = False
 
         if routing_adv_data:
             try:
                 adv_routing_enabled = routing_adv_data.get('data', {}).get('ipv4', {}).get('advancedRoutingEnabled', False)
-                bgp_enabled = routing_adv_data.get('data', {}).get('ipv4', {}).get('isBGPEnabled', False)
+                bgp_enabled = routing_adv_data.get('data', {}).get('ipv4', {}).get('isBGPEnabled', False) or bgp_adv_data
                 routing_interfaces = routing_adv_data.get('data', {}).get('ipv4', {}).get('interfaces', [])
                 routing_data = []
                 for intf in routing_interfaces:
@@ -4652,18 +4652,39 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
                     if intf_rip == 'disabled':
                         intf_rip = False
+                        routing_data_entry['rip_enabled'] = False
+                    elif isinstance(intf_rip, bool) and intf_rip:
+                        intf_rip = True
+                        routing_data_entry['rip_enabled'] = True
+                    elif isinstance(intf_rip, bool) and not intf_rip:
+                        intf_rip = False
+                        routing_data_entry['rip_enabled'] = False
                     else:
                         intf_rip = True
                         routing_data_entry['rip_enabled'] = True
 
                     if intf_ospfv2 == 'disabled':
                         intf_ospfv2 = False
+                        routing_data_entry['ospfv2_enabled'] = False
+                    elif isinstance(intf_ospfv2, bool) and intf_ospfv2:
+                        intf_ospfv2 = True
+                        routing_data_entry['ospfv2_enabled'] = True
+                    elif isinstance(intf_ospfv2, bool) and not intf_ospfv2:
+                        intf_ospfv2 = False
+                        routing_data_entry['ospfv2_enabled'] = False
                     else:
                         intf_ospfv2 = True
                         routing_data_entry['ospfv2_enabled'] = True
 
                     if intf_ospfv2_authentication == 'disabled':
                         intf_ospfv2_authentication = False
+                        routing_data_entry['ospfv2_authentication'] = False
+                    elif isinstance(intf_ospfv2_authentication, bool) and intf_ospfv2_authentication:
+                        intf_ospfv2_authentication = True
+                        routing_data_entry['ospfv2_authentication'] = True
+                    elif isinstance(intf_ospfv2_authentication, bool) and not intf_ospfv2_authentication:
+                        intf_ospfv2_authentication = False
+                        routing_data_entry['ospfv2_authentication'] = False
                     else:
                         intf_ospfv2_authentication = True
                         routing_data_entry['ospfv2_authentication'] = True
@@ -4704,10 +4725,8 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
     # Cellular WWAN
     if should_run_check('cellular_wwan', a.severity):
         try:
-            # TODO: Seems to be no API endpoint for this on Gen 6 firewalls.
             if firewall_info['firewall_generation'] == 6:
-                cellular = []
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: WWAN modem information cannot be retrieved on Gen 6 firewalls at this time.")
+                cellular = alt_session.get_cellular_wwan_settings()
             else:
                 cellular = get_request(api_base, api_session, '/api/sonicos/reporting/wwan', silent=silent)
 

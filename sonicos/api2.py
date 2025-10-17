@@ -1,5 +1,7 @@
 import time
 import re
+from xml.etree.ElementTree import indent
+
 import requests
 import hashlib
 import os
@@ -705,6 +707,345 @@ class Login:
                 }
             }
             return rd
+
+    # Function to get the AWS API page
+    def get_aws_api(self):
+        # print("\nTrying to get AWS API page...")
+        # response = self.get_request("awsConfig.html", print_content=False)
+        response = self.get_request("awsLogs.html", print_content=False)
+        if response.status_code == 200:
+            # print("AWS API page retrieved successfully!")
+            aws_logging_enabled = re.search(r'var awsLogEnable = "CHECKED"', response.text)
+            aws_region = re.search(r'var awsRegion = "(.*)"', response.text)
+            aws_access_key_id = re.search(r'var awsAccessKeyId = "(.*)"', response.text)
+            aws_log_group_name = re.search(r'var awsLogGroupName = "(.*)"', response.text)
+            aws_steam_name = re.search(r'var awsLogStreamName = "(.*)"', response.text)
+
+            if aws_logging_enabled:
+                aws_logging_enabled = True
+            else:
+                aws_logging_enabled = False
+
+            if aws_region:
+                aws_region = aws_region.group(1)
+            else:
+                aws_region = ""
+
+            if aws_access_key_id:
+                aws_access_key_id = aws_access_key_id.group(1)
+            else:
+                aws_access_key_id = ""
+
+            if aws_log_group_name:
+                aws_log_group_name = aws_log_group_name.group(1)
+            else:
+                aws_log_group_name = ""
+
+            if aws_steam_name:
+                aws_steam_name = aws_steam_name.group(1)
+            else:
+                aws_steam_name = ""
+
+            data = {
+                "log": {
+                    "aws": {
+                        "enable": aws_logging_enabled,
+                        "region": aws_region,
+                        "access_key_id": aws_access_key_id,
+                        "log_group_name": aws_log_group_name,
+                        "log_stream_name": aws_steam_name
+                    }
+                }
+            }
+
+            return data
+        else:
+            print("Failed to retrieve AWS API page.")
+            return None
+
+    # Function to get the TACACS Authentication servers.
+    def get_tacacs_servers(self):
+        response = self.get_request("tacacsProps.html", print_content=False)
+        if response.status_code == 200:
+            tacacs_servers = []
+            tacacs_entries = re.findall(r'tacSrvrArray\[(\d+)\]\s*=\s*new\s*TacacsServer\((.*?)\);', response.text, re.DOTALL)
+            for entry in tacacs_entries:
+                index = entry[0]
+                values = [v.strip().strip('"') for v in entry[1].split(",")]
+                if len(values) >= 6:
+                    server_info = {
+                        "host": values[0] or "",
+                        "port": values[1] or 0,
+                        "enable": values[5] or False,
+                    }
+                    tacacs_servers.append(server_info)
+
+            data = {
+                'user': {
+                    'tacacs': tacacs_servers
+                }
+            }
+
+            return data
+        else:
+            print("Failed to retrieve TACACS servers.")
+            return None
+
+    # Function to get the TACACS Accounting servers
+    def get_tacacs_accounting_servers(self):
+        response = self.get_request("tacacsAcctProps.html", print_content=False)
+        if response.status_code == 200:
+            tacacs_accounting_servers = []
+            tacacs_acc_entries = re.findall(r'tacAcctSrvrArray\[(\d+)\]\s*=\s*new\s*TacAcctSrvr\((.*?)\);', response.text, re.DOTALL)
+            for entry in tacacs_acc_entries:
+                values = [v.strip().strip('"') for v in entry[1].split(",")]
+                server_info = {
+                    "host": values[0] or "",
+                    "port": values[1] or 0,
+                    "enable": values[4] or False,
+                    "shared_secret": "not_extracted"
+                }
+                tacacs_accounting_servers.append(server_info)
+
+            data = {
+                'user': {
+                    'tacacs': {
+                        'accounting': {
+                            'server': tacacs_accounting_servers
+                        }
+                    }
+                }
+            }
+
+            return data
+        else:
+            print("Failed to retrieve TACACS accounting servers.")
+            return None
+
+    # Function to get the Settings/TSR Scheduled Reports
+    def get_scheduled_reports(self):
+        response = self.get_request("cloudBackupSettings.html", print_content=False)
+        if response.status_code == 200:
+            ftp_server = re.search(r'var gFtpServerAddr = \'(.*)\';', response.text)
+            ftp_user = re.search(r'var gFtpUser = \'(.*)\';', response.text)
+            ftp_password = re.search(r'var gFtpPwd = \'(.*)\';', response.text)
+
+            data = {
+                'server': ftp_server.group(1),
+                'user': ftp_user.group(1),
+                'password': ftp_password.group(1)
+            }
+
+            return data
+        else:
+            print("Failed to retrieve scheduled reports.")
+            return None
+
+    # Function to get the Dynamic External Address Objects
+    def get_dynamic_external_address_objects(self):
+        response = self.get_request("getObjectList.json?type=2056", print_content=False)
+        if response.status_code == 200:
+            response = response.json()
+            response = response.get('dynObjArray', [])
+            dynamic_objects = []
+            for entry in response:
+                obj_info = {
+                    "type": entry['dynGroupType'] or "",
+                    "name": entry['name'] or "",
+                    "protocol": "ftp" if entry['dynGroupProtocol'] == 1 else "https" if entry['dynGroupProtocol'] == 2 else "",
+                    "server": {"value": entry['dynGroupFtpServerAddr'] or ""},
+                    "login": entry['dynGroupFtpUser'] or "",
+                    "url": entry['dynGroupUrlName'] or "",
+                }
+                dynamic_objects.append(obj_info)
+
+            data = {
+                'dynamic_external_objects': dynamic_objects
+            }
+
+            return data
+        else:
+            print("Failed to retrieve dynamic external address objects.")
+            return None
+
+    # Function to get the SSO 3rd Party API Clients
+    def get_sso_api_clients(self):
+        response = self.get_request("ssoAuthProps.html", print_content=False)
+        if response.status_code == 200:
+            api_client_array = re.findall(r'restApiClientArray\[(\d+)\]\s*=\s*new\s*RestApiClient\((.*?)\);', response.text, re.DOTALL)
+            api_clients = []
+            for entry in api_client_array:
+                values = [v.strip().strip('"') for v in entry[1].split(",")]
+                client_info = {
+                    "host": values[0] or "",
+                    "shared_secret": "not_extracted",
+                }
+                api_clients.append(client_info)
+
+            data = {
+                'user': {
+                    'sso': {
+                        'third_party_api': {
+                            'client': api_clients
+                        }
+                    }
+                }
+            }
+
+            return data
+        else:
+            print("Failed to retrieve SSO API clients.")
+            return None
+
+    # Function to get the SFR Mailing configuration
+    def get_sfr_mailing_settings(self):
+        response = self.get_request("logNetFlowView.html", print_content=False)
+        if response.status_code == 200:
+            sfr_reporting_enabled = re.search(r'id="appVizActionEmail" name="appVizActionEmail" CHECKED', response.text)
+            sfr_smtp_auth = re.search(r'id="appVizSmtpAuthEnable" name="appVizSmtpAuthEnable" CHECKED', response.text)
+            sfr_pop_auth = re.search(r'id="appVizEmailPopBeforeSmtp" name="appVizEmailPopBeforeSmtp" CHECKED', response.text)
+            sfr_server = re.search(r'id="appVizEmailServerName"\s+name="appVizEmailServerName"\s+value="(.*)"\s+', response.text)
+            sfr_server_pop = re.search(r'id="appVizEmailPopServerAddr"\s+name="appVizEmailPopServerAddr"\s+value="(.*)"\s+', response.text)
+            sfr_username = re.search(r'id="appVizSmtpAuthName"\s+name="appVizSmtpAuthName"\s+value="(.*)"\s+', response.text)
+            sfr_password = re.search(r'id="appVizSmtpAuthPassword"\s+name="appVizSmtpAuthPassword"\s+value="(.*)"\s+', response.text)
+            sfr_username_pop = re.search(r'id="appVizEmailUser"\s+name="appVizEmailUser"\s+value="(.*)"\s+', response.text)
+            sfr_password_pop = re.search(r'id="appVizEmailPwd"\s+name="appVizEmailPwd"\s+value="(.*)"\s+', response.text)
+
+            data = {
+                'appflow': {
+                    'sfr_mailing': {
+                        'send_email': True if sfr_reporting_enabled else False,
+                        'smtp_auth': True if sfr_smtp_auth else False,
+                        'pop_before_smtp': True if sfr_pop_auth else False,
+                        'smtp_server_host': sfr_server.group(1) if sfr_server else "",
+                        'pop_server_address': sfr_server_pop.group(1) if sfr_server_pop else "",
+                        'smtp_user': sfr_username.group(1) if sfr_username else "",
+                        'smtp_pass': sfr_password.group(1) if sfr_password else "",
+                        'pop_username': sfr_username_pop.group(1) if sfr_username_pop else "",
+                        'pop_pass': sfr_password_pop.group(1) if sfr_password_pop else "",
+                    }
+                }
+            }
+
+            return data
+        else:
+            print("Failed to retrieve SFR mailing settings.")
+            return None
+
+    def get_cellular_wwan_settings(self):
+        response = self.get_request("netDialupProfilesView.html", print_content=False)
+        if response.status_code == 200:
+            profile_list = []
+            wwan_conn_profiles = re.findall(r'dupObjArray\[(\d+)\]\s*=\s*new\s*dupObj\((.*?)\);', response.text, re.DOTALL)
+
+            # We're assuming WWAN is enabled if there are connection profiles configured.
+            for pro in wwan_conn_profiles:
+                values = [v.strip().strip('"') for v in pro[1].split(",")]
+                p = {
+                    'modem_attached': 1,  # Simulating modem attached when profiles exist
+                    'vendor_name': values[1] or None,  # Provider and Plan Type
+                }
+                profile_list.append(p)
+
+            return profile_list
+        else:
+            print("Failed to retrieve cellular WWAN settings.")
+            return None
+
+    def get_advanced_routing_settings(self):
+        # RIP
+        routing_interfaces = []
+        rip_response = self.get_request("getRouteList.json?reqType=4096", print_content=False)
+        if rip_response.status_code == 200:
+            rip_response = rip_response.json()
+            routed_ifs = rip_response.get('routedIfs', '')
+
+            if len(routed_ifs) > 0:
+                # Lines are separated by '|', first line is the header with key names
+                lines = routed_ifs.split('|')
+                key_names = lines[0].strip().split(',')
+
+                # Creates a list of dictionaries for each route interface entry
+                for line in lines[1:]:
+                    values = line.strip().split(',')
+                    route_info = dict(zip(key_names, values))
+                    int_name = route_info.pop('ifName', 'N/A').strip('"')
+                    int_zone = route_info.pop('zoneName', '"N/A"').strip('"')
+                    int_num = route_info.pop('iface', '')
+
+                    if route_info['rip'].lower() == 'rip enabled':
+                        # RIP individual interface settings
+                        int_response = self.get_request(f"ZRipSettingsGenEnum_{int_num}.html", print_content=False)
+                        if int_response.status_code == 200:
+                            # We can detect the "Simple Password" or "Message Digest" selections to see if a password would be required.
+                            rip_use_password = re.search(r'<input type="checkbox"\s+name="ZRipUsePassword"\s+CHECKED', int_response.text)
+                            route_info['rip_auth'] = True if rip_use_password else False
+
+                    int_dict = {
+                        'name': int_name,
+                        'zone': int_zone,
+                        'RIP': {
+                            'status': True if route_info['rip'].lower() == 'rip enabled' else False,
+                            'password': 'not_extracted' if route_info.get('rip_auth', False) else ''
+                        },
+                    }
+                    routing_interfaces.append(int_dict)
+        else:
+            print("Failed to retrieve RIP routing settings.")
+
+        # OSPFv2
+        ospf_response = self.get_request("/getRouteList.json?reqType=256", print_content=False)
+        if ospf_response.status_code == 200:
+            ospf_response = ospf_response.json()
+            ospf_routed_ifs = ospf_response.get('routedIfs', '')
+
+            if len(ospf_routed_ifs) > 0:
+                # Lines are separated by '|', first line is the header with key names
+                lines = ospf_routed_ifs.split('|')
+                key_names = lines[0].strip().split(',')
+
+                # Creates a list of dictionaries for each route entry
+                for line in lines[1:]:
+                    values = line.strip().split(',')
+                    route_info = dict(zip(key_names, values))
+                    int_name = route_info.pop('ifName', 'N/A').strip('"')
+                    int_num = route_info.pop('iface', '')
+
+                    if route_info['ospf'].lower() == 'ospf enabled':
+                        # OSPFv2 individual interface settings
+                        int_response = self.get_request(f"ospfSettingsGenEnum_{int_num}.html", print_content=False)
+                        if int_response.status_code == 200:
+                            # We can detect the "Simple Password" or "Message Digest" selections to see if a password would be required.
+                            simple_password = re.search(r'<option value="\d+"\s+SELECTED>Simple Password\s+</option>', int_response.text)
+                            msg_digest = re.search(r'<option value="\d+"\s+SELECTED>Message Digest\s+</option>', int_response.text)
+                            route_info['ospf_auth'] = True if simple_password or msg_digest else False
+
+                    # Find the corresponding interface in routing_interfaces
+                    for intf in routing_interfaces:
+                        if intf['name'] == int_name:
+                            intf['OSPFv2'] = {'status': True if route_info['ospf'].lower() == 'ospf enabled' else False}
+                            intf['OSPFv2']['authentication'] = route_info.get('ospf_auth', False)
+                            intf['OSPFv2']['password'] = 'not_extracted' if route_info.get('ospf_auth', False) else ''
+                            break
+        else:
+            print("Failed to retrieve OSPF routing settings.")
+
+        if len(routing_interfaces) > 0:
+            data = {
+                'data': {
+                    'ipv4': {
+                        'interfaces': routing_interfaces
+                    }
+                }
+            }
+            return data
+        else:
+            print("Failed to retrieve advanced routing settings.")
+            return None
+
+    # TODO: Create a function to get the Extended Switches, Switch Users, and Switch RADIUS Servers.
+
+
 
 
 # Test
