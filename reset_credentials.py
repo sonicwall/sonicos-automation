@@ -2,7 +2,6 @@
 import json
 from typing import Optional, List
 from os import path, mkdir
-from time import sleep
 from common.banner import print_banner
 from common.utils import (
     generate_timestamp,
@@ -12,14 +11,9 @@ from common.arguments import get_parser
 from sonicos.api import (
     get_request,
     post_request,
-    put_request,
-    patch_request,
     commit_pending,
     logout,
     disable_sonicos_api_ssh,
-    download_tsr,
-    download_tracelog,
-    export_preferences,
     get_ssh_session,
     get_users_ssh,
     force_password_change_ssh,
@@ -325,64 +319,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print()
 
     # List WAN interfaces (check for L2TP/PPTP/PPPoE/WWAN)
-    if should_run_check('wan_interfaces', a.severity):
-        try:
-            interfaces = get_request(api_base, api_session, '/api/sonicos/interfaces/ipv4', silent=silent)
-            if interfaces:
-                wan_interfaces = []
-                wan_list = []
-                for intf in interfaces.get('interfaces', []):
-                    if intf.get('ipv4', {}).get('ip_assignment', {}).get('zone', '') == 'WAN':
-                        wan_interfaces.append(intf)
-
-                if len(wan_interfaces) > 0:
-                    # if not silent:
-                    #     print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {len(wan_interfaces)} WAN interface(s) configured.")
-                    for intf in wan_interfaces:
-                        intf_name = intf.get('ipv4', {}).get('name', '')
-                        intf_mode = intf.get('ipv4', {}).get('ip_assignment', {}).get('mode', None)
-                        pppoe = False
-                        pptp = False
-                        l2tp = False
-                        dhcp = False
-                        static = False
-                        if intf_mode:
-                            pppoe = intf.get('ipv4', {}).get('ip_assignment', {}).get('mode', {}).get('pppoe', False)
-                            pptp = intf.get('ipv4', {}).get('ip_assignment', {}).get('mode', {}).get('pptp', False)
-                            l2tp = intf.get('ipv4', {}).get('ip_assignment', {}).get('mode', {}).get('l2tp', False)
-                            dhcp = intf.get('ipv4', {}).get('ip_assignment', {}).get('mode', {}).get('dhcp', False)
-                            static = intf.get('ipv4', {}).get('ip_assignment', {}).get('mode', {}).get('static', False)
-                        intf_type = 'PPPoE' if pppoe else 'PPTP' if pptp else 'L2TP' if l2tp else 'DHCP' if dhcp else 'Static' if static else intf_mode
-
-                        if intf_type != 'Static' and intf_type != 'DHCP':
-                            wan_list.append(intf_name)
-                            # if not silent:
-                            #     print(f"  - {intf_name} ({intf_type})")
-                else:
-                    if not silent:
-                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No WAN interfaces found.")
-
-                if len(wan_list) > 0:
-                    if not silent:
-                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Found {len(wan_interfaces)} PPPoE/PPTP/L2TP WAN interface(s) configured.")
-                        print(f"WAN Interfaces using PPPoE/PPTP/L2TP: {', '.join(wan_list)}")
-                else:
-                    if not silent:
-                        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No PPPoE/PPTP/L2TP WAN interfaces found.")
-
-                wan_interfaces = {"interesting_wan_list": wan_list, "wan_interfaces": wan_interfaces}
-                update_routine_results(routine_results, firewall, 'wan_interfaces', wan_interfaces)
-            else:
-                if not silent:
-                    print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: No interfaces found")
-                    print(type(interfaces), "->", interfaces)
-                    print()
-        except Exception as e:
-            if not silent:
-                print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error retrieving interfaces: {e}")
-    else:
-        print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Skipping WAN interface check (severity: {get_check_severity('wan_interfaces')}, filter: {a.severity})")
-        update_routine_results(routine_results, firewall, 'skipped_checks', data=['wan_interfaces'])
+    pb.check_wan_interfaces()
 
     if not silent:
         print()
@@ -596,8 +533,6 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
 
     if not silent:
         print()
-
-    # TODO: The checks above need to be compiled into functions to reduce the size of this routine function.
 
     # Process user operations (if enabled)
     print()
