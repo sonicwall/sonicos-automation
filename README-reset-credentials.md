@@ -247,10 +247,10 @@ All files are stored locally and not transmitted externally.
 
 ### Version Compatibility
 
-| SonicOS Generation | API Support | Supported Features                                                                  |
-|-------------------|--------------|-------------------------------------------------------------------------------------|
-| Generation 6      | Limited      | Most analysis is functional, some cals do not work. TOTP currently cannot be reset. |
-| Generation 7      | Full         | Complete analysis, All features available.                                          |
+| SonicOS Generation | SonicOS API Support | Supported Features                                                                                                     |
+|--------------------|---------------------|------------------------------------------------------------------------------------------------------------------------|
+| Generation 6       | Limited API         | Complete analysis, except of features that are unavailable on Gen6, such as Clearpass/NAC and Cloud Secure Edge (CSE). |
+| Generation 7       | Full API            | Complete analysis can be performed.                                                                                    |
 
 
 ### Support
