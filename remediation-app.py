@@ -242,16 +242,22 @@ def test_connection():
     logger.info(f"Received {request.method} -> {request.url}")
     if request.method == 'POST':
         try:
-            # Extracts form data from the request form data
-            data = request.form.to_dict()
+            # Extract JSON data from the request body (not form data)
+            data = request.get_json()
+            if not data:
+                logger.error("test_connection(): No JSON data received")
+                return {'success': False, 'error': 'No data received', 'function': 'test_connection() 0'}, 400
+
             logger.info(f"test_connection(): Received data: {data}")
 
             # Load the target from form data
             target = load_targets(data)
             target_numbers = (1, 1)  # Single target (1 of 1)
 
-            if int(data.get('sshport', 0)) == 0 or str(data.get('sshport', '')) == "no":
-                print(f"{generate_timestamp()}: INFO: SSH logic is disabled.")
+            logger.info(target)
+
+            if target.sshport == 0:
+                logger.info(f"SSH logic is disabled.")
 
             # Initialize a session with the firewall.
             api_session, return_msg, api_base, username, password = initialize_session(target,
@@ -277,6 +283,15 @@ def test_connection():
                 logger.error(f"Error gathering firewall information: {error_msg}")
                 # return False, f"Error gathering firewall information: {error_msg}"
                 return {'success': False, 'error': error_msg, 'function': 'test_connection() 2'}, 400
+
+            # Successfully connected and gathered info
+            logger.info(f"Successfully connected to firewall: {firewall_info}")
+
+            # Log out from the session
+            try:
+                logout(api_base, api_session, firewall_generation=firewall_info.get('firewall_generation', None))
+            except Exception as e:
+                logger.error(f"Error logging out: {e}")
 
             return {'success': True, 'data': data, 'firewall_info': firewall_info, 'return_msg': return_msg}, 200
         except Exception as e:
@@ -350,8 +365,8 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
             password=normalize_password(password=target_input.get('password')),
             sshport=target_input.get('sshport'),
             temp_password=normalize_temp_password(password=target_input.get('temp_password'),
-                                                  randomize=normalize_boolean(target_input.get('randomize_password'))),
-            randomize_temp_password=normalize_boolean(target_input.get('randomize_password')),
+                                                  randomize=normalize_boolean(target_input.get('randomize_temp_password'))),
+            randomize_temp_password=normalize_boolean(target_input.get('randomize_temp_password')),
             unbind_totp=normalize_boolean(target_input.get('unbind_totp')),
             force_password_change=normalize_boolean(target_input.get('force_password_change'))
         )
