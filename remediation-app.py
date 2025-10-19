@@ -247,26 +247,20 @@ def test_connection():
             if not data:
                 logger.error("test_connection(): No JSON data received")
                 return {'success': False, 'error': 'No data received', 'function': 'test_connection() 0'}, 400
-
             logger.info(f"test_connection(): Received data: {data}")
 
             # Load the target from form data
             target = load_targets(data)
             target_numbers = (1, 1)  # Single target (1 of 1)
-
             logger.info(target)
 
             errors = []
-
             if target.firewall is None or target.firewall.strip() == "":
                 errors.append(f"Firewall IP/Hostname is required.")
-
             if target.username is None or target.username.strip() == "":
                 errors.append(f"Username is required.")
-
             if target.password is None or target.password.strip() == "":
                 errors.append(f"Password is required.")
-
             if errors:
                 return {'success': False, 'error': "<br>".join(errors), 'function': 'test_connection() 0.1'}, 400
 
@@ -282,12 +276,6 @@ def test_connection():
 
             if api_session is None or api_session is False:
                 logger.error(f"Error: Unable to create an admin session. Return message: {return_msg}")
-
-                # Write error results and return
-                # routine_results[firewall] = dict(sorted(routine_results[firewall].items()))
-                # results_str = json.dumps(routine_results[firewall], indent=4)
-                # write_to_file(f"\n{results_str}\n", filename=f"{constants.START_TIMESTAMP_FOLDER}/{target_numbers[0]}results.txt")
-                # return False, return_msg
                 return {'success': False, 'error': return_msg, 'function': 'test_connection(), 1'}, 400
 
             # Gather firewall information
@@ -295,7 +283,6 @@ def test_connection():
             firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=False)
             if firewall_info is None:
                 logger.error(f"Error gathering firewall information: {error_msg}")
-                # return False, f"Error gathering firewall information: {error_msg}"
                 return {'success': False, 'error': error_msg, 'function': 'test_connection() 2'}, 400
 
             # Successfully connected and gathered info
@@ -303,6 +290,7 @@ def test_connection():
 
             # If we enabled SonicOS API via SSH, disable it now
             if constants.get_autoenabled_sonicos_api():
+                firewall_info['api_autoenabled'] = True  # Flag for the web app to display conditional message
                 disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
 
             # Log out from the session
@@ -325,18 +313,81 @@ def test_connection():
 @app.route('/single', methods=['POST', 'GET'])
 def single_target():
     """Proxy endpoint that accepts the single target form data from the web app and triggers the routine for a single device."""
-    logger.info(f"Received {request.method} to /single endpoint")
+    logger.info(f"Received {request.method} -> {request.url}")
     if request.method == 'POST':
-        print(request.method, request.url)
-        print(request)
-        print(request.form)
-    elif request.method == 'GET':
-        print(request.method, request.url)
-        print(request)
-        print(request.args)
-        return {'message': 'Use POST method to submit single target data'}, 200
+        try:
+            # Extract JSON data from the request body (not form data)
+            data = request.get_json()
+            if not data:
+                logger.error("single_target(): No JSON data received")
+                return {'success': False, 'error': 'No data received', 'function': 'single_target() 0'}, 400
+            logger.info(f"single_target(): Received data: {data}")
 
-    return {'method': request.method}, 200
+            # Load the target from form data
+            target = load_targets(data)
+            target_numbers = (1, 1)  # Single target (1 of 1)
+            logger.info(target)
+
+            errors = []
+            if target.firewall is None or target.firewall.strip() == "":
+                errors.append(f"Firewall IP/Hostname is required.")
+            if target.username is None or target.username.strip() == "":
+                errors.append(f"Username is required.")
+            if target.password is None or target.password.strip() == "":
+                errors.append(f"Password is required.")
+            if errors:
+                return {'success': False, 'error': "<br>".join(errors), 'function': 'single_target() 0.1'}, 400
+
+            if target.sshport == 0:
+                logger.info(f"SSH logic is disabled.")
+
+            # Initialize a session with the firewall.
+            api_session, return_msg, api_base, username, password = initialize_session(target,
+                                                                                       target_numbers,
+                                                                                       username=target.username,
+                                                                                       password=target.password,
+                                                                                       sshport=target.sshport)
+
+            if api_session is None or api_session is False:
+                logger.error(f"Unable to create an admin session. Return message: {return_msg}")
+
+                # Write error results and return
+                # routine_results[firewall] = dict(sorted(routine_results[firewall].items()))
+                # results_str = json.dumps(routine_results[firewall], indent=4)
+                # write_to_file(f"\n{results_str}\n", filename=f"{constants.START_TIMESTAMP_FOLDER}/{target_numbers[0]}results.txt")
+                # return False, return_msg
+                return {'success': False, 'error': return_msg, 'function': 'single_target(), 1'}, 400
+
+            # Gather firewall information
+            # TODO: Silent mode?
+            firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=False)
+            if firewall_info is None:
+                logger.error(f"Error gathering firewall information: {error_msg}")
+                return {'success': False, 'error': error_msg, 'function': 'single_target() 2'}, 400
+
+            # Successfully connected and gathered info
+            logger.info(f"Successfully connected to firewall: {firewall_info}")
+
+            # If we enabled SonicOS API via SSH, disable it now
+            if constants.get_autoenabled_sonicos_api():
+                firewall_info['api_autoenabled'] = True  # Flag for the web app to display conditional message
+                disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
+
+            # Log out from the session
+            try:
+                logout(api_base, api_session, firewall_generation=firewall_info.get('firewall_generation', None))
+            except Exception as e:
+                logger.error(f"Error logging out: {e}")
+
+            # Reset auto-enabled SonicOS API flag for each new firewall
+            if constants.get_autoenabled_sonicos_api() is True:
+                constants.set_autoenabled_sonicos_api(False)
+
+            return {'success': True, 'data': data, 'firewall_info': firewall_info, 'return_msg': return_msg}, 200
+        except Exception as e:
+            logger.error(f"test_connection(): Error processing request data: {e}")
+            return {'success': False, 'error': str(e), 'function': 'test_connection() 3'}, 400
+    return {'error': 'Method not supported'}, 405
 
 
 def main():
