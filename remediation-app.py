@@ -256,6 +256,26 @@ def test_connection():
 
             logger.info(target)
 
+            errors = []
+
+            if target.firewall is None or target.firewall.strip() == "":
+                logger.error(f"Firewall IP/Hostname is required.")
+                errors.append(f"Firewall IP/Hostname is required.")
+                # return {'error': "SonicOS management IP/Hostname is required."}, 200
+
+            if target.username is None or target.username.strip() == "":
+                logger.error(f"Username is required.")
+                errors.append(f"Username is required.")
+                # return {'error': "SonicOS management username is required."}, 200
+
+            if target.password is None or target.password.strip() == "":
+                logger.error(f"Password is required.")
+                # return {'error': "Password is required."}, 200
+                errors.append(f"Password is required.")
+
+            if errors:
+                return {'success': False, 'error': "<br>".join(errors), 'function': 'test_connection() 0.1'}, 400
+
             if target.sshport == 0:
                 logger.info(f"SSH logic is disabled.")
 

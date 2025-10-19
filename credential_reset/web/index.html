@@ -575,40 +575,78 @@
                         const result = await response.json();
                         console.log('Test connection response:', result);
 
+                        // Remove any existing connection result messages
+                        const existingResult = document.getElementById('connection-result');
+                        if (existingResult) {
+                            existingResult.remove();
+                        }
+
                         if (response.ok && result.success) {
                             // Build a detailed message with firewall info
-                            let message = 'Connection Test Successful!\n';
+                            let messageHtml = '<h4 class="font-medium text-green-800 mb-2">Connection Test Successful!</h4>';
 
                             if (result.firewall_info) {
                                 const info = result.firewall_info;
-                                message += `Model: ${info.device_model || 'N/A'}\n`;
-                                message += `Serial Number: ${info.serial_number || 'N/A'}\n`;
-                                message += `Firmware: ${info.firmware_version || 'N/A'}\n`;
-                                message += `Generation: ${info.firewall_generation || 'N/A'}\n`;
+                                messageHtml += '<div class="bg-green-50 border border-green-200 rounded-md p-3 mt-2">';
+                                messageHtml += '<h5 class="font-semibold text-green-800 mb-2">Firewall Information</h5>';
+                                messageHtml += '<div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">';
+                                messageHtml += `<div><span class="font-medium">Model:</span> ${info.device_model || 'N/A'}</div>`;
+                                messageHtml += `<div><span class="font-medium">Serial Number:</span> ${info.serial_number || 'N/A'}</div>`;
+                                messageHtml += `<div><span class="font-medium">Firmware:</span> ${info.firmware_version || 'N/A'}</div>`;
+                                messageHtml += `<div><span class="font-medium">Generation:</span> ${info.firewall_generation || 'N/A'}</div>`;
 
                                 if (info.management_ip) {
-                                    message += `Management IP: ${info.management_ip}\n`;
+                                    messageHtml += `<div><span class="font-medium">Management IP:</span> ${info.management_ip}</div>`;
                                 }
 
                                 if (info.hostname) {
-                                    message += `Hostname: ${info.hostname}\n`;
+                                    messageHtml += `<div><span class="font-medium">Hostname:</span> ${info.hostname}</div>`;
                                 }
 
                                 // Add any additional key/value pairs that might be in firewall_info
                                 Object.keys(info).forEach(key => {
                                     if (!['device_model', 'serial_number', 'firmware_version', 'rom_version', 'firewall_generation', 'management_ip', 'hostname'].includes(key)) {
-                                        message += `${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}: ${info[key] || 'N/A'}\n`;
+                                        const displayKey = key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+                                        messageHtml += `<div><span class="font-medium">${displayKey}:</span> ${info[key] || 'N/A'}</div>`;
                                     }
                                 });
+
+                                messageHtml += '</div></div>';
                             }
 
                             if (result.return_msg) {
-                                message += `\n${result.return_msg}`;
+                                messageHtml += `<div class="mt-2 text-sm text-green-700">${result.return_msg}</div>`;
                             }
 
-                            alert(message);
+                            // Create success notification
+                            const successDiv = document.createElement('div');
+                            successDiv.id = 'connection-result';
+                            successDiv.className = 'bg-green-50 border border-green-200 rounded-md p-4 mb-4';
+                            successDiv.innerHTML = `<div class="text-green-800">${messageHtml}</div>`;
+
+                            // Insert after the form title
+                            const form = document.getElementById('single-target-form');
+                            form.insertBefore(successDiv, form.firstChild);
+
+                            // Scroll to the result
+                            successDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
                         } else {
-                            alert('Connection Test Failed!\n\n' + (result.error || result.message || 'Unable to connect to the firewall.'));
+                            // Create error notification
+                            const errorDiv = document.createElement('div');
+                            errorDiv.id = 'connection-result';
+                            errorDiv.className = 'bg-red-50 border border-red-200 rounded-md p-4 mb-4';
+                            errorDiv.innerHTML = `<div class="text-red-800">
+                                <h4 class="font-medium mb-2">Connection Test Failed!</h4>
+                                <p class="text-sm">${result.error || result.message || 'Unable to connect to the firewall.'}</p>
+                            </div>`;
+
+                            // Insert after the form title
+                            const form = document.getElementById('single-target-form');
+                            form.insertBefore(errorDiv, form.firstChild);
+
+                            // Scroll to the result
+                            errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
                     } catch (error) {
                         console.error('Test connection error:', error);
@@ -664,6 +702,12 @@
             const existingError = document.getElementById('form-errors');
             if (existingError) {
                 existingError.remove();
+            }
+
+            // Clear any connection result messages
+            const existingResult = document.getElementById('connection-result');
+            if (existingResult) {
+                existingResult.remove();
             }
 
             // Clear any validation feedback messages
