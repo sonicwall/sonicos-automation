@@ -53,7 +53,7 @@ from credential_reset.utils import (
     normalize_boolean,
     create_random_password,
     should_run_check,
-    get_check_severity
+    get_check_severity,
 )
 from credential_reset.firewall import (
     FirewallTarget,
@@ -238,75 +238,85 @@ def health():
 
 @app.route('/test_connection', methods=['POST'])
 def test_connection():
-    """Proxy endpoint that tests connectivity to the single target provided in the form data from the web app."""
+    """Test connectivity using the operation engine with progress tracking."""
     logger.info(f"Received {request.method} -> {request.url}")
     if request.method == 'POST':
         try:
-            # Extract JSON data from the request body (not form data)
+            # Extract JSON data from the request body
             data = request.get_json()
             if not data:
                 logger.error("test_connection(): No JSON data received")
                 return {'success': False, 'error': 'No data received', 'function': 'test_connection() 0'}, 400
+
             logger.info(f"test_connection(): Received data: {data}")
 
-            # Load the target from form data
-            target = load_targets(data)
-            target_numbers = (1, 1)  # Single target (1 of 1)
-            logger.info(target)
+            # Import and use the SERVER operation engine (not PyScript engine)
+            from server_operation_engine import server_operation_engine
 
-            errors = []
-            if target.firewall is None or target.firewall.strip() == "":
-                errors.append(f"Firewall IP/Hostname is required.")
-            if target.username is None or target.username.strip() == "":
-                errors.append(f"Username is required.")
-            if target.password is None or target.password.strip() == "":
-                errors.append(f"Password is required.")
-            if errors:
-                return {'success': False, 'error': "<br>".join(errors), 'function': 'test_connection() 0.1'}, 400
+            # Execute connection test with the server engine
+            result = server_operation_engine.execute_connection_test_sync(data)
 
-            if target.sshport == 0:
-                logger.info(f"SSH logic is disabled.")
+            # Return the result in the expected format
+            if result['success']:
+                return {
+                    'success': True,
+                    'data': result['data'],
+                    'firewall_info': result['firewall_info'],
+                    'return_msg': result['return_msg']
+                }, 200
+            else:
+                return {
+                    'success': False,
+                    'error': result['return_msg'],
+                    'function': result['function']
+                }, 400
 
-            # Initialize a session with the firewall.
-            api_session, return_msg, api_base, username, password = initialize_session(target,
-                                                                                       target_numbers,
-                                                                                       username=target.username,
-                                                                                       password=target.password,
-                                                                                       sshport=target.sshport)
-
-            if api_session is None or api_session is False:
-                logger.error(f"Error: Unable to create an admin session. Return message: {return_msg}")
-                return {'success': False, 'error': return_msg, 'function': 'test_connection(), 1'}, 400
-
-            # Gather firewall information
-            # TODO: Silent mode?
-            firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=False)
-            if firewall_info is None:
-                logger.error(f"Error gathering firewall information: {error_msg}")
-                return {'success': False, 'error': error_msg, 'function': 'test_connection() 2'}, 400
-
-            # Successfully connected and gathered info
-            logger.info(f"Successfully connected to firewall: {firewall_info}")
-
-            # If we enabled SonicOS API via SSH, disable it now
-            if constants.get_autoenabled_sonicos_api():
-                firewall_info['api_autoenabled'] = True  # Flag for the web app to display conditional message
-                disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
-
-            # Log out from the session
-            try:
-                logout(api_base, api_session, firewall_generation=firewall_info.get('firewall_generation', None))
-            except Exception as e:
-                logger.error(f"Error logging out: {e}")
-
-            # Reset auto-enabled SonicOS API flag for each new firewall
-            if constants.get_autoenabled_sonicos_api() is True:
-                constants.set_autoenabled_sonicos_api(False)
-
-            return {'success': True, 'data': data, 'firewall_info': firewall_info, 'return_msg': return_msg}, 200
         except Exception as e:
-            logger.error(f"test_connection(): Error processing request data: {e}")
-            return {'success': False, 'error': str(e), 'function': 'test_connection() 3'}, 400
+            logger.error(f"test_connection(): Error processing request: {e}")
+            return {'success': False, 'error': str(e), 'function': 'test_connection() exception'}, 400
+
+    return {'error': 'Method not supported'}, 405
+
+
+@app.route('/single_analysis', methods=['POST'])
+def single_analysis():
+    """Execute security analysis using the server operation engine."""
+    logger.info(f"Received {request.method} -> {request.url}")
+    if request.method == 'POST':
+        try:
+            # Extract JSON data from the request body
+            data = request.get_json()
+            if not data:
+                logger.error("single_analysis(): No JSON data received")
+                return {'success': False, 'error': 'No data received', 'function': 'single_analysis() 0'}, 400
+
+            logger.info(f"single_analysis(): Received data: {data}")
+
+            # Import and use the SERVER operation engine
+            from server_operation_engine import server_operation_engine
+
+            # Execute security analysis operation
+            result = server_operation_engine.execute_single_target_operation(data, "analysis")
+
+            # Return the result in the expected format
+            if result['success']:
+                return {
+                    'success': True,
+                    'results': result['results'],
+                    'firewall_info': result.get('firewall_info'),
+                    'operation_type': result['operation_type']
+                }, 200
+            else:
+                return {
+                    'success': False,
+                    'errors': result['errors'],
+                    'function': result['function']
+                }, 400
+
+        except Exception as e:
+            logger.error(f"single_analysis(): Error processing request: {e}")
+            return {'success': False, 'error': str(e), 'function': 'single_analysis() exception'}, 400
+
     return {'error': 'Method not supported'}, 405
 
 
@@ -427,8 +437,6 @@ def main():
         logger.info("\nShutting down proxy server...")
         sys.exit(0)
 
-
-
 def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
     """Load targets from either CSV file or single target data."""
     if not isinstance(target_input, dict) and path.isfile(target_input):
@@ -449,19 +457,17 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
             force_password_change=normalize_boolean(target_input.get('force_password_change'))
         )
     else:
-        # Single target from command line
-        # TODO: Figure out what to do with the arguments from CLI for single target
-        logger.info(f"Target came from CLI: {target_input} - why?")
-        return [FirewallTarget(
+        # Single target from command line - this case may need proper args handling
+        logger.info(f"Target came from CLI: {target_input}")
+        # For now, return a basic FirewallTarget - this needs proper CLI args integration
+        return FirewallTarget(
             firewall=target_input,
-            sshport=a.sshport,
-            temp_password=normalize_temp_password(password=a.temp_password,
-                                                  randomize=normalize_boolean(a.randomize_password)),
-            randomize_temp_password=normalize_boolean(a.randomize_password),
-            unbind_totp=normalize_boolean(a.unbind_totp),
-            force_password_change=normalize_boolean(a.force_password_change)
-        )]
-
+            sshport=22,  # Default SSH port
+            temp_password="",
+            randomize_temp_password=False,
+            unbind_totp=False,
+            force_password_change=False
+        )
 
 # TODO: Integrate argument parsing with web form data handling
 def print_and_save_summary(results: dict, firewall: str, firewall_info: dict, output_folder: str):
@@ -519,7 +525,6 @@ def finalize_routine(api_session, api_base: str, firewall: str, firewall_generat
         exit()
     except Exception as e:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error logging out: {e}")
-
 
 
 if __name__ == '__main__':

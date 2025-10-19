@@ -1,7 +1,12 @@
 import random
 import string
+from typing import Union, List
+from os import path
+import logging
 from common.utils import generate_timestamp
 from credential_reset.firewall import FirewallTarget
+
+logger = logging.getLogger(__name__)
 
 
 def print_verbose_details(target: FirewallTarget, target_numbers: tuple, args, **kwargs):
