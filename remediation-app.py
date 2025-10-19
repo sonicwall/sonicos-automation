@@ -251,7 +251,7 @@ def test_connection():
             logger.info(f"test_connection(): Received data: {data}")
 
             # Import and use the SERVER operation engine (not PyScript engine)
-            from server_operation_engine import server_operation_engine
+            from credential_reset.server_engine import server_operation_engine
 
             # Execute connection test with the server engine
             result = server_operation_engine.execute_connection_test_sync(data)
@@ -293,7 +293,7 @@ def single_analysis():
             logger.info(f"single_analysis(): Received data: {data}")
 
             # Import and use the SERVER operation engine
-            from server_operation_engine import server_operation_engine
+            from credential_reset.server_engine import server_operation_engine
 
             # Execute security analysis operation
             result = server_operation_engine.execute_single_target_operation(data, "analysis")

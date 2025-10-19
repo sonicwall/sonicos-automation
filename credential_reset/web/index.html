@@ -745,7 +745,7 @@
         packages = []
 
         [[fetch]]
-        files = ["./operation_engine.py"]
+        files = ["./credential_reset/client_engine.py"]
     </py-config>
 
     <!-- PyScript Main Logic -->
@@ -756,9 +756,9 @@
 
         # Import the operation engine instance directly
         try:
-            # The operation_engine instance is already created in operation_engine.py
+            # The operation_engine instance is already created in client_engine.py
             # We just need to import it and make it available to JavaScript
-            import operation_engine as oe_module
+            import client_engine as oe_module
             operation_engine = oe_module.operation_engine
 
             # Make operation engine available to JavaScript

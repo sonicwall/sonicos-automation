@@ -7,13 +7,18 @@ import logging
 import json
 import importlib.util
 import sys
+import os
 from typing import Dict, Any, Tuple, Optional
+
+# Add parent directory to path to access common and sonicos modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from credential_reset.firewall import initialize_session, gather_firewall_info
 from sonicos.api import logout, disable_sonicos_api_ssh
 import common.constants as constants
 
 # Import load_targets from remediation-app.py using importlib
-spec = importlib.util.spec_from_file_location("remediation_app", "remediation-app.py")
+spec = importlib.util.spec_from_file_location("remediation_app", os.path.join(os.path.dirname(os.path.dirname(__file__)), "remediation-app.py"))
 remediation_app = importlib.util.module_from_spec(spec)
 sys.modules["remediation_app"] = remediation_app
 spec.loader.exec_module(remediation_app)
