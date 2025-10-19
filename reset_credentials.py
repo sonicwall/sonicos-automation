@@ -47,6 +47,9 @@ from credential_reset.export_helper import (
 from credential_reset.report_console import generate_summary_table
 from credential_reset.report_markdown import generate_markdown_summary
 from credential_reset.playbook import Playbook
+from credential_reset.report_helper import (
+    calculate_routine_statistics,
+)
 from rich import print
 
 
@@ -76,32 +79,6 @@ a = get_parser(arg_set="remediation", description=arg_description)
 
 # This variable stores the results of the routine for each firewall.
 routine_results = {}
-
-
-# Helper function for the summary
-def calculate_routine_statistics(routine_results: dict, firewall: str):
-    """Calculate and update routine statistics."""
-    try:
-        routine_results[firewall]['total_users_forced_to_update_password'] = len([u for u in routine_results[firewall].get('users', []) if u.get('commit_successful') is True])
-    except (KeyError, TypeError):
-        routine_results[firewall]['total_users_forced_to_update_password'] = 0
-
-    try:
-        routine_results[firewall]['commit_possibly_failed_count'] = len([u for u in routine_results[firewall].get('users', []) if u.get('commit_successful') is False])
-    except (KeyError, TypeError):
-        routine_results[firewall]['commit_possibly_failed_count'] = 0
-
-    try:
-        routine_results[firewall]['skipped_user_count'] = len([u for u in routine_results[firewall].get('users', []) if u.get('skipped') is True])
-    except (KeyError, TypeError):
-        routine_results[firewall]['skipped_user_count'] = 0
-
-    try:
-        routine_results[firewall]['total_postprocess_user_count'] = len(routine_results[firewall].get('users', []))
-    except (KeyError, TypeError):
-        routine_results[firewall]['total_postprocess_user_count'] = 0
-
-    routine_results[firewall]['completed_routine_successfully'] = True
 
 
 def print_and_save_summary(results: dict, firewall: str, firewall_info: dict, output_folder: str):
