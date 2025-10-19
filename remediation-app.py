@@ -368,6 +368,11 @@ def single_target():
             # Successfully connected and gathered info
             logger.info(f"Successfully connected to firewall: {firewall_info}")
 
+            # TODO: Tagging the line... Logged in, got fw info... now what?
+
+
+            # TODO: Tagging the line... Should be done with the single target routine here and may disable API if needed.
+
             # If we enabled SonicOS API via SSH, disable it now
             if constants.get_autoenabled_sonicos_api():
                 firewall_info['api_autoenabled'] = True  # Flag for the web app to display conditional message
@@ -514,9 +519,6 @@ def finalize_routine(api_session, api_base: str, firewall: str, firewall_generat
         exit()
     except Exception as e:
         print(f"({target_numbers[0]}/{target_numbers[1]}) {generate_timestamp()}: Error logging out: {e}")
-
-
-
 
 
 
