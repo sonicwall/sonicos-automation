@@ -110,13 +110,24 @@ def index():
 def serve_static(filename):
     """Serve static files (Python modules, etc.)."""
     try:
-        # Check if file exists in the base directory
-        file_path = os.path.join(BASE_DIR, filename)
-        if os.path.exists(file_path):
-            return send_file(file_path)
-        else:
-            logger.warning(f"File not found: {filename}")
-            return f"File not found: {filename}", 404
+        logger.debug(f"Serving static file: {filename}")
+
+        # First, check if the file exists in the web directory (for PyScript files)
+        web_file_path = os.path.join(BASE_DIR, 'credential_reset/web', filename)
+        if os.path.exists(web_file_path):
+            logger.info(f"Serving file from web directory: {web_file_path}")
+            return send_file(web_file_path)
+
+        # Then check in the base directory for other files
+        base_file_path = os.path.join(BASE_DIR, filename)
+        if os.path.exists(base_file_path):
+            logger.info(f"Serving file from base directory: {base_file_path}")
+            return send_file(base_file_path)
+
+        # File not found in either location
+        logger.warning(f"File not found in web or base directory: {filename}")
+        return f"File not found: {filename}", 404
+
     except Exception as e:
         logger.error(f"Error serving file {filename}: {e}")
         return f"Error serving file: {str(e)}", 500
