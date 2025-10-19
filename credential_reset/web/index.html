@@ -407,6 +407,49 @@
 
     <!-- JavaScript for navigation (before PyScript) -->
     <script>
+        // Progress Modal Functions
+        function showProgressModal(title = "Operation Progress") {
+            const modal = document.getElementById('progress-modal');
+            const modalTitle = modal.querySelector('h3');
+            modalTitle.textContent = title;
+            modal.classList.remove('hide');
+            resetProgressModal();
+        }
+
+        function hideProgressModal() {
+            const modal = document.getElementById('progress-modal');
+            modal.classList.add('hide');
+        }
+
+        function resetProgressModal() {
+            updateProgress(0, "Initializing...");
+            clearOperationSteps();
+        }
+
+        function updateProgress(percentage, currentStep) {
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-percentage');
+            const currentTarget = document.getElementById('current-target');
+
+            progressBar.style.width = `${percentage}%`;
+            progressText.textContent = `${percentage}%`;
+            currentTarget.textContent = currentStep;
+        }
+
+        function addOperationStep(step, status = 'info') {
+            const stepsContainer = document.getElementById('operation-steps');
+            const stepElement = document.createElement('div');
+            stepElement.className = `text-xs p-2 rounded status-${status}`;
+            stepElement.textContent = step;
+            stepsContainer.appendChild(stepElement);
+            stepsContainer.scrollTop = stepsContainer.scrollHeight;
+        }
+
+        function clearOperationSteps() {
+            const stepsContainer = document.getElementById('operation-steps');
+            stepsContainer.innerHTML = '';
+        }
+
         // Global navigation function that works immediately
         function showSection(sectionId) {
             console.log('Showing section:', sectionId);
@@ -558,14 +601,42 @@
                         randomize_temp_password: document.querySelector('input[name="password-option"]:checked').value === 'random' ? 'True' : 'False'
                     };
 
-                    console.log('Posting to /test_connection:', formData);
+                    console.log('Testing connection to:', formData.firewall);
 
-                    // Always use Flask endpoint for connection testing
-                    // (Remove PyScript conditional logic to ensure POST requests)
+                    // Validate required fields before showing progress
+                    if (!formData.firewall || !formData.username || !formData.password) {
+                        window.alert('Please fill in all required fields (Firewall IP, Username, Password)');
+                        return;
+                    }
+
+                    // Disable button and show progress modal
                     testConnectionBtn.disabled = true;
-                    testConnectionBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Testing Connection...</span>';
+                    testConnectionBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Testing...</span>';
+
+                    // Show progress modal with detailed steps
+                    showProgressModal(`Testing Connection to ${formData.firewall}`);
+
+                    // Simulate connection test steps with progress updates
+                    updateProgress(10, `Connecting to ${formData.firewall}:${formData.sshport}...`);
+                    addOperationStep(`Initiating connection to ${formData.firewall}`, 'info');
 
                     try {
+                        // Add a small delay to show initial progress
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        updateProgress(25, 'Establishing SSH connection...');
+                        addOperationStep('Establishing SSH connection', 'info');
+
+                        await new Promise(resolve => setTimeout(resolve, 300));
+
+                        updateProgress(50, 'Authenticating with credentials...');
+                        addOperationStep(`Authenticating user: ${formData.username}`, 'info');
+
+                        await new Promise(resolve => setTimeout(resolve, 300));
+
+                        updateProgress(75, 'Verifying firewall access...');
+                        addOperationStep('Verifying administrative access', 'info');
+
                         const response = await fetch('/test_connection', {
                             method: 'POST',
                             headers: {
@@ -574,24 +645,55 @@
                             body: JSON.stringify(formData)
                         });
 
+                        updateProgress(90, 'Processing response...');
+                        addOperationStep('Retrieving firewall information', 'info');
+
                         const result = await response.json();
 
+                        updateProgress(100, 'Connection test completed');
+
                         if (response.ok && result.success) {
+                            addOperationStep('Connection test successful!', 'success');
+                            await new Promise(resolve => setTimeout(resolve, 500)); // Show success briefly
                             handleConnectionTestResult(result);
                         } else {
+                            addOperationStep(`Connection failed: ${result.error || result.message || 'Unknown error'}`, 'error');
+                            await new Promise(resolve => setTimeout(resolve, 1000)); // Show error longer
                             handleConnectionTestError(result.error || result.message || 'Connection test failed');
                         }
                     } catch (error) {
                         console.error('Test connection error:', error);
+                        updateProgress(100, 'Connection failed');
+                        addOperationStep(`Network error: ${error.message}`, 'error');
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Show error longer
                         handleConnectionTestError(error.message);
                     } finally {
                         testConnectionBtn.disabled = false;
                         testConnectionBtn.innerHTML = 'Test Connection';
+                        // Hide progress modal after a brief delay
+                        setTimeout(() => {
+                            hideProgressModal();
+                        }, 1500);
                     }
                 });
             }
 
-            // Helper functions for handling results
+            // Cancel operation button functionality
+            const cancelOperationBtn = document.getElementById('cancel-operation-btn');
+            if (cancelOperationBtn) {
+                cancelOperationBtn.addEventListener('click', function() {
+                    console.log('Operation cancelled by user');
+                    hideProgressModal();
+                    // Reset any ongoing operations
+                    const testBtn = document.getElementById('test-connection-btn');
+                    if (testBtn.disabled) {
+                        testBtn.disabled = false;
+                        testBtn.innerHTML = 'Test Connection';
+                    }
+                });
+            }
+
+            // Helper functions for handling connection test results
             function handleConnectionTestResult(result) {
                 // Remove any existing connection result messages
                 const existingResult = document.getElementById('connection-result');
@@ -667,7 +769,6 @@
             }
 
             // Event listener for Run Security Analysis button
-            // TODO: Run Analysis button.
             document.getElementById('run-analysis-btn').addEventListener('click', function() {
                 console.log('Run Security Analysis button clicked');
                 execute_single_analysis();
@@ -675,69 +776,6 @@
 
             console.log('Navigation and checkbox setup complete');
         });
-
-        // Reset form function
-        function resetSingleTargetForm() {
-            // Clear all text inputs
-            // TODO: Remove the test values before deployment
-            document.getElementById('firewall-ip').value = '192.168.0.208';
-            document.getElementById('ssh-port').value = '22';
-            document.getElementById('admin-username').value = 'admin';
-            document.getElementById('admin-password').value = 'password';
-            document.getElementById('temp-password').value = '';
-
-            // Reset checkboxes to unchecked
-            document.getElementById('force-password-change').checked = false;
-            document.getElementById('unbind-totp').checked = false;
-            document.getElementById('export-settings').checked = false;
-
-            // Reset radio buttons to default (random password)
-            document.getElementById('random-password').checked = true;
-            document.getElementById('custom-password').checked = false;
-
-            // Disable temp password input (default state)
-            document.getElementById('temp-password').disabled = true;
-
-            // Reset security checkboxes to all checked (default state)
-            document.getElementById('select-all-security').checked = true;
-            const securityCheckboxes = document.querySelectorAll('.security-check');
-            securityCheckboxes.forEach(checkbox => {
-                checkbox.checked = true;
-            });
-
-            // Clear any existing error messages
-            const existingError = document.getElementById('form-errors');
-            if (existingError) {
-                existingError.remove();
-            }
-
-            // Clear any connection result messages
-            const existingResult = document.getElementById('connection-result');
-            if (existingResult) {
-                existingResult.remove();
-            }
-
-            // Clear any validation feedback messages
-            const feedbackElements = document.querySelectorAll('#password-feedback, #ip-feedback');
-            feedbackElements.forEach(element => {
-                element.remove();
-            });
-
-            console.log('Form reset to default values');
-        }
-
-        // Make showSection available globally
-        window.showSection = showSection;
-
-        // Placeholder functions for other global functions
-        window.viewOperationDetails = function(timestamp) { console.log('View details:', timestamp); };
-        window.clearSingleTargetForm = function() { console.log('Clear form'); };
-        window.editTarget = function(index) { console.log('Edit target:', index); };
-        window.removeTarget = function(index) { console.log('Remove target:', index); };
-        window.closeEditModal = function() { console.log('Close modal'); };
-        window.saveTargetEdit = function(index) { console.log('Save edit:', index); };
-        window.exportCurrentTargets = function() { console.log('Export targets'); };
-        window.downloadBatchResults = function() { console.log('Download results'); };
     </script>
 
     <!-- PyScript Configuration -->
