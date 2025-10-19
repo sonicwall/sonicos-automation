@@ -301,11 +301,19 @@ def test_connection():
             # Successfully connected and gathered info
             logger.info(f"Successfully connected to firewall: {firewall_info}")
 
+            # If we enabled SonicOS API via SSH, disable it now
+            if constants.get_autoenabled_sonicos_api():
+                disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
+
             # Log out from the session
             try:
                 logout(api_base, api_session, firewall_generation=firewall_info.get('firewall_generation', None))
             except Exception as e:
                 logger.error(f"Error logging out: {e}")
+
+            # Reset auto-enabled SonicOS API flag for each new firewall
+            if constants.get_autoenabled_sonicos_api() is True:
+                constants.set_autoenabled_sonicos_api(False)
 
             return {'success': True, 'data': data, 'firewall_info': firewall_info, 'return_msg': return_msg}, 200
         except Exception as e:
