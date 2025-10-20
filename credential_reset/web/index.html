@@ -486,7 +486,7 @@
 
         // Set up navigation immediately when DOM loads
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, setting up navigation');
+            // console.log('DOM loaded, setting up navigation');
 
             // Add click handlers to navigation buttons
             const navButtons = document.querySelectorAll('.nav-btn');
@@ -824,7 +824,7 @@
                 execute_single_analysis();
             });
 
-            console.log('Navigation and checkbox setup complete');
+            // console.log('Navigation and checkbox setup complete');
         });
 
         // Make showSection available globally
@@ -865,7 +865,7 @@
             # Make operation engine available to JavaScript
             window.operation_engine = operation_engine
 
-            console.log("Operation engine loaded successfully and available to JavaScript")
+            console.log("Engine loaded successfully")
         except Exception as e:
             console.error(f"Failed to load operation engine: {e}")
             operation_engine = None
@@ -1014,7 +1014,7 @@
         # Expose Python function to JavaScript
         window.execute_single_analysis = create_proxy(execute_single_analysis_sync)
 
-        console.log("PyScript initialized successfully - button handler is ready!")
+        console.log("PyScript initialized successfully")
     </script>
 </body>
 </html>
