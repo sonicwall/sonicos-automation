@@ -237,6 +237,7 @@ class ServerOperationEngine:
                 return operation_result
 
             # Execute based on operation type
+            # TODO: Review the operation types.
             if operation_type == "analysis":
                 results = self._execute_security_analysis(api_session, api_base, target, firewall_info, config)
             elif operation_type == "reset":

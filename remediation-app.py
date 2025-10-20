@@ -374,6 +374,7 @@ def single_analysis():
             from credential_reset.server_engine import server_operation_engine
 
             # Execute security analysis operation
+            # TODO: Analysis button click calls this....
             result = server_operation_engine.execute_single_target_operation(data, "analysis")
 
             # Return the result in the expected format
