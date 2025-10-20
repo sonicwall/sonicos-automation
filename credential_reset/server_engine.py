@@ -91,7 +91,7 @@ class ServerOperationEngine:
                 return test_result
 
             if progress_tracker:
-                progress_tracker.update(f"Connecting to {target.firewall}...", 20)
+                progress_tracker.update(f"Connecting to {target.firewall}...", 10)
 
             self.logger.info(f"Connecting to {target.firewall}")
 
@@ -100,7 +100,7 @@ class ServerOperationEngine:
 
             # Initialize a session with the firewall
             if progress_tracker:
-                progress_tracker.update("Establishing firewall session...", 40)
+                progress_tracker.update("Establishing firewall session...", 15)
 
             api_session, return_msg, api_base, username, password = initialize_session(
                 target,
@@ -120,7 +120,7 @@ class ServerOperationEngine:
                 return test_result
 
             if progress_tracker:
-                progress_tracker.update("Gathering firewall information...", 70)
+                progress_tracker.update("Gathering firewall information...", 30)
 
             # Gather firewall information
             firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=True)
@@ -133,11 +133,14 @@ class ServerOperationEngine:
                     progress_tracker.complete(success=False, message=f"Info gathering failed: {error_msg}", result_data=test_result)
                 return test_result
 
+            if progress_tracker:
+                progress_tracker.update(f"{firewall_info['device_model']} (Gen{firewall_info['firewall_generation']}) - {firewall_info['firmware_version']}", 60)
+
             # Successfully connected and gathered info
             self.logger.info(f"Successfully connected to firewall: {firewall_info}")
 
             if progress_tracker:
-                progress_tracker.update("Finalizing connection test...", 90)
+                progress_tracker.update("Finalizing connection test...", 75)
 
             # If we enabled SonicOS API via SSH, flag it for display
             if constants.get_autoenabled_sonicos_api():
