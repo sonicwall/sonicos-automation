@@ -96,6 +96,7 @@ class ServerOperationEngine:
             self.logger.info(f"Connecting to {target.firewall}")
 
             if target.sshport == 0:
+                progress_tracker.update(f"SSH Management failback connection is disabled", 10)
                 self.logger.info("SSH logic is disabled.")
 
             # Initialize a session with the firewall
@@ -118,6 +119,9 @@ class ServerOperationEngine:
                 if progress_tracker:
                     progress_tracker.complete(success=False, message=f"Session failed: {return_msg}", result_data=test_result)
                 return test_result
+
+            if constants.get_autoenabled_sonicos_api():
+                progress_tracker.update(f"SonicOS API auto-enabled via SSH", 25)
 
             if progress_tracker:
                 progress_tracker.update("Gathering firewall information...", 30)
@@ -145,6 +149,7 @@ class ServerOperationEngine:
             # If we enabled SonicOS API via SSH, flag it for display
             if constants.get_autoenabled_sonicos_api():
                 firewall_info['api_autoenabled'] = True
+                progress_tracker.update(f"Auto-disabling SonicOS API via SSH", 80)
                 disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
 
             # Log out from the session
