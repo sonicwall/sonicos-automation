@@ -133,7 +133,20 @@ def gather_firewall_info(api_session, api_base: str, target_numbers: tuple, sile
 
 
 def get_local_users(api_session, api_base: str, firewall_generation: int, firewall: str, sshport: str, username: str, password: str, target_numbers: tuple, silent: bool = False):
-    """Retrieve local users from the firewall."""
+    """Retrieve local users from the firewall.
+    Arguments:
+    api_session -- The established API session
+    api_base -- The base URL of the firewall API
+    firewall_generation -- The generation of the firewall (5, 6, or 7)
+    firewall -- The firewall IP or hostname
+    sshport -- The SSH port of the firewall
+    username -- The username for authentication
+    password -- The password for authentication
+    target_numbers -- Tuple indicating the current target number and total targets
+    silent -- If True, suppress output messages
+    Returns:
+    A dictionary containing local user information, or None if an error occurs.
+    """
     users = None
 
     try:

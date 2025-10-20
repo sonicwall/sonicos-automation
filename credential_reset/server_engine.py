@@ -214,7 +214,7 @@ class ServerOperationEngine:
 
         try:
             if progress_tracker:
-                progress_tracker.update("Initializing operation...", 5)
+                progress_tracker.update("Initializing operation...", 0)
 
             self.logger.info(f"Starting {operation_type} operation")
 
@@ -233,14 +233,14 @@ class ServerOperationEngine:
             }
 
             if progress_tracker:
-                progress_tracker.update(f"Connecting to {config.get('firewall')}...", 10)
+                progress_tracker.update(f"Connecting to {config.get('firewall')}...", 5)
 
             # Load the target
             target = load_targets(target_data)
             target_numbers = (1, 1)
 
             if progress_tracker:
-                progress_tracker.update("Establishing firewall session...", 20)
+                progress_tracker.update("Establishing firewall session...", 5)
 
             # Initialize session
             api_session, return_msg, api_base, username, password = initialize_session(
@@ -259,7 +259,7 @@ class ServerOperationEngine:
                 return operation_result
 
             if progress_tracker:
-                progress_tracker.update("Gathering firewall information...", 35)
+                progress_tracker.update("Gathering firewall information...", 20)
 
             # Gather firewall info
             firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=True)
@@ -270,7 +270,7 @@ class ServerOperationEngine:
                 return operation_result
 
             if progress_tracker:
-                progress_tracker.update(f"Connected to {firewall_info['device_model']} (Gen{firewall_info['firewall_generation']}) - {firewall_info['firmware_version']}", 50)
+                progress_tracker.update(f"Connected to {firewall_info['device_model']} (Gen{firewall_info['firewall_generation']}) - {firewall_info['firmware_version']}", 30)
 
             # Execute based on operation type
             # TODO: Review the operation types.
@@ -282,18 +282,25 @@ class ServerOperationEngine:
                 results = {"error": f"Unknown operation type: {operation_type}"}
 
             if progress_tracker:
-                progress_tracker.update("Finalizing operation...", 90)
+                progress_tracker.update("Finalizing operation...", 85)
 
             # Cleanup
             try:
+                if progress_tracker:
+                    progress_tracker.update("Closing API session...", 85)
                 logout(api_base, api_session, firewall_generation=firewall_info.get('firewall_generation'))
             except Exception as e:
                 self.logger.error(f"Error during logout: {e}")
 
             # Reset API flag if needed
             if constants.get_autoenabled_sonicos_api():
+                if progress_tracker:
+                    progress_tracker.update("Disabling SonicOS API...", 90)
                 disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
                 constants.set_autoenabled_sonicos_api(False)
+
+            if progress_tracker:
+                progress_tracker.update("Closing API session...", 95)
 
             operation_result["success"] = True
             operation_result["results"] = results
@@ -316,7 +323,7 @@ class ServerOperationEngine:
         """Execute security analysis on the firewall with progress tracking."""
         try:
             if progress_tracker:
-                progress_tracker.update("Starting security analysis...", 60)
+                progress_tracker.update("Starting security analysis...", 30)
 
             # Export TSR if requested (before analysis)
             tsr_result = {}
@@ -327,29 +334,33 @@ class ServerOperationEngine:
                 tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
                 if progress_tracker:
                     progress_tracker.add_substep("TSR export completed", "completed", "success")
+                    progress_tracker.update(f"TSR export completed", 35)
+
+            # Export Settings if requested (before analysis)
+            if config.get('export_settings', False):
+                if progress_tracker:
+                    progress_tracker.add_substep("Exporting Configuration Settings...", "running")
+                from credential_reset.export_helper import export_configuration_settings
+                settings_result = export_configuration_settings(api_session, api_base, target, firewall_info, silent=False, tag="pre-analysis")
+                if progress_tracker:
+                    progress_tracker.add_substep("Configuration settings export completed", "completed", "success")
+                    progress_tracker.update(f"Configuration settings export completed", 40)
 
             if progress_tracker:
                 progress_tracker.update("Analyzing local users...", 70)
 
             from credential_reset.firewall import get_local_users
 
-            # Get local users for analysis
-            local_users = get_local_users(api_session, api_base, firewall_info.get('firewall_generation'))
-
-            if not local_users:
-                if progress_tracker:
-                    progress_tracker.add_substep("No local users found", "error", "warning")
-                return {"error": "No local users found or unable to retrieve users"}
 
             if progress_tracker:
-                progress_tracker.add_substep(f"Found {len(local_users)} local users", "completed", "success")
+                progress_tracker.add_substep(f".....", "completed", "success")
                 progress_tracker.update("Performing security checks...", 80)
 
             # Perform security analysis
             security_analysis = {
                 "user_security": {
-                    "users_analyzed": len(local_users),
-                    "users_found": len(local_users),
+                    "users_analyzed": 0,
+                    "users_found": 0,
                     "issues": []
                 },
                 "configuration_analysis": {
@@ -357,38 +368,6 @@ class ServerOperationEngine:
                     "recommendations": []
                 }
             }
-
-            # Analyze each user for security issues
-            for i, user in enumerate(local_users):
-                if progress_tracker:
-                    progress_tracker.add_substep(f"Analyzing user: {user.get('name', 'Unknown')}", "running")
-
-                user_issues = []
-
-                # Check for default passwords (basic heuristic)
-                if user.get('name', '').lower() in ['admin', 'user', 'guest']:
-                    user_issues.append({
-                        "severity": "high",
-                        "issue": f"Default account '{user.get('name')}' detected",
-                        "recommendation": "Review default account security"
-                    })
-
-                # Check for password policy issues
-                if not user.get('password_change_required', False):
-                    user_issues.append({
-                        "severity": "medium",
-                        "issue": f"User '{user.get('name')}' not required to change password",
-                        "recommendation": "Enable forced password change"
-                    })
-
-                # Add user-specific issues to analysis
-                if user_issues:
-                    security_analysis["user_security"]["issues"].extend(user_issues)
-                    if progress_tracker:
-                        progress_tracker.add_substep(f"Found {len(user_issues)} issue(s) for {user.get('name')}", "completed", "warning")
-                else:
-                    if progress_tracker:
-                        progress_tracker.add_substep(f"No issues found for {user.get('name')}", "completed", "success")
 
             # Add configuration checks based on selected security levels
             security_levels = config.get('security_checks', ['critical', 'high', 'medium', 'low'])
@@ -410,7 +389,6 @@ class ServerOperationEngine:
 
             return {
                 "security_analysis": security_analysis,
-                "users_found": len(local_users),
                 "analysis_timestamp": constants.generate_timestamp(),
                 "tsr_result": tsr_result
             }
