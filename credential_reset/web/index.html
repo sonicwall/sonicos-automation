@@ -581,6 +581,56 @@
                 });
             }
 
+            // Reset form function
+            function resetSingleTargetForm() {
+                // Clear all text inputs
+                // TODO: Remove the test values before deployment
+                document.getElementById('firewall-ip').value = '192.168.0.208';
+                document.getElementById('ssh-port').value = '22';
+                document.getElementById('admin-username').value = 'admin';
+                document.getElementById('admin-password').value = 'password';
+                document.getElementById('temp-password').value = '';
+
+                // Reset checkboxes to unchecked
+                document.getElementById('force-password-change').checked = false;
+                document.getElementById('unbind-totp').checked = false;
+                document.getElementById('export-settings').checked = false;
+
+                // Reset radio buttons to default (random password)
+                document.getElementById('random-password').checked = true;
+                document.getElementById('custom-password').checked = false;
+
+                // Disable temp password input (default state)
+                document.getElementById('temp-password').disabled = true;
+
+                // Reset security checkboxes to all checked (default state)
+                document.getElementById('select-all-security').checked = true;
+                const securityCheckboxes = document.querySelectorAll('.security-check');
+                securityCheckboxes.forEach(checkbox => {
+                    checkbox.checked = true;
+                });
+
+                // Clear any existing error messages
+                const existingError = document.getElementById('form-errors');
+                if (existingError) {
+                    existingError.remove();
+                }
+
+                // Clear any connection result messages
+                const existingResult = document.getElementById('connection-result');
+                if (existingResult) {
+                    existingResult.remove();
+                }
+
+                // Clear any validation feedback messages
+                const feedbackElements = document.querySelectorAll('#password-feedback, #ip-feedback');
+                feedbackElements.forEach(element => {
+                    element.remove();
+                });
+
+                console.log('Form reset to default values');
+            }
+
             // Test Connection button functionality with progress integration
             const testConnectionBtn = document.getElementById('test-connection-btn');
             if (testConnectionBtn) {
@@ -776,6 +826,19 @@
 
             console.log('Navigation and checkbox setup complete');
         });
+
+        // Make showSection available globally
+        window.showSection = showSection;
+
+        // Placeholder functions for other global functions
+        window.viewOperationDetails = function(timestamp) { console.log('View details:', timestamp); };
+        window.clearSingleTargetForm = function() { console.log('Clear form'); };
+        window.editTarget = function(index) { console.log('Edit target:', index); };
+        window.removeTarget = function(index) { console.log('Remove target:', index); };
+        window.closeEditModal = function() { console.log('Close modal'); };
+        window.saveTargetEdit = function(index) { console.log('Save edit:', index); };
+        window.exportCurrentTargets = function() { console.log('Export targets'); };
+        window.downloadBatchResults = function() { console.log('Download results'); };
     </script>
 
     <!-- PyScript Configuration -->
