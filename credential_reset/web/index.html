@@ -210,6 +210,13 @@
                                     <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
                                 </label>
                                     <span class="text-xs text-gray-500 mt-1">Downloads the preferences file before/after running the playbook.</span>
+
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="export-tsr" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-sm text-gray-700">Export Tech Support Report (TSR)</span>
+                                    <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
+                                </label>
+                                    <span class="text-xs text-gray-500 mt-1">Downloads technical support report before/after running the playbook.</span>
                             </div>
 
                             <div>
@@ -605,6 +612,7 @@
                 document.getElementById('force-password-change').checked = false;
                 document.getElementById('unbind-totp').checked = false;
                 document.getElementById('export-settings').checked = false;
+                document.getElementById('export-tsr').checked = false;
 
                 // Reset radio buttons to default (random password)
                 document.getElementById('random-password').checked = true;
@@ -657,6 +665,7 @@
                         force_password_change: document.getElementById('force-password-change').checked.toString(),
                         unbind_totp: document.getElementById('unbind-totp').checked.toString(),
                         export_settings: document.getElementById('export-settings').checked.toString(),
+                        export_tsr: document.getElementById('export-tsr').checked.toString(),
                         temp_password: document.getElementById('temp-password').value.trim(),
                         randomize_temp_password: document.querySelector('input[name="password-option"]:checked').value === 'random' ? 'True' : 'False'
                     };
@@ -973,6 +982,12 @@
                         username: document.getElementById('admin-username').value.trim(),
                         password: document.getElementById('admin-password').value.trim(),
                         sshport: document.getElementById('ssh-port').value.trim(),
+                        force_password_change: document.getElementById('force-password-change').checked.toString(),
+                        unbind_totp: document.getElementById('unbind-totp').checked.toString(),
+                        export_settings: document.getElementById('export-settings').checked.toString(),
+                        export_tsr: document.getElementById('export-tsr').checked.toString(),
+                        temp_password: document.getElementById('temp-password').value.trim(),
+                        randomize_temp_password: document.querySelector('input[name="password-option"]:checked').value === 'random' ? 'True' : 'False',
                         security_checks: Array.from(document.querySelectorAll('.security-check:checked')).map(cb => cb.value)
                     };
 

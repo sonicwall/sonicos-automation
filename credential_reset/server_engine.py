@@ -14,6 +14,7 @@ from typing import Dict, Any, Tuple, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from credential_reset.firewall import initialize_session, gather_firewall_info
+from credential_reset.export_helper import export_tsr_if_enabled
 from sonicos.api import logout, disable_sonicos_api_ssh
 import common.constants as constants
 
@@ -214,7 +215,9 @@ class ServerOperationEngine:
                 'temp_password': config.get('temp_password', ''),
                 'randomize_temp_password': config.get('randomize_temp_password', True),
                 'unbind_totp': config.get('unbind_totp', False),
-                'force_password_change': config.get('force_password_change', False)
+                'force_password_change': config.get('force_password_change', False),
+                'export_settings': config.get('export_settings', False),
+                'export_tsr': config.get('export_tsr', False)
             }
 
             # Load the target
@@ -276,6 +279,12 @@ class ServerOperationEngine:
     def _execute_security_analysis(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict) -> Dict:
         """Execute security analysis on the firewall."""
         try:
+            # Export TSR if requested (before analysis)
+            tsr_result = {}
+            if config.get('export_tsr', False):
+                target_numbers = (1, 1)
+                tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
+
             from credential_reset.firewall import get_local_users
 
             # Get local users for analysis
@@ -330,7 +339,8 @@ class ServerOperationEngine:
             return {
                 "security_analysis": security_analysis,
                 "users_found": len(local_users),
-                "analysis_timestamp": constants.generate_timestamp()
+                "analysis_timestamp": constants.generate_timestamp(),
+                "tsr_result": tsr_result  # Include TSR result
             }
 
         except Exception as e:
@@ -340,6 +350,12 @@ class ServerOperationEngine:
     def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict) -> Dict:
         """Execute credential reset operation."""
         try:
+            # Export TSR if requested (before making changes)
+            tsr_result = {}
+            if config.get('export_tsr', False):
+                target_numbers = (1, 1)
+                tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-reset")
+
             # This would implement the full credential reset logic
             # For now, return a placeholder result
             return {
@@ -349,7 +365,8 @@ class ServerOperationEngine:
                     "totp_unbound": 0 if not config.get('unbind_totp') else 0,
                     "status": "Not yet implemented"
                 },
-                "operation_timestamp": constants.generate_timestamp()
+                "operation_timestamp": constants.generate_timestamp(),
+                "tsr_result": tsr_result  # Include TSR result
             }
 
         except Exception as e:
