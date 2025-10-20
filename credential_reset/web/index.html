@@ -735,7 +735,7 @@
                                             // Fallback if no result data
                                             handleConnectionTestError('No result data received from server');
                                         }
-                                    }, 4000);
+                                    }, 3000);
                                 } else if (progressData.type === 'error') {
                                     console.error('Operation error:', progressData.message);
                                     eventSource.close();
