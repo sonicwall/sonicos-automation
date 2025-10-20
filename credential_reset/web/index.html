@@ -186,25 +186,28 @@
                     <!-- Operation Options -->
                     <div class="border-t pt-6 mb-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Operation Options</h3>
-                        <p class="text-gray-600 mb-4">Select the desired actions for the execution.</p>
+                        <p class="text-sm text-gray-600 mb-4">Select the desired optional actions for the execution.</p>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div class="space-y-4">
                                 <label class="flex items-center">
                                     <input type="checkbox" id="force-password-change" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                                     <span class="ml-2 text-sm text-gray-700">Reset Local User Passwords & Force Password Change</span>
+                                    <span class="ml-2 inline-block bg-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full" title="This option commits changes to the firewall">Config Change</span>
                                 </label>
                                     <span class="text-xs text-gray-500 mt-1">Attempts to change the password for all local users and require a password update on next login.</span>
 
                                 <label class="flex items-center">
                                     <input type="checkbox" id="unbind-totp" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                                     <span class="ml-2 text-sm text-gray-700">Clear Local User TOTP Bindings</span>
+                                    <span class="ml-2 inline-block bg-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full" title="This option commits changes to the firewall">Config Change</span>
                                 </label>
                                     <span class="text-xs text-gray-500 mt-1">Attempts to reset all local user TOTP bindings.</span>
 
                                 <label class="flex items-center">
                                     <input type="checkbox" id="export-settings" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                                     <span class="ml-2 text-sm text-gray-700">Export Settings</span>
+                                    <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
                                 </label>
                                     <span class="text-xs text-gray-500 mt-1">Downloads the preferences file before/after running the playbook.</span>
                             </div>
