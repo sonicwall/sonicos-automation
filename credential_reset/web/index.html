@@ -262,13 +262,13 @@
                             Test Connection
                         </button>
                         <button type="button" id="run-analysis-btn" class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            Run Security Analysis
+                            Run Playbook
                         </button>
                         <button type="button" id="reset-form-btn" class="bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
                             Reset Form
                         </button>
                         <button type="button" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400" onclick="showSection('dashboard-section')">
-                            Close
+                            Back to Dashboard
                         </button>
                     </div>
                 </form>
@@ -893,7 +893,7 @@
                     if (info.api_autoenabled) {
                         resultHTML += `
                             <div class="mt-3 p-2 bg-orange-50 border border-orange-200 rounded text-orange-800 text-sm">
-                                <strong>🔧 API Status:</strong> SonicOS API was temporarily auto-enabled via SSH for this connection test and has been automatically disabled after completion.
+                                <strong>API Status:</strong> SonicOS API was temporarily auto-enabled via SSH for this connection test and has been automatically disabled after completion.
                             </div>
                         `;
                     }
