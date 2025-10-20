@@ -984,7 +984,7 @@
             if (runAnalysisBtn) {
                 runAnalysisBtn.addEventListener('click', async function(e) {
                     e.preventDefault();
-                    console.log('Run Security Analysis button clicked');
+                    console.log('Run Playbook button clicked');
 
                     // Gather form data
                     const formData = {
@@ -1017,7 +1017,7 @@
 
                     try {
                         runAnalysisBtn.disabled = true;
-                        runAnalysisBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Analyzing...</span>';
+                        runAnalysisBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Running Playbook...</span>';
 
                         const response = await fetch('/single_analysis', {
                             method: 'POST',
@@ -1032,29 +1032,29 @@
                         if (response.ok && result.success) {
                             handleAnalysisResult(result);
                         } else {
-                            handleAnalysisError(result.errors ? result.errors.join(', ') : 'Security analysis failed');
+                            handleAnalysisError(result.errors ? result.errors.join(', ') : 'Playbook run failed');
                         }
 
                     } catch (error) {
-                        console.error('Security analysis error:', error);
+                        console.error('Playbook run error:', error);
                         handleAnalysisError(error.message);
                     } finally {
                         runAnalysisBtn.disabled = false;
-                        runAnalysisBtn.innerHTML = 'Run Security Analysis';
+                        runAnalysisBtn.innerHTML = 'Run Playbook';
                     }
                 });
             }
 
             function handleAnalysisResult(result) {
-                console.log('Security analysis completed:', result);
+                console.log('Playbook run completed:', result);
                 // For now, just show a simple success message
                 // In a full implementation, this would display detailed analysis results
-                window.alert('Security analysis completed successfully! Check the console for detailed results.');
+                window.alert('Playbook run completed successfully! Check the console for detailed results.');
             }
 
             function handleAnalysisError(errorMessage) {
-                console.error('Security analysis failed:', errorMessage);
-                window.alert(`Security analysis failed: ${errorMessage}`);
+                console.error('Playbook run failed:', errorMessage);
+                window.alert(`Playbook run failed: ${errorMessage}`);
             }
 
             console.log('All event listeners set up successfully');
