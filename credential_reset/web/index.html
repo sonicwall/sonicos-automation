@@ -659,73 +659,263 @@
                         return;
                     }
 
-                    // Disable button and show progress modal
-                    testConnectionBtn.disabled = true;
-                    testConnectionBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Testing...</span>';
+                    // Check if we should use real-time progress streaming
+                    const useProgressStreaming = true; // Enable SSE progress streaming
 
-                    // Show progress modal with detailed steps
-                    showProgressModal(`Testing Connection to ${formData.firewall}`);
-
-                    // Simulate connection test steps with progress updates
-                    updateProgress(10, `Connecting to ${formData.firewall}:${formData.sshport}...`);
-                    addOperationStep(`Initiating connection to ${formData.firewall}`, 'info');
-
-                    try {
-                        // Add a small delay to show initial progress
-                        await new Promise(resolve => setTimeout(resolve, 500));
-
-                        updateProgress(25, 'Establishing SSH connection...');
-                        addOperationStep('Establishing SSH connection', 'info');
-
-                        await new Promise(resolve => setTimeout(resolve, 300));
-
-                        updateProgress(50, 'Authenticating with credentials...');
-                        addOperationStep(`Authenticating user: ${formData.username}`, 'info');
-
-                        await new Promise(resolve => setTimeout(resolve, 300));
-
-                        updateProgress(75, 'Verifying firewall access...');
-                        addOperationStep('Verifying administrative access', 'info');
-
-                        const response = await fetch('/test_connection', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(formData)
-                        });
-
-                        updateProgress(90, 'Processing response...');
-                        addOperationStep('Retrieving firewall information', 'info');
-
-                        const result = await response.json();
-
-                        updateProgress(100, 'Connection test completed');
-
-                        if (response.ok && result.success) {
-                            addOperationStep('Connection test successful!', 'success');
-                            await new Promise(resolve => setTimeout(resolve, 500)); // Show success briefly
-                            handleConnectionTestResult(result);
-                        } else {
-                            addOperationStep(`Connection failed: ${result.error || result.message || 'Unknown error'}`, 'error');
-                            await new Promise(resolve => setTimeout(resolve, 1000)); // Show error longer
-                            handleConnectionTestError(result.error || result.message || 'Connection test failed');
-                        }
-                    } catch (error) {
-                        console.error('Test connection error:', error);
-                        updateProgress(100, 'Connection failed');
-                        addOperationStep(`Network error: ${error.message}`, 'error');
-                        await new Promise(resolve => setTimeout(resolve, 1000)); // Show error longer
-                        handleConnectionTestError(error.message);
-                    } finally {
-                        testConnectionBtn.disabled = false;
-                        testConnectionBtn.innerHTML = 'Test Connection';
-                        // Hide progress modal after a brief delay
-                        setTimeout(() => {
-                            hideProgressModal();
-                        }, 1500);
+                    if (useProgressStreaming) {
+                        await testConnectionWithProgress(formData, testConnectionBtn);
+                    } else {
+                        await testConnectionLegacy(formData, testConnectionBtn);
                     }
                 });
+            }
+
+            // New SSE-based connection test with real-time progress
+            async function testConnectionWithProgress(formData, testConnectionBtn) {
+                testConnectionBtn.disabled = true;
+                testConnectionBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Testing...</span>';
+
+                showProgressModal(`Testing Connection to ${formData.firewall}`);
+                updateProgress(0, 'Starting connection test...');
+
+                try {
+                    // Start the connection test with progress tracking
+                    const response = await fetch('/test_connection_with_progress', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.success && result.operation_id) {
+                        // Start SSE stream to get real-time progress
+                        const operationId = result.operation_id;
+                        console.log(`Starting SSE stream for operation ${operationId}`);
+
+                        const eventSource = new EventSource(`/progress/${operationId}`);
+
+                        eventSource.onmessage = function(event) {
+                            try {
+                                const progressData = JSON.parse(event.data);
+                                console.log('Progress update:', progressData);
+
+                                if (progressData.type === 'progress') {
+                                    // Update progress bar and current step
+                                    if (progressData.percentage !== undefined) {
+                                        updateProgress(progressData.percentage, progressData.step_name);
+                                    }
+
+                                    // Add step to operation log
+                                    const logLevel = progressData.log_level || 'info';
+                                    addOperationStep(progressData.step_name, logLevel);
+                                } else if (progressData.type === 'complete') {
+                                    console.log('Operation completed');
+                                    eventSource.close();
+
+                                    // Show completion message
+                                    addOperationStep('Connection test completed successfully!', 'success');
+
+                                    // Hide progress modal after a delay
+                                    setTimeout(() => {
+                                        hideProgressModal();
+                                        // Handle successful connection (could call handleConnectionTestResult here)
+                                        handleConnectionTestResult({
+                                            success: true,
+                                            firewall_info: { /* would need to get this from a separate endpoint */ },
+                                            return_msg: 'Connection test completed successfully'
+                                        });
+                                    }, 2000);
+                                } else if (progressData.type === 'error') {
+                                    console.error('Operation error:', progressData.message);
+                                    eventSource.close();
+
+                                    addOperationStep(`Error: ${progressData.message}`, 'error');
+
+                                    setTimeout(() => {
+                                        hideProgressModal();
+                                        handleConnectionTestError(progressData.message);
+                                    }, 2000);
+                                } else if (progressData.type === 'ping') {
+                                    // Keepalive ping, no action needed
+                                    console.log('SSE keepalive ping received');
+                                }
+                            } catch (e) {
+                                console.error('Error parsing progress data:', e);
+                            }
+                        };
+
+                        eventSource.onerror = function(event) {
+                            console.error('SSE connection error:', event);
+                            eventSource.close();
+                            addOperationStep('Connection to progress stream lost', 'error');
+
+                            setTimeout(() => {
+                                hideProgressModal();
+                                handleConnectionTestError('Progress stream connection lost');
+                            }, 1000);
+                        };
+
+                        // Set up cleanup when modal is closed
+                        const originalHideModal = hideProgressModal;
+                        hideProgressModal = function() {
+                            if (eventSource && eventSource.readyState !== EventSource.CLOSED) {
+                                eventSource.close();
+                            }
+                            originalHideModal();
+                            hideProgressModal = originalHideModal; // Restore original function
+                        };
+
+                    } else {
+                        throw new Error(result.error || 'Failed to start connection test with progress tracking');
+                    }
+
+                } catch (error) {
+                    console.error('Error starting connection test with progress:', error);
+                    addOperationStep(`Failed to start connection test: ${error.message}`, 'error');
+
+                    setTimeout(() => {
+                        hideProgressModal();
+                        handleConnectionTestError(error.message);
+                    }, 1000);
+                } finally {
+                    testConnectionBtn.disabled = false;
+                    testConnectionBtn.innerHTML = 'Test Connection';
+                }
+            }
+
+            // Legacy connection test with simulated progress (fallback)
+            async function testConnectionLegacy(formData, testConnectionBtn) {
+                testConnectionBtn.disabled = true;
+                testConnectionBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Testing...</span>';
+
+                showProgressModal(`Testing Connection to ${formData.firewall}`);
+
+                // Simulate connection test steps with progress updates
+                updateProgress(10, `Connecting to ${formData.firewall}:${formData.sshport}...`);
+                addOperationStep(`Initiating connection to ${formData.firewall}`, 'info');
+
+                try {
+                    // Add a small delay to show initial progress
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    updateProgress(25, 'Establishing SSH connection...');
+                    addOperationStep('Establishing SSH connection', 'info');
+
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    updateProgress(50, 'Authenticating with credentials...');
+                    addOperationStep(`Authenticating user: ${formData.username}`, 'info');
+
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    updateProgress(75, 'Verifying firewall access...');
+                    addOperationStep('Verifying administrative access', 'info');
+
+                    const response = await fetch('/test_connection', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    updateProgress(90, 'Processing response...');
+                    addOperationStep('Retrieving firewall information', 'info');
+
+                    const result = await response.json();
+
+                    updateProgress(100, 'Connection test completed');
+
+                    if (response.ok && result.success) {
+                        addOperationStep('Connection test successful!', 'success');
+                        await new Promise(resolve => setTimeout(resolve, 500)); // Show success briefly
+                        handleConnectionTestResult(result);
+                    } else {
+                        addOperationStep(`Connection failed: ${result.error || result.message || 'Unknown error'}`, 'error');
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Show error longer
+                        handleConnectionTestError(result.error || result.message || 'Connection test failed');
+                    }
+                } catch (error) {
+                    console.error('Test connection error:', error);
+                    updateProgress(100, 'Connection failed');
+                    addOperationStep(`Network error: ${error.message}`, 'error');
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Show error longer
+                    handleConnectionTestError(error.message);
+                } finally {
+                    testConnectionBtn.disabled = false;
+                    testConnectionBtn.innerHTML = 'Test Connection';
+                    // Hide progress modal after a brief delay
+                    setTimeout(() => {
+                        hideProgressModal();
+                    }, 1500);
+                }
+            }
+
+            // Helper functions for handling connection test results
+            function handleConnectionTestResult(result) {
+                // Remove any existing connection result messages
+                const existingResult = document.getElementById('connection-result');
+                if (existingResult) {
+                    existingResult.remove();
+                }
+
+                // Create success message
+                const resultDiv = document.createElement('div');
+                resultDiv.id = 'connection-result';
+                resultDiv.className = 'mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md';
+
+                let resultHTML = '<strong>✅ Connection Successful!</strong><br>';
+
+                if (result.firewall_info) {
+                    const info = result.firewall_info;
+                    resultHTML += `
+                        <div class="mt-2 text-sm">
+                            <strong>Firewall Information:</strong><br>
+                            ${info.device_model ? `• Model: ${info.device_model}<br>` : ''}
+                            ${info.firmware_version ? `• Firmware: ${info.firmware_version}<br>` : ''}
+                            ${info.serial_number ? `• Serial: ${info.serial_number}<br>` : ''}
+                            ${info.firewall_generation ? `• Generation: ${info.firewall_generation}<br>` : ''}
+                            ${info.api_autoenabled ? `• <span class="text-orange-600">Note: SonicOS API was temporarily enabled via SSH</span><br>` : ''}
+                        </div>
+                    `;
+                }
+
+                resultDiv.innerHTML = resultHTML;
+
+                // Insert after the form
+                const form = document.getElementById('single-target-form');
+                form.parentNode.insertBefore(resultDiv, form.nextSibling);
+
+                console.log('Connection test successful:', result);
+            }
+
+            function handleConnectionTestError(errorMessage) {
+                // Remove any existing connection result messages
+                const existingResult = document.getElementById('connection-result');
+                if (existingResult) {
+                    existingResult.remove();
+                }
+
+                // Create error message
+                const resultDiv = document.createElement('div');
+                resultDiv.id = 'connection-result';
+                resultDiv.className = 'mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md';
+                resultDiv.innerHTML = `
+                    <strong>❌ Connection Failed</strong><br>
+                    <div class="mt-2 text-sm">${errorMessage}</div>
+                    <div class="mt-2 text-xs text-gray-600">
+                        Please verify your credentials and ensure the firewall is accessible.
+                    </div>
+                `;
+
+                // Insert after the form
+                const form = document.getElementById('single-target-form');
+                form.parentNode.insertBefore(resultDiv, form.nextSibling);
+
+                console.error('Connection test failed:', errorMessage);
             }
 
             // Cancel operation button functionality
@@ -743,278 +933,78 @@
                 });
             }
 
-            // Helper functions for handling connection test results
-            function handleConnectionTestResult(result) {
-                // Remove any existing connection result messages
-                const existingResult = document.getElementById('connection-result');
-                if (existingResult) {
-                    existingResult.remove();
-                }
+            // Run Security Analysis button functionality
+            const runAnalysisBtn = document.getElementById('run-analysis-btn');
+            if (runAnalysisBtn) {
+                runAnalysisBtn.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    console.log('Run Security Analysis button clicked');
 
-                // Build success message with firewall info
-                let messageHtml = '<h4 class="font-medium text-green-800 mb-2">Connection Test Successful!</h4>';
+                    // Gather form data
+                    const formData = {
+                        firewall: document.getElementById('firewall-ip').value.trim(),
+                        username: document.getElementById('admin-username').value.trim(),
+                        password: document.getElementById('admin-password').value.trim(),
+                        sshport: document.getElementById('ssh-port').value.trim(),
+                        security_checks: Array.from(document.querySelectorAll('.security-check:checked')).map(cb => cb.value)
+                    };
 
-                if (result.firewall_info) {
-                    const info = result.firewall_info;
-                    messageHtml += '<div class="bg-green-50 border border-green-200 rounded-md p-3 mt-2">';
-                    messageHtml += '<h5 class="font-semibold text-green-800 mb-2">Firewall Information</h5>';
-                    messageHtml += '<div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">';
-                    messageHtml += `<div><span class="font-medium">Model:</span> ${info.device_model || 'N/A'}</div>`;
-                    messageHtml += `<div><span class="font-medium">Serial Number:</span> ${info.serial_number || 'N/A'}</div>`;
-                    messageHtml += `<div><span class="font-medium">Firmware:</span> ${info.firmware_version || 'N/A'}</div>`;
-                    messageHtml += `<div><span class="font-medium">Generation:</span> ${info.firewall_generation || 'N/A'}</div>`;
-
-                    if (info.api_autoenabled) {
-                        messageHtml += `<div class="col-span-2"><span class="font-medium">API Status:</span> <span class="text-orange-600">Temporarily auto-enabled via SSH</span></div>`;
-                    } else {
-                        messageHtml += `<div class="col-span-2"><span class="font-medium">API Status:</span> <span class="text-green-600">Already accessible</span></div>`;
+                    // Validate required fields
+                    if (!formData.firewall || !formData.username || !formData.password) {
+                        window.alert('Please fill in all required fields (Firewall IP, Username, Password)');
+                        return;
                     }
 
-                    if (info.management_ip) {
-                        messageHtml += `<div><span class="font-medium">Management IP:</span> ${info.management_ip}</div>`;
-                    }
-                    if (info.hostname) {
-                        messageHtml += `<div><span class="font-medium">Hostname:</span> ${info.hostname}</div>`;
+                    if (formData.security_checks.length === 0) {
+                        window.alert('Please select at least one security check level');
+                        return;
                     }
 
-                    messageHtml += '</div></div>';
-                }
+                    try {
+                        runAnalysisBtn.disabled = true;
+                        runAnalysisBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Analyzing...</span>';
 
-                if (result.return_msg && result.return_msg !== 'Connection test successful') {
-                    messageHtml += `<div class="mt-2 text-sm text-green-700">${result.return_msg}</div>`;
-                }
+                        const response = await fetch('/single_analysis', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(formData)
+                        });
 
-                // Create success notification
-                const successDiv = document.createElement('div');
-                successDiv.id = 'connection-result';
-                successDiv.className = 'bg-green-50 border border-green-200 rounded-md p-4 mb-4';
-                successDiv.innerHTML = `<div class="text-green-800">${messageHtml}</div>`;
+                        const result = await response.json();
 
-                // Insert after the form title
-                const form = document.getElementById('single-target-form');
-                form.insertBefore(successDiv, form.firstChild);
-                successDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        if (response.ok && result.success) {
+                            handleAnalysisResult(result);
+                        } else {
+                            handleAnalysisError(result.errors ? result.errors.join(', ') : 'Security analysis failed');
+                        }
+
+                    } catch (error) {
+                        console.error('Security analysis error:', error);
+                        handleAnalysisError(error.message);
+                    } finally {
+                        runAnalysisBtn.disabled = false;
+                        runAnalysisBtn.innerHTML = 'Run Security Analysis';
+                    }
+                });
             }
 
-            function handleConnectionTestError(errorMessage) {
-                // Remove any existing connection result messages
-                const existingResult = document.getElementById('connection-result');
-                if (existingResult) {
-                    existingResult.remove();
-                }
-
-                // Create error notification
-                const errorDiv = document.createElement('div');
-                errorDiv.id = 'connection-result';
-                errorDiv.className = 'bg-red-50 border border-red-200 rounded-md p-4 mb-4';
-                errorDiv.innerHTML = `<div class="text-red-800">
-                    <h4 class="font-medium mb-2">Connection Test Failed!</h4>
-                    <p class="text-sm">${errorMessage}</p>
-                </div>`;
-
-                // Insert after the form title
-                const form = document.getElementById('single-target-form');
-                form.insertBefore(errorDiv, form.firstChild);
-                errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            function handleAnalysisResult(result) {
+                console.log('Security analysis completed:', result);
+                // For now, just show a simple success message
+                // In a full implementation, this would display detailed analysis results
+                window.alert('Security analysis completed successfully! Check the console for detailed results.');
             }
 
-            // Event listener for Run Security Analysis button
-            document.getElementById('run-analysis-btn').addEventListener('click', function() {
-                console.log('Run Security Analysis button clicked');
-                execute_single_analysis();
-            });
+            function handleAnalysisError(errorMessage) {
+                console.error('Security analysis failed:', errorMessage);
+                window.alert(`Security analysis failed: ${errorMessage}`);
+            }
 
-            // console.log('Navigation and checkbox setup complete');
+            console.log('All event listeners set up successfully');
         });
-
-        // Make showSection available globally
-        window.showSection = showSection;
-
-        // Placeholder functions for other global functions
-        window.viewOperationDetails = function(timestamp) { console.log('View details:', timestamp); };
-        window.clearSingleTargetForm = function() { console.log('Clear form'); };
-        window.editTarget = function(index) { console.log('Edit target:', index); };
-        window.removeTarget = function(index) { console.log('Remove target:', index); };
-        window.closeEditModal = function() { console.log('Close modal'); };
-        window.saveTargetEdit = function(index) { console.log('Save edit:', index); };
-        window.exportCurrentTargets = function() { console.log('Export targets'); };
-        window.downloadBatchResults = function() { console.log('Download results'); };
     </script>
 
-    <!-- PyScript Configuration -->
-    <py-config>
-        packages = []
-
-        [[fetch]]
-        files = ["./client_engine.py"]
-    </py-config>
-
-    <!-- PyScript Main Logic -->
-    <script type="py">
-        from js import document, window, console
-        from pyodide.ffi import create_proxy
-        import asyncio
-
-        # Import the operation engine instance directly
-        try:
-            # The operation_engine instance is already created in client_engine.py
-            # We just need to import it and make it available to JavaScript
-            import client_engine as oe_module
-            operation_engine = oe_module.operation_engine
-
-            # Make operation engine available to JavaScript
-            window.operation_engine = operation_engine
-
-            console.log("Engine loaded successfully")
-        except Exception as e:
-            console.error(f"Failed to load operation engine: {e}")
-            operation_engine = None
-
-        def validate_single_target_form():
-            """Validate the single target form and return configuration."""
-            # Get form values
-            firewall_ip = document.getElementById('firewall-ip').value.strip()
-            ssh_port = document.getElementById('ssh-port').value.strip()
-            admin_username = document.getElementById('admin-username').value.strip()
-            admin_password = document.getElementById('admin-password').value.strip()
-
-            # Validation
-            errors = []
-
-            if not firewall_ip:
-                errors.append("Firewall IP/Hostname is required")
-
-            if not admin_username:
-                errors.append("Admin username is required")
-
-            if not admin_password:
-                errors.append("Admin password is required")
-
-            try:
-                port = int(ssh_port);
-                if port < 1 or port > 65535:
-                    errors.append("SSH port must be between 1 and 65535")
-            except ValueError:
-                errors.append("SSH port must be a valid number")
-
-            # Get operation options
-            force_password_change = document.getElementById('force-password-change').checked
-            unbind_totp = document.getElementById('unbind-totp').checked
-            export_settings = document.getElementById('export-settings').checked
-
-            # Password options
-            password_option = document.querySelector('input[name="password-option"]:checked').value
-            temp_password = document.getElementById('temp-password').value.strip()
-
-            if password_option == 'custom' and not temp_password:
-                errors.append("Custom temporary password is required when selected")
-
-            # Security check options
-            security_checks = []
-            checkboxes = document.querySelectorAll('.security-check:checked')
-            for checkbox in checkboxes:
-                security_checks.append(checkbox.value)
-
-            if errors:
-                return False, errors, None
-
-            # Build configuration
-            config = {
-                "firewall": firewall_ip,
-                "username": admin_username,
-                "password": admin_password,
-                "sshport": ssh_port,
-                "force_password_change": force_password_change,
-                "unbind_totp": unbind_totp,
-                "export_settings": export_settings,
-                "temp_password": temp_password if password_option == 'custom' else "",
-                "randomize_temp_password": password_option == 'random',
-                "security_checks": security_checks
-            }
-
-            return True, [], config
-
-        def show_form_errors(errors):
-            """Display form validation errors."""
-            # Remove existing error display
-            existing_error = document.getElementById('form-errors')
-            if existing_error:
-                existing_error.remove()
-
-            if not errors:
-                return
-
-            # Create error display
-            error_div = document.createElement('div')
-            error_div.id = 'form-errors'
-            error_div.className = 'bg-red-50 border border-red-200 rounded-md p-4 mb-4'
-
-            error_html = '<div class="text-red-800"><h4 class="font-medium">Please correct the following errors:</h4><ul class="mt-2 list-disc list-inside text-sm">'
-            for error in errors:
-                error_html += f'<li>{error}</li>'
-            error_html += '</ul></div>'
-
-            error_div.innerHTML = error_html
-
-            form = document.getElementById('single-target-form')
-            form.insertBefore(error_div, form.firstChild)
-
-        async def execute_single_analysis_async():
-            """Execute security analysis on single target."""
-            console.log("Execute single analysis called from Python!")
-
-            valid, errors, config = validate_single_target_form()
-
-            if not valid:
-                show_form_errors(errors)
-                return
-
-            show_form_errors([])  # Clear any existing errors
-
-            # Check if operation engine is available
-            if operation_engine is None:
-                window.alert("Error: Operation engine not available. Please check the console for errors.")
-                return
-
-            try:
-                # Execute the security analysis using operation_engine
-                console.log("Starting security analysis...")
-                console.log("Configuration for analysis:")
-                for key, value in config.items():
-                    console.log(f"  {key}: {value}")
-                result = await operation_engine.execute_single_target_operation(config, "analysis")
-
-                console.log("Security analysis completed:", result)
-
-                # Show results summary
-                if result.get("success"):
-                    analysis = result.get("results", {}).get("security_analysis", {});
-                    user_security = analysis.get("user_security", {});
-                    issues_count = len(user_security.get("issues", []));
-
-                    message = f"Security Analysis Completed Successfully!\n\n"
-                    message += f"Target: {config['firewall']}\n"
-                    message += f"Users found: {result['results'].get('users_found', 0)}\n"
-                    message += f"Security issues detected: {issues_count}\n\n"
-                    message += "Check the Results section for detailed analysis."
-
-                    window.alert(message)
-                else:
-                    error_messages = "\n".join(result.get("errors", ["Unknown error"]))
-                    window.alert(f"Security Analysis Failed!\n\n{error_messages}")
-
-            except Exception as e:
-                console.error(f"Analysis execution error: {e}")
-                window.alert(f"Error executing analysis: {str(e)}")
-
-        def execute_single_analysis_sync():
-            """Synchronous wrapper for async execution."""
-            asyncio.ensure_future(execute_single_analysis_async())
-
-        # Expose Python function to JavaScript
-        window.execute_single_analysis = create_proxy(execute_single_analysis_sync)
-
-        console.log("PyScript initialized successfully")
-    </script>
 </body>
 </html>

@@ -20,10 +20,14 @@ import argparse
 import sys
 import logging
 import os
+import uuid
+import queue
+import json
+import time
+import threading
 
 
 # Imports from reset_credentials.py
-import json
 from typing import Optional, List
 from os import path, mkdir
 from common.banner import print_banner
@@ -247,6 +251,69 @@ def health():
     return {'status': 'ok', 'message': 'CORS Proxy Server is running'}
 
 
+@app.route('/progress/<operation_id>')
+def progress_stream(operation_id):
+    """
+    Server-Sent Events endpoint for streaming operation progress.
+
+    Args:
+        operation_id: Unique identifier for the operation to stream
+
+    Returns:
+        SSE stream with progress events
+    """
+    from common.progress_tracker import progress_manager
+
+    def generate_progress_events():
+        """Generator function for SSE events."""
+        operation_queue = progress_manager.get_operation_queue(operation_id)
+
+        if not operation_queue:
+            # Operation doesn't exist, send error and close
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Operation not found'})}\n\n"
+            return
+
+        logger.info(f"Starting SSE stream for operation {operation_id}")
+
+        try:
+            while True:
+                try:
+                    # Get progress event from queue with timeout
+                    event_data = operation_queue.get(timeout=30)
+
+                    # Send the event as SSE
+                    yield f"data: {json.dumps(event_data)}\n\n"
+
+                    # Check if operation is complete
+                    if event_data.get('type') == 'complete':
+                        logger.info(f"Operation {operation_id} completed, ending SSE stream")
+                        break
+
+                except queue.Empty:
+                    # Send keepalive ping
+                    yield f"data: {json.dumps({'type': 'ping', 'timestamp': generate_timestamp()})}\n\n"
+                    continue
+
+        except Exception as e:
+            logger.error(f"Error in SSE stream for operation {operation_id}: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            # Clean up operation
+            progress_manager.complete_operation(operation_id)
+            logger.info(f"SSE stream ended for operation {operation_id}")
+
+    return Response(
+        generate_progress_events(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+        }
+    )
+
+
 @app.route('/test_connection', methods=['POST'])
 def test_connection():
     """Test connectivity using the operation engine with progress tracking."""
@@ -414,6 +481,63 @@ def single_target():
             logger.error(f"test_connection(): Error processing request data: {e}")
             return {'success': False, 'error': str(e), 'function': 'test_connection() 3'}, 400
     return {'error': 'Method not supported'}, 405
+
+
+@app.route('/test_connection_with_progress', methods=['POST'])
+def test_connection_with_progress():
+    """Test connectivity with real-time progress streaming via SSE."""
+    logger.info(f"Received {request.method} -> {request.url}")
+
+    try:
+        # Extract JSON data from the request body
+        data = request.get_json()
+        if not data:
+            logger.error("test_connection_with_progress(): No JSON data received")
+            return {'success': False, 'error': 'No data received'}, 400
+
+        logger.info(f"test_connection_with_progress(): Received data for {data.get('firewall', 'unknown')}")
+
+        # Generate unique operation ID
+        operation_id = str(uuid.uuid4())
+
+        # Import progress manager and create operation
+        from common.progress_tracker import progress_manager
+        from credential_reset.server_engine import server_operation_engine
+
+        # Create progress tracker for this operation (5 main steps for connection test)
+        progress_tracker = progress_manager.create_operation(operation_id, total_steps=5)
+
+        def run_connection_test():
+            """Run the connection test in a separate thread with progress tracking."""
+            try:
+                # Execute connection test with progress tracking
+                result = server_operation_engine.execute_connection_test_sync(data, operation_id)
+
+                # Store result for retrieval (optional, could be sent via SSE)
+                # For now, just complete the operation
+                if result['success']:
+                    progress_tracker.complete(success=True, message="Connection test completed successfully")
+                else:
+                    progress_tracker.error(result.get('return_msg', 'Connection test failed'))
+
+            except Exception as e:
+                logger.error(f"Connection test thread error: {e}")
+                progress_tracker.error(f"Connection test failed: {str(e)}")
+
+        # Start the connection test in a background thread
+        test_thread = threading.Thread(target=run_connection_test, daemon=True)
+        test_thread.start()
+
+        # Return operation ID immediately so client can start SSE stream
+        return {
+            'success': True,
+            'operation_id': operation_id,
+            'message': 'Connection test started, use operation_id to stream progress'
+        }, 200
+
+    except Exception as e:
+        logger.error(f"test_connection_with_progress(): Error processing request: {e}")
+        return {'success': False, 'error': str(e)}, 400
 
 
 def main():

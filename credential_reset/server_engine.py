@@ -33,12 +33,13 @@ class ServerOperationEngine:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    def execute_connection_test_sync(self, target_data: Dict[str, Any]) -> Dict[str, Any]:
+    def execute_connection_test_sync(self, target_data: Dict[str, Any], operation_id: str = None) -> Dict[str, Any]:
         """
         Server-side connection test without browser dependencies.
 
         Args:
             target_data: Dictionary containing firewall connection parameters
+            operation_id: Optional operation ID for progress tracking
 
         Returns:
             Dictionary with test results in format expected by web client
@@ -53,7 +54,46 @@ class ServerOperationEngine:
             "function": "execute_connection_test_sync"
         }
 
+        # Initialize progress tracker if operation_id is provided
+        progress_tracker = None
+        if operation_id:
+            from common.progress_tracker import progress_manager
+            # Get existing progress tracker for this operation
+            operation_queue = progress_manager.get_operation_queue(operation_id)
+            if operation_queue:
+                # Create a simple progress tracker that uses the existing queue
+                class SimpleProgressTracker:
+                    def __init__(self, op_id, queue):
+                        self.operation_id = op_id
+                        self.queue = queue
+                        self.logger = logging.getLogger(__name__)
+
+                    def update(self, step_name, percentage=None, log_level='info'):
+                        from common.utils import generate_timestamp
+                        event_data = {
+                            "type": "progress",
+                            "operation_id": self.operation_id,
+                            "timestamp": generate_timestamp(),
+                            "step_name": step_name,
+                            "log_level": log_level,
+                            "status": "running"
+                        }
+                        if percentage is not None:
+                            event_data["percentage"] = percentage
+
+                        try:
+                            self.queue.put(event_data, timeout=1)
+                        except:
+                            pass  # Queue full, skip update
+
+                        self.logger.info(f"Progress: {step_name}")
+
+                progress_tracker = SimpleProgressTracker(operation_id, operation_queue)
+
         try:
+            if progress_tracker:
+                progress_tracker.update("Initializing connection test...", 5)
+
             self.logger.info("Starting server-side connection test")
 
             # Load the target from form data
@@ -73,7 +113,12 @@ class ServerOperationEngine:
                 test_result["errors"] = errors
                 test_result["return_msg"] = "<br>".join(errors)
                 self.logger.error(f"Validation failed: {errors}")
+                if progress_tracker:
+                    progress_tracker.update(f"Validation failed: {'; '.join(errors)}", 100, 'error')
                 return test_result
+
+            if progress_tracker:
+                progress_tracker.update(f"Connecting to {target.firewall}...", 20)
 
             self.logger.info(f"Connecting to {target.firewall}")
 
@@ -81,6 +126,9 @@ class ServerOperationEngine:
                 self.logger.info("SSH logic is disabled.")
 
             # Initialize a session with the firewall
+            if progress_tracker:
+                progress_tracker.update("Establishing firewall session...", 40)
+
             api_session, return_msg, api_base, username, password = initialize_session(
                 target,
                 target_numbers,
@@ -94,7 +142,12 @@ class ServerOperationEngine:
                 self.logger.error(error_msg)
                 test_result["return_msg"] = return_msg
                 test_result["errors"] = [error_msg]
+                if progress_tracker:
+                    progress_tracker.update(f"Session failed: {return_msg}", 100, 'error')
                 return test_result
+
+            if progress_tracker:
+                progress_tracker.update("Gathering firewall information...", 70)
 
             # Gather firewall information
             firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=True)
@@ -103,10 +156,15 @@ class ServerOperationEngine:
                 self.logger.error(error_msg)
                 test_result["return_msg"] = error_msg
                 test_result["errors"] = [error_msg]
+                if progress_tracker:
+                    progress_tracker.update(f"Info gathering failed: {error_msg}", 100, 'error')
                 return test_result
 
             # Successfully connected and gathered info
             self.logger.info(f"Successfully connected to firewall: {firewall_info}")
+
+            if progress_tracker:
+                progress_tracker.update("Finalizing connection test...", 90)
 
             # If we enabled SonicOS API via SSH, flag it for display
             if constants.get_autoenabled_sonicos_api():
@@ -123,6 +181,9 @@ class ServerOperationEngine:
             if constants.get_autoenabled_sonicos_api() is True:
                 constants.set_autoenabled_sonicos_api(False)
 
+            if progress_tracker:
+                progress_tracker.update("Connection test completed successfully", 100, 'success')
+
             # Set success result
             test_result["success"] = True
             test_result["firewall_info"] = firewall_info
@@ -135,6 +196,8 @@ class ServerOperationEngine:
             self.logger.error(error_msg)
             test_result["return_msg"] = error_msg
             test_result["errors"] = [error_msg]
+            if progress_tracker:
+                progress_tracker.update(f"Exception: {error_msg}", 100, 'error')
             return test_result
 
     def execute_single_target_operation(self, config: Dict[str, Any], operation_type: str) -> Dict[str, Any]:
