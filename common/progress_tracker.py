@@ -117,13 +117,14 @@ class ProgressTracker:
             is_substep=True
         )
 
-    def complete(self, success: bool = True, message: str = "Operation completed") -> None:
+    def complete(self, success: bool = True, message: str = "Operation completed", result_data: Dict = None) -> None:
         """
         Mark operation as complete.
 
         Args:
             success: Whether operation completed successfully
             message: Completion message
+            result_data: Optional result data to include in completion event
         """
         if self.is_complete:
             return
@@ -136,13 +137,14 @@ class ProgressTracker:
 
         self.logger.info(f"Operation {self.operation_id} {status} in {elapsed_time:.2f}s: {message}")
 
-        # Send completion event
+        # Send completion event with result data
         self._send_progress_event(
             step_name=message,
             percentage=100,
             log_level=log_level,
             details=f"Completed in {elapsed_time:.2f} seconds",
-            status=status
+            status=status,
+            result_data=result_data
         )
 
         # Send final termination event
@@ -152,26 +154,29 @@ class ProgressTracker:
                     "type": "complete",
                     "operation_id": self.operation_id,
                     "success": success,
-                    "elapsed_time": elapsed_time
+                    "elapsed_time": elapsed_time,
+                    "result_data": result_data
                 }, timeout=1)
             except queue.Full:
                 self.logger.warning(f"Progress queue full, dropped completion event for {self.operation_id}")
 
-    def error(self, error_message: str, details: Optional[str] = None) -> None:
+    def error(self, error_message: str, details: Optional[str] = None, result_data: Dict = None) -> None:
         """
         Mark operation as failed with error.
 
         Args:
             error_message: Error description
             details: Additional error details
+            result_data: Optional result data to include in error event
         """
-        self.complete(success=False, message=f"Error: {error_message}")
+        self.complete(success=False, message=f"Error: {error_message}", result_data=result_data)
         if details:
             self.add_substep(f"Error details: {details}", status="error", log_level="error")
 
     def _send_progress_event(self, step_name: str, percentage: Optional[int],
                            log_level: str, details: Optional[str] = None,
-                           status: str = "running", is_substep: bool = False) -> None:
+                           status: str = "running", is_substep: bool = False,
+                           result_data: Optional[Dict] = None) -> None:
         """
         Send progress event to queue for SSE streaming.
 
@@ -182,6 +187,7 @@ class ProgressTracker:
             details: Additional details
             status: Operation status
             is_substep: Whether this is a substep event
+            result_data: Optional result data for completion events
         """
         if not self.progress_queue:
             return
@@ -204,6 +210,10 @@ class ProgressTracker:
 
         if details:
             event_data["details"] = details
+
+        # Include result data for completion events
+        if result_data:
+            event_data["result_data"] = result_data
 
         if self.substeps and not is_substep:
             event_data["substeps"] = self.substeps.copy()

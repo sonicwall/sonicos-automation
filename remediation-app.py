@@ -511,18 +511,25 @@ def test_connection_with_progress():
             """Run the connection test in a separate thread with progress tracking."""
             try:
                 # Execute connection test with progress tracking
+                # The server engine will handle all progress updates and completion
                 result = server_operation_engine.execute_connection_test_sync(data, operation_id)
 
-                # Store result for retrieval (optional, could be sent via SSE)
-                # For now, just complete the operation
-                if result['success']:
-                    progress_tracker.complete(success=True, message="Connection test completed successfully")
-                else:
-                    progress_tracker.error(result.get('return_msg', 'Connection test failed'))
+                # No need to call progress_tracker.complete() here - server engine handles it
+                # The result_data is automatically included in the SSE completion event
 
             except Exception as e:
                 logger.error(f"Connection test thread error: {e}")
-                progress_tracker.error(f"Connection test failed: {str(e)}")
+                # Only handle exceptions not caught by server engine
+                from common.progress_tracker import progress_manager
+                operation_data = progress_manager.active_operations.get(operation_id)
+                if operation_data:
+                    tracker = operation_data["tracker"]
+                    error_result = {
+                        "success": False,
+                        "error": str(e),
+                        "function": "run_connection_test"
+                    }
+                    tracker.complete(success=False, message=f"Connection test failed: {str(e)}", result_data=error_result)
 
         # Start the connection test in a background thread
         test_thread = threading.Thread(target=run_connection_test, daemon=True)

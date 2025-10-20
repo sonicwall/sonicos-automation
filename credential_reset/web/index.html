@@ -716,18 +716,26 @@
                                     eventSource.close();
 
                                     // Show completion message
-                                    addOperationStep('Connection test completed successfully!', 'success');
+                                    addOperationStep('Connection test completed', 'success');
 
-                                    // Hide progress modal after a delay
+                                    // Extract results directly from SSE completion event - no duplicate API call
                                     setTimeout(() => {
                                         hideProgressModal();
-                                        // Handle successful connection (could call handleConnectionTestResult here)
-                                        handleConnectionTestResult({
-                                            success: true,
-                                            firewall_info: { /* would need to get this from a separate endpoint */ },
-                                            return_msg: 'Connection test completed successfully'
-                                        });
-                                    }, 2000);
+
+                                        if (progressData.result_data && progressData.result_data.success) {
+                                            // Use result data from SSE event - eliminates duplicate connection test
+                                            handleConnectionTestResult(progressData.result_data);
+                                        } else if (progressData.result_data) {
+                                            // Handle error case with result data
+                                            const errorMsg = progressData.result_data.return_msg ||
+                                                           progressData.result_data.error ||
+                                                           'Connection test failed';
+                                            handleConnectionTestError(errorMsg);
+                                        } else {
+                                            // Fallback if no result data
+                                            handleConnectionTestError('No result data received from server');
+                                        }
+                                    }, 1000);
                                 } else if (progressData.type === 'error') {
                                     console.error('Operation error:', progressData.message);
                                     eventSource.close();
