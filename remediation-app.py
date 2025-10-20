@@ -358,7 +358,7 @@ def test_connection():
 
 @app.route('/single_analysis', methods=['POST'])
 def single_analysis():
-    """Execute security analysis using the server operation engine."""
+    """Execute security analysis with progress tracking using the server operation engine."""
     logger.info(f"Received {request.method} -> {request.url}")
     if request.method == 'POST':
         try:
@@ -370,33 +370,78 @@ def single_analysis():
 
             logger.info(f"single_analysis(): Received data: {data}")
 
-            # Import and use the SERVER operation engine
-            from credential_reset.server_engine import server_operation_engine
-
-            # Execute security analysis operation
-            # TODO: Analysis button click calls this....
-            result = server_operation_engine.execute_single_target_operation(data, "analysis")
-
-            # Return the result in the expected format
-            if result['success']:
-                return {
-                    'success': True,
-                    'results': result['results'],
-                    'firewall_info': result.get('firewall_info'),
-                    'operation_type': result['operation_type']
-                }, 200
-            else:
-                return {
-                    'success': False,
-                    'errors': result['errors'],
-                    'function': result['function']
-                }, 400
+            # Generate unique operation ID
+            operation_id = str(uuid.uuid4())
+            logger.info(f"Generated operation ID: {operation_id}")
+            
+            # Import progress manager and create operation tracker (estimated 8 main steps)
+            from common.progress_tracker import progress_manager
+            progress_tracker = progress_manager.create_operation(operation_id, 8)
+            
+            # Start operation in background thread
+            thread = threading.Thread(
+                target=_execute_analysis_with_progress,
+                args=(data, operation_id),
+                daemon=True
+            )
+            thread.start()
+            
+            # Return operation ID immediately for progress tracking
+            return {
+                "success": True,
+                "operation_id": operation_id,
+                "message": "Analysis started"
+            }, 200
 
         except Exception as e:
             logger.error(f"single_analysis(): Error processing request: {e}")
             return {'success': False, 'error': str(e), 'function': 'single_analysis() exception'}, 400
 
     return {'error': 'Method not supported'}, 405
+
+
+def _execute_analysis_with_progress(data, operation_id):
+    """Execute analysis operation with progress tracking in background thread."""
+    try:
+        logger.info(f"Starting background analysis for operation {operation_id}")
+        
+        # Import and use the SERVER operation engine
+        from credential_reset.server_engine import server_operation_engine
+        
+        # Convert form data to expected format
+        config = {
+            'firewall': data.get('firewall'),
+            'username': data.get('username'),
+            'password': data.get('password'),
+            'sshport': int(data.get('sshport', 22)),
+            'export_tsr': data.get('export_tsr', 'false').lower() == 'true',
+            'export_settings': data.get('export_settings', 'false').lower() == 'true',
+            'security_checks': data.get('security_checks', [])
+        }
+        
+        # Execute operation with progress tracking
+        result = server_operation_engine.execute_single_target_operation(
+            config, 
+            "analysis", 
+            operation_id
+        )
+        
+        # Mark operation as complete in progress manager
+        from common.progress_tracker import progress_manager
+        progress_manager.complete_operation(operation_id)
+        
+        logger.info(f"Background analysis completed for operation {operation_id}")
+        
+    except Exception as e:
+        logger.error(f"Background analysis failed for operation {operation_id}: {e}")
+        # Handle errors and update progress tracker
+        from common.progress_tracker import progress_manager
+        operation_data = progress_manager.active_operations.get(operation_id)
+        if operation_data:
+            tracker = operation_data["tracker"]
+            tracker.error(f"Operation failed: {str(e)}")
+        progress_manager.complete_operation(operation_id)
+        logger.info(f"Operation {operation_id} marked as complete due to error")
 
 
 @app.route('/single', methods=['POST', 'GET'])

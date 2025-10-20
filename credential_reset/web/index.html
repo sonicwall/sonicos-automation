@@ -964,22 +964,67 @@
                 console.error('Connection test failed:', errorMessage);
             }
 
+            function handleAnalysisError(errorMessage) {
+                console.error('Analysis error:', errorMessage);
+
+                // Remove any existing analysis result messages
+                const existingResult = document.getElementById('analysis-result');
+                if (existingResult) {
+                    existingResult.remove();
+                }
+
+                // Create error message
+                const resultDiv = document.createElement('div');
+                resultDiv.id = 'analysis-result';
+                resultDiv.className = 'mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md';
+                resultDiv.innerHTML = `
+                    <strong>❌ Analysis Failed</strong><br>
+                    <div class="mt-2 text-sm">${errorMessage}</div>
+                    <div class="mt-2 text-xs text-gray-600">
+                        Please verify your connection and try again.
+                    </div>
+                `;
+
+                // Insert after the form
+                const form = document.getElementById('single-target-form');
+                form.parentNode.insertBefore(resultDiv, form.nextSibling);
+
+                // Show alert as well for immediate user feedback
+                window.alert(`Analysis Failed: ${errorMessage}`);
+            }
+
             // Cancel operation button functionality
             const cancelOperationBtn = document.getElementById('cancel-operation-btn');
             if (cancelOperationBtn) {
                 cancelOperationBtn.addEventListener('click', function() {
                     console.log('Operation cancelled by user');
+
+                    // Close any active SSE streams
+                    if (window.currentProgressStream) {
+                        console.log('Closing active progress stream');
+                        window.currentProgressStream.close();
+                        window.currentProgressStream = null;
+                    }
+
                     hideProgressModal();
+
                     // Reset any ongoing operations
                     const testBtn = document.getElementById('test-connection-btn');
-                    if (testBtn.disabled) {
+                    const analysisBtn = document.getElementById('run-analysis-btn');
+
+                    if (testBtn && testBtn.disabled) {
                         testBtn.disabled = false;
                         testBtn.innerHTML = 'Test Connection';
+                    }
+
+                    if (analysisBtn && analysisBtn.disabled) {
+                        analysisBtn.disabled = false;
+                        analysisBtn.innerHTML = 'Run Playbook';
                     }
                 });
             }
 
-            // Run Security Analysis button functionality
+            // Run Security Analysis button functionality with progress tracking
             const runAnalysisBtn = document.getElementById('run-analysis-btn');
             if (runAnalysisBtn) {
                 runAnalysisBtn.addEventListener('click', async function(e) {
@@ -1012,13 +1057,15 @@
                         return;
                     }
 
-                    // Debug: Log form data
-                    console.log(formData);
-
                     try {
-                        runAnalysisBtn.disabled = true;
-                        runAnalysisBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Running Playbook...</span>';
+                        // Show progress modal immediately
+                        showProgressModal("Security Analysis Progress");
 
+                        // Disable button and show loading state
+                        runAnalysisBtn.disabled = true;
+                        runAnalysisBtn.innerHTML = '<span class="inline-flex items-center"><svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Starting Analysis...</span>';
+
+                        // Start the operation
                         const response = await fetch('/single_analysis', {
                             method: 'POST',
                             headers: {
@@ -1029,14 +1076,17 @@
 
                         const result = await response.json();
 
-                        if (response.ok && result.success) {
-                            handleAnalysisResult(result);
+                        if (response.ok && result.success && result.operation_id) {
+                            // Start SSE connection for progress updates
+                            startProgressTracking(result.operation_id);
                         } else {
-                            handleAnalysisError(result.errors ? result.errors.join(', ') : 'Playbook run failed');
+                            hideProgressModal();
+                            handleAnalysisError(result.error || 'Failed to start analysis');
                         }
 
                     } catch (error) {
-                        console.error('Playbook run error:', error);
+                        console.error('Analysis start error:', error);
+                        hideProgressModal();
                         handleAnalysisError(error.message);
                     } finally {
                         runAnalysisBtn.disabled = false;
@@ -1045,19 +1095,122 @@
                 });
             }
 
+            // New function to handle SSE progress tracking
+            function startProgressTracking(operationId) {
+                console.log(`Starting SSE stream for operation ${operationId}`);
+                const eventSource = new EventSource(`/progress/${operationId}`);
+
+                eventSource.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    console.log('SSE Event:', data);
+
+                    if (data.type === 'progress') {
+                        // Update progress bar and current step
+                        if (data.percentage !== undefined) {
+                            updateProgress(data.percentage, data.step_name);
+                        }
+
+                        // Add operation step
+                        addOperationStep(data.step_name, getStatusFromLogLevel(data.log_level));
+
+                        // Add substeps if present
+                        if (data.is_substep) {
+                            // This is already a substep, don't add extra indentation
+                        } else if (data.substeps && data.substeps.length > 0) {
+                            // Add any new substeps that aren't already displayed
+                            data.substeps.forEach(substep => {
+                                addOperationStep(`  └─ ${substep.description}`, getStatusFromLogLevel(substep.log_level));
+                            });
+                        }
+                    } else if (data.type === 'complete') {
+                        // Operation completed
+                        console.log('Analysis completed:', data);
+                        eventSource.close();
+
+                        if (data.success) {
+                            updateProgress(100, "Analysis completed successfully");
+                            addOperationStep("✓ Analysis completed", "success");
+
+                            // Handle successful result
+                            if (data.result_data) {
+                                handleAnalysisResult(data.result_data);
+                            }
+
+                            // Auto-hide modal after brief delay
+                            setTimeout(() => {
+                                hideProgressModal();
+                            }, 3000);
+                        } else {
+                            addOperationStep("✗ Analysis failed", "error");
+                            handleAnalysisError("Analysis failed");
+
+                            // Keep modal open for error review
+                            setTimeout(() => {
+                                hideProgressModal();
+                            }, 5000);
+                        }
+                    } else if (data.type === 'ping') {
+                        // Keep-alive ping, do nothing
+                        console.log('SSE keepalive ping');
+                    } else if (data.type === 'error') {
+                        // Error occurred
+                        console.error('SSE Error:', data);
+                        eventSource.close();
+                        addOperationStep(`✗ Error: ${data.message || data.error}`, "error");
+                        handleAnalysisError(data.message || data.error || "Unknown error occurred");
+                    }
+                };
+
+                eventSource.onerror = function(event) {
+                    console.error('SSE Connection Error:', event);
+                    eventSource.close();
+                    addOperationStep("✗ Connection error", "error");
+                    handleAnalysisError("Lost connection to server");
+                };
+
+                // Store reference for potential cancellation
+                window.currentProgressStream = eventSource;
+            }
+
+            // Helper function to map log levels to status classes
+            function getStatusFromLogLevel(logLevel) {
+                const statusMap = {
+                    'success': 'success',
+                    'info': 'info',
+                    'warning': 'warning',
+                    'error': 'error'
+                };
+                return statusMap[logLevel] || 'info';
+            }
+
             function handleAnalysisResult(result) {
                 console.log('Playbook run completed:', result);
-                // For now, just show a simple success message
-                // In a full implementation, this would display detailed analysis results
-                window.alert('Playbook run completed successfully! Check the console for detailed results.');
+
+                // Display success message with summary
+                let summaryMessage = "Security analysis completed successfully!";
+
+                if (result.results && result.results.security_analysis) {
+                    const analysis = result.results.security_analysis;
+                    const userSecurity = analysis.user_security;
+                    const configAnalysis = analysis.configuration_analysis;
+
+                    summaryMessage += `\n\nResults Summary:`;
+                    summaryMessage += `\n• Users analyzed: ${userSecurity.users_found}`;
+                    summaryMessage += `\n• Security issues found: ${userSecurity.issues.length}`;
+                    summaryMessage += `\n• Configuration checks: ${configAnalysis.checks_performed.length}`;
+
+                    if (userSecurity.issues.length > 0) {
+                        summaryMessage += `\n\nSecurity Issues:`;
+                        userSecurity.issues.forEach(issue => {
+                            summaryMessage += `\n• [${issue.severity.toUpperCase()}] ${issue.issue}`;
+                        });
+                    }
+                }
+
+                // Show results in an alert for now (in a real app, this would be a proper results display)
+                window.alert(summaryMessage);
             }
 
-            function handleAnalysisError(errorMessage) {
-                console.error('Playbook run failed:', errorMessage);
-                window.alert(`Playbook run failed: ${errorMessage}`);
-            }
-
-            console.log('All event listeners set up successfully');
         });
     </script>
 

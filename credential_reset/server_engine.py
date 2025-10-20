@@ -183,13 +183,14 @@ class ServerOperationEngine:
                 progress_tracker.complete(success=False, message=f"Exception: {error_msg}", result_data=test_result)
             return test_result
 
-    def execute_single_target_operation(self, config: Dict[str, Any], operation_type: str) -> Dict[str, Any]:
+    def execute_single_target_operation(self, config: Dict[str, Any], operation_type: str, operation_id: str = None) -> Dict[str, Any]:
         """
-        Execute a single target operation (analysis, credential reset, etc.).
+        Execute a single target operation (analysis, credential reset, etc.) with progress tracking.
 
         Args:
             config: Configuration dictionary from web form
             operation_type: Type of operation ("analysis", "reset", etc.)
+            operation_id: Optional operation ID for progress tracking
 
         Returns:
             Dictionary with operation results
@@ -203,7 +204,18 @@ class ServerOperationEngine:
             "function": "execute_single_target_operation"
         }
 
+        # Initialize progress tracker if operation_id is provided
+        progress_tracker = None
+        if operation_id:
+            from common.progress_tracker import progress_manager
+            operation_data = progress_manager.active_operations.get(operation_id)
+            if operation_data:
+                progress_tracker = operation_data["tracker"]
+
         try:
+            if progress_tracker:
+                progress_tracker.update("Initializing operation...", 5)
+
             self.logger.info(f"Starting {operation_type} operation")
 
             # Convert config to target format
@@ -220,9 +232,15 @@ class ServerOperationEngine:
                 'export_tsr': config.get('export_tsr', False)
             }
 
+            if progress_tracker:
+                progress_tracker.update(f"Connecting to {config.get('firewall')}...", 10)
+
             # Load the target
             target = load_targets(target_data)
             target_numbers = (1, 1)
+
+            if progress_tracker:
+                progress_tracker.update("Establishing firewall session...", 20)
 
             # Initialize session
             api_session, return_msg, api_base, username, password = initialize_session(
@@ -236,22 +254,35 @@ class ServerOperationEngine:
             if api_session is None or api_session is False:
                 error_msg = f"Unable to create session: {return_msg}"
                 operation_result["errors"] = [error_msg]
+                if progress_tracker:
+                    progress_tracker.complete(success=False, message=f"Session failed: {error_msg}", result_data=operation_result)
                 return operation_result
+
+            if progress_tracker:
+                progress_tracker.update("Gathering firewall information...", 35)
 
             # Gather firewall info
             firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=True)
             if firewall_info is None:
                 operation_result["errors"] = [f"Error gathering firewall info: {error_msg}"]
+                if progress_tracker:
+                    progress_tracker.complete(success=False, message=f"Info gathering failed: {error_msg}", result_data=operation_result)
                 return operation_result
+
+            if progress_tracker:
+                progress_tracker.update(f"Connected to {firewall_info['device_model']} (Gen{firewall_info['firewall_generation']}) - {firewall_info['firmware_version']}", 50)
 
             # Execute based on operation type
             # TODO: Review the operation types.
             if operation_type == "analysis":
-                results = self._execute_security_analysis(api_session, api_base, target, firewall_info, config)
+                results = self._execute_security_analysis(api_session, api_base, target, firewall_info, config, progress_tracker)
             elif operation_type == "reset":
-                results = self._execute_credential_reset(api_session, api_base, target, firewall_info, config)
+                results = self._execute_credential_reset(api_session, api_base, target, firewall_info, config, progress_tracker)
             else:
                 results = {"error": f"Unknown operation type: {operation_type}"}
+
+            if progress_tracker:
+                progress_tracker.update("Finalizing operation...", 90)
 
             # Cleanup
             try:
@@ -268,22 +299,37 @@ class ServerOperationEngine:
             operation_result["results"] = results
             operation_result["firewall_info"] = firewall_info
 
+            if progress_tracker:
+                progress_tracker.complete(success=True, message="Operation completed successfully", result_data=operation_result)
+
             return operation_result
 
         except Exception as e:
             error_msg = f"Operation failed: {str(e)}"
             self.logger.error(error_msg)
             operation_result["errors"] = [error_msg]
+            if progress_tracker:
+                progress_tracker.complete(success=False, message=f"Exception: {error_msg}", result_data=operation_result)
             return operation_result
 
-    def _execute_security_analysis(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict) -> Dict:
-        """Execute security analysis on the firewall."""
+    def _execute_security_analysis(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None) -> Dict:
+        """Execute security analysis on the firewall with progress tracking."""
         try:
+            if progress_tracker:
+                progress_tracker.update("Starting security analysis...", 60)
+
             # Export TSR if requested (before analysis)
             tsr_result = {}
             if config.get('export_tsr', False):
+                if progress_tracker:
+                    progress_tracker.add_substep("Exporting Technical Support Report...", "running")
                 target_numbers = (1, 1)
                 tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
+                if progress_tracker:
+                    progress_tracker.add_substep("TSR export completed", "completed", "success")
+
+            if progress_tracker:
+                progress_tracker.update("Analyzing local users...", 70)
 
             from credential_reset.firewall import get_local_users
 
@@ -291,7 +337,13 @@ class ServerOperationEngine:
             local_users = get_local_users(api_session, api_base, firewall_info.get('firewall_generation'))
 
             if not local_users:
+                if progress_tracker:
+                    progress_tracker.add_substep("No local users found", "error", "warning")
                 return {"error": "No local users found or unable to retrieve users"}
+
+            if progress_tracker:
+                progress_tracker.add_substep(f"Found {len(local_users)} local users", "completed", "success")
+                progress_tracker.update("Performing security checks...", 80)
 
             # Perform security analysis
             security_analysis = {
@@ -307,7 +359,10 @@ class ServerOperationEngine:
             }
 
             # Analyze each user for security issues
-            for user in local_users:
+            for i, user in enumerate(local_users):
+                if progress_tracker:
+                    progress_tracker.add_substep(f"Analyzing user: {user.get('name', 'Unknown')}", "running")
+
                 user_issues = []
 
                 # Check for default passwords (basic heuristic)
@@ -329,25 +384,44 @@ class ServerOperationEngine:
                 # Add user-specific issues to analysis
                 if user_issues:
                     security_analysis["user_security"]["issues"].extend(user_issues)
+                    if progress_tracker:
+                        progress_tracker.add_substep(f"Found {len(user_issues)} issue(s) for {user.get('name')}", "completed", "warning")
+                else:
+                    if progress_tracker:
+                        progress_tracker.add_substep(f"No issues found for {user.get('name')}", "completed", "success")
 
             # Add configuration checks based on selected security levels
             security_levels = config.get('security_checks', ['critical', 'high', 'medium', 'low'])
 
+            if progress_tracker:
+                progress_tracker.update("Running configuration security checks...", 85)
+
             for level in security_levels:
                 security_analysis["configuration_analysis"]["checks_performed"].append(f"{level}_security_check")
+                if progress_tracker:
+                    progress_tracker.add_substep(f"Completed {level} security check", "completed", "success")
+
+            if progress_tracker:
+                total_issues = len(security_analysis["user_security"]["issues"])
+                if total_issues > 0:
+                    progress_tracker.add_substep(f"Analysis complete: {total_issues} security issues found", "completed", "warning")
+                else:
+                    progress_tracker.add_substep("Analysis complete: No security issues found", "completed", "success")
 
             return {
                 "security_analysis": security_analysis,
                 "users_found": len(local_users),
                 "analysis_timestamp": constants.generate_timestamp(),
-                "tsr_result": tsr_result  # Include TSR result
+                "tsr_result": tsr_result
             }
 
         except Exception as e:
             self.logger.error(f"Security analysis failed: {e}")
+            if progress_tracker:
+                progress_tracker.add_substep(f"Analysis failed: {str(e)}", "error", "error")
             return {"error": f"Security analysis failed: {str(e)}"}
 
-    def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict) -> Dict:
+    def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None) -> Dict:
         """Execute credential reset operation."""
         try:
             # Export TSR if requested (before making changes)
