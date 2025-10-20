@@ -275,7 +275,9 @@ class ServerOperationEngine:
             # Execute based on operation type
             # TODO: Review the operation types.
             if operation_type == "analysis":
-                results = self._execute_security_analysis(api_session, api_base, target, firewall_info, config, progress_tracker)
+                results = self._execute_security_analysis(api_session, api_base, target, firewall_info, config, progress_tracker, username, password)
+                if progress_tracker:
+                    progress_tracker.clear_substeps()
             elif operation_type == "reset":
                 results = self._execute_credential_reset(api_session, api_base, target, firewall_info, config, progress_tracker)
             else:
@@ -319,7 +321,7 @@ class ServerOperationEngine:
                 progress_tracker.complete(success=False, message=f"Exception: {error_msg}", result_data=operation_result)
             return operation_result
 
-    def _execute_security_analysis(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None) -> Dict:
+    def _execute_security_analysis(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None, username: str = None, password: str = None) -> Dict:
         """Execute security analysis on the firewall with progress tracking."""
         try:
             if progress_tracker:
@@ -329,32 +331,70 @@ class ServerOperationEngine:
             tsr_result = {}
             if config.get('export_tsr', False):
                 if progress_tracker:
-                    progress_tracker.add_substep("Exporting Technical Support Report...", "running")
+                    progress_tracker.update("TSR export requested...", 30)
+                    progress_tracker.add_substep("Exporting Tech Support Report...", "running")
                 target_numbers = (1, 1)
                 tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
                 if progress_tracker:
                     progress_tracker.add_substep("TSR export completed", "completed", "success")
-                    progress_tracker.update(f"TSR export completed", 35)
+                    progress_tracker.clear_substeps()
 
             # Export Settings if requested (before analysis)
             if config.get('export_settings', False):
                 if progress_tracker:
-                    progress_tracker.add_substep("Exporting Configuration Settings...", "running")
-                from credential_reset.export_helper import export_configuration_settings
-                settings_result = export_configuration_settings(api_session, api_base, target, firewall_info, silent=False, tag="pre-analysis")
+                    progress_tracker.update("Preferences export requested...", 30)
+                    progress_tracker.add_substep("Exporting preferences file...", "running")
+                from credential_reset.export_helper import export_settings_if_enabled
+                # Create a mock args object with the required attributes
+                class MockArgs:
+                    def __init__(self):
+                        self.export_settings = True
+                        self.verbose = False
+
+                mock_args = MockArgs()
+                target_numbers = (1, 1)
+                settings_result = export_settings_if_enabled(api_session, api_base, mock_args, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
                 if progress_tracker:
-                    progress_tracker.add_substep("Configuration settings export completed", "completed", "success")
-                    progress_tracker.update(f"Configuration settings export completed", 40)
+                    progress_tracker.add_substep("Preferences export completed", "completed", "success")
+                    progress_tracker.clear_substeps()
 
             if progress_tracker:
-                progress_tracker.update("Analyzing local users...", 70)
+                progress_tracker.update("Initializing playbook...", 35)
 
-            from credential_reset.firewall import get_local_users
+            # If the firewall is a GEN6, establish an alternate API session.
+            if firewall_info.get('firewall_generation') == 6:
+                if progress_tracker:
+                    progress_tracker.update("Establishing GEN6 alternate API session...", 35)
 
+                    from sonicos.api2 import Login
+
+                    alt_session = Login(
+                        ipaddress=api_base,
+                        userid=username,
+                        passwd=password,
+                        admin_mode="config",
+                        http_type="https",
+                        brwsr_cache=0,
+                        verbose=0,
+                        sessIdRef=0
+                    )
+
+                    logged_in, rmsg = alt_session.login2()
+                    if logged_in == 1:
+                        if progress_tracker:
+                            progress_tracker.add_substep("GEN6 alternate API session established", "completed", "success")
+                            progress_tracker.clear_substeps()
+            else:
+                alt_session = None
 
             if progress_tracker:
-                progress_tracker.add_substep(f".....", "completed", "success")
-                progress_tracker.update("Performing security checks...", 80)
+                progress_tracker.update("Executing playbook...", 40)
+
+            # TODO: Implement remediation playbook execution logic here
+
+            from credential_reset.playbook import Playbook
+
+            # Initialize the playbook class the way reset_credentials.py does.
 
             # Perform security analysis
             security_analysis = {
@@ -374,11 +414,6 @@ class ServerOperationEngine:
 
             if progress_tracker:
                 progress_tracker.update("Running configuration security checks...", 85)
-
-            for level in security_levels:
-                security_analysis["configuration_analysis"]["checks_performed"].append(f"{level}_security_check")
-                if progress_tracker:
-                    progress_tracker.add_substep(f"Completed {level} security check", "completed", "success")
 
             if progress_tracker:
                 total_issues = len(security_analysis["user_security"]["issues"])

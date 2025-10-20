@@ -117,6 +117,16 @@ class ProgressTracker:
             is_substep=True
         )
 
+    def clear_substeps(self) -> None:
+        """
+        Clear all accumulated substeps.
+
+        This is useful when you want to start fresh with substeps for a new operation phase
+        without carrying over substeps from previous phases.
+        """
+        self.substeps.clear()
+        self.logger.debug(f"Cleared substeps for operation {self.operation_id}")
+
     def complete(self, success: bool = True, message: str = "Operation completed", result_data: Dict = None) -> None:
         """
         Mark operation as complete.
