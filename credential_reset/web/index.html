@@ -153,31 +153,41 @@
         <div id="single-section" class="section hide">
             <div class="bg-white rounded-lg card-shadow p-6">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Single Target Configuration</h2>
+                <p class="text-gray-600 mb-3">
+                    Run the playbook against a single <strong>live</strong> firewall. Fill in the details below and select the desired operations.
+                    <ul class="list-disc list-inside mb-4 text-gray-600 text-xs">
+                        <li>Ensure the firewall is reachable over the network and that the provided credentials are valid.</li>
+                        <li>SonicOS API access will be auto-enabled if needed, using the provided SSH port as a failback. Set the port to 0 to disable SSH failback.</li>
+                        <li>You can provide a custom (non-443) target port by adding the port number to the IP/hostname. For example: 192.168.168.168:4443</li>
+                        <li>Running the playbook with any "Config Change" options enabled will modify the firewall's configuration.</li>
+                    </ul>
+                </p>
 
                 <form id="single-target-form">
                     <!-- Target Configuration -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Firewall IP/Hostname *</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Firewall IP/Hostname</label>
                             <input type="text" id="firewall-ip" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                    placeholder="192.168.1.1 or firewall.company.com" required>
-                            <p class="text-xs text-gray-500 mt-1">Enter the IP address or hostname of the SonicWall firewall</p>
+                            <p class="text-xs text-gray-500 mt-1">Enter the IP address/hostname (and optionally :port) of the SonicWall firewall.</p>
                         </div>
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">SSH Port</label>
                             <input type="number" id="ssh-port" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                    value="22" min="1" max="65535">
+                            <p class="text-xs text-gray-500 mt-1">Used as a failback for auto-enabling/disabling SonicOS API. <strong>To disable, use port 0.</strong></p>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Admin Username *</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Admin Username</label>
                             <input type="text" id="admin-username" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                    placeholder="admin" required>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Admin Password *</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Admin Password</label>
                             <input type="password" id="admin-password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                    placeholder="Enter admin password" required>
                         </div>
