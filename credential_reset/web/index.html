@@ -268,7 +268,7 @@
                             Reset Form
                         </button>
                         <button type="button" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400" onclick="showSection('dashboard-section')">
-                            Cancel
+                            Close
                         </button>
                     </div>
                 </form>
@@ -735,7 +735,7 @@
                                             // Fallback if no result data
                                             handleConnectionTestError('No result data received from server');
                                         }
-                                    }, 1000);
+                                    }, 4000);
                                 } else if (progressData.type === 'error') {
                                     console.error('Operation error:', progressData.message);
                                     eventSource.close();
