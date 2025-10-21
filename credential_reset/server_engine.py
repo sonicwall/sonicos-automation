@@ -284,6 +284,9 @@ class ServerOperationEngine:
             if progress_tracker:
                 progress_tracker.update(f"Connected to {firewall_info['device_model']} (Gen{firewall_info['firewall_generation']}) - {firewall_info['firmware_version']}", 30)
 
+            if os.path.exists(constants.START_TIMESTAMP_FOLDER) is False:
+                os.mkdir(constants.START_TIMESTAMP_FOLDER)
+
             # Execute based on operation type
             # TODO: Review the operation types.
             if operation_type == "analysis":
@@ -340,14 +343,21 @@ class ServerOperationEngine:
             if progress_tracker:
                 progress_tracker.update("Starting security analysis...", 30)
 
+            # Initialize export results dictionary to capture all export statuses
+            export_results = {
+                'tsr_downloaded': False,
+                'settings_exported': False,
+                'trace_logs_downloaded': False
+            }
+
             # Export TSR if requested (before analysis)
-            tsr_result = {}
             if config.get('export_tsr', False):
                 if progress_tracker:
                     progress_tracker.update("Tech Support Report (TSR) export requested...", 31)
                     # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
                 target_numbers = (1, 1)
                 tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
+                export_results.update(tsr_result)  # Merge TSR results into export_results
                 if progress_tracker:
                     progress_tracker.add_substep("Export complete", "completed", "success")
                     progress_tracker.clear_substeps()
@@ -360,12 +370,25 @@ class ServerOperationEngine:
                 from credential_reset.export_helper import export_settings_if_enabled
                 target_numbers = (1, 1)
                 settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
+                export_results.update(settings_result)  # Merge settings results into export_results
+                if progress_tracker:
+                    progress_tracker.add_substep("Export complete", "completed", "success")
+                    progress_tracker.clear_substeps()
+
+            # Export Trace Logs if requested (before analysis) - NEW FUNCTIONALITY
+            if config.get('export_tracelogs', False):
+                if progress_tracker:
+                    progress_tracker.update("Trace logs export requested...", 33)
+                from credential_reset.export_helper import export_tracelogs_if_enabled
+                target_numbers = (1, 1)
+                tracelogs_result = export_tracelogs_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
+                export_results.update(tracelogs_result)  # Merge trace logs results into export_results
                 if progress_tracker:
                     progress_tracker.add_substep("Export complete", "completed", "success")
                     progress_tracker.clear_substeps()
 
             if progress_tracker:
-                progress_tracker.update("Initializing playbook...", 33)
+                progress_tracker.update("Initializing playbook...", 34)
 
             # If the firewall is a GEN6, establish an alternate API session.
             alt_session = None
@@ -619,7 +642,7 @@ class ServerOperationEngine:
                 if progress_tracker:
                     progress_tracker.update("Generating summary data...", 90)
 
-                summary_data = self._generate_summary_data(converted_results, check_results, routine_results, markdown_report)
+                summary_data = self._generate_summary_data(converted_results, check_results, routine_results, markdown_report, export_results)
 
                 if progress_tracker:
                     progress_tracker.update("Summary data generated", 92)
@@ -632,7 +655,7 @@ class ServerOperationEngine:
                 "markdown_report": markdown_report,  # NEW: Add markdown report
                 "summary_data": summary_data,  # NEW: Add summary data for frontend
                 "analysis_timestamp": constants.generate_timestamp(),
-                "tsr_result": tsr_result
+                **export_results  # Merge export results (tsr_downloaded, settings_exported, etc.)
             }
 
         except Exception as e:
@@ -693,7 +716,7 @@ class ServerOperationEngine:
                 'list_tacacs_accounting_servers': 'tacacs_accounting_servers',
                 'check_appflow_sfr_reporting': 'appflow_sfr_reporting',
                 'check_sec_services_proxy': 'sec_services_proxy',
-                'list_advanced_routing_protocols': 'advanced_routing_protocols',
+                'list_advanced_routing_protocols': 'advanced_routing',
                 'check_cellular_wwan': 'cellular_wwan',
                 'check_internal_wlan_radio': 'internal_wlan_radio',
                 'check_internal_wlan_vaps': 'internal_wlan_vaps',
@@ -812,7 +835,7 @@ class ServerOperationEngine:
             self.logger.error(f"Error extracting recommendations from markdown: {e}")
             return []
 
-    def _generate_summary_data(self, converted_results: Dict, check_results: Dict, routine_results: Dict, markdown_report: str = None) -> Dict:
+    def _generate_summary_data(self, converted_results: Dict, check_results: Dict, routine_results: Dict, markdown_report: str = None, export_results: Dict = None) -> Dict:
         """
         Generate summary data for the frontend summary tab.
 
@@ -821,6 +844,7 @@ class ServerOperationEngine:
             check_results: Raw check results from playbook
             routine_results: Routine operation results
             markdown_report: Optional markdown report content to extract from
+            export_results: Optional export results for inclusion in summary
 
         Returns:
             Dictionary containing summary data for frontend display
