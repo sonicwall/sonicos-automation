@@ -509,7 +509,6 @@ class ServerOperationEngine:
                             if progress_tracker:
                                 progress_percent = 45 + int((completed_checks / total_checks) * 35)
                                 progress_tracker.update(f"Checking {check_description}...", progress_percent)
-                                progress_tracker.add_substep(f"Running {check_description} check", "running")
 
                             # Execute the playbook method
                             if hasattr(pb, method_name):
@@ -522,11 +521,10 @@ class ServerOperationEngine:
                                     'status': 'completed'
                                 }
 
-                                if progress_tracker:
-                                    progress_tracker.add_substep(f"{check_description} check completed", "completed", "success")
                             else:
                                 if progress_tracker:
                                     progress_tracker.add_substep(f"{check_description} check not available", "completed", "warning")
+                                    progress_tracker.clear_substeps()
                                 check_results[method_name] = {
                                     'description': check_description,
                                     'severity': level,

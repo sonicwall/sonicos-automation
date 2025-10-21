@@ -466,7 +466,8 @@
         function addOperationStep(step, status = 'info') {
             const stepsContainer = document.getElementById('operation-steps');
             const stepElement = document.createElement('div');
-            stepElement.className = `text-xs p-1 rounded status-${status}`;
+            // stepElement.className = `text-xs p-1 rounded status-${status}`;
+            stepElement.className = `text-xs rounded status-${status}`;
             stepElement.textContent = step;
             stepsContainer.appendChild(stepElement);
             stepsContainer.scrollTop = stepsContainer.scrollHeight;
