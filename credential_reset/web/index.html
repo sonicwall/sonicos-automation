@@ -433,31 +433,20 @@
                     <div class="border-t pt-6 mb-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Playbook Options</h3>
 
-                        <!-- Select All Checkbox -->
-                        <div class="mb-4 pb-2 border-b border-gray-200">
-                            <label class="flex items-center">
-                                <input type="checkbox" id="select-all-security" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked>
-                                <span class="ml-2 text-sm font-semibold text-gray-900">Select All</span>
+                        <div class="mb-4">
+                            <label for="security-level-select" class="block text-sm font-medium text-gray-700 mb-2">
+                                Priority Level Filter
                             </label>
-                        </div>
-
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <label class="flex items-center">
-                                <input type="checkbox" class="security-check rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="critical" checked>
-                                <span class="ml-2 text-sm text-gray-700">Critical</span>
-                            </label>
-                            <label class="flex items-center">
-                                <input type="checkbox" class="security-check rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="high" checked>
-                                <span class="ml-2 text-sm text-gray-700">High</span>
-                            </label>
-                            <label class="flex items-center">
-                                <input type="checkbox" class="security-check rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="medium" checked>
-                                <span class="ml-2 text-sm text-gray-700">Medium</span>
-                            </label>
-                            <label class="flex items-center">
-                                <input type="checkbox" class="security-check rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="low" checked>
-                                <span class="ml-2 text-sm text-gray-700">Low</span>
-                            </label>
+                            <select id="security-level-select" class="w-1/4 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                <option value="all" selected>All</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High and above</option>
+                                <option value="medium">Medium and above</option>
+                                <option value="low">Low and above</option>
+                            </select>
+                            <p class="mt-1 text-sm text-gray-500">
+                                Select the minimum priority level to include in the analysis.
+                            </p>
                         </div>
                     </div>
 
@@ -790,46 +779,6 @@
                 });
             });
 
-            // Security Analysis Checkbox Functionality
-            const selectAllSecurity = document.getElementById('select-all-security');
-            const securityCheckboxes = document.querySelectorAll('.security-check');
-
-            // Handle "Select All" checkbox change
-            if (selectAllSecurity) {
-                selectAllSecurity.addEventListener('change', function(event) {
-                    const isChecked = event.target.checked;
-                    securityCheckboxes.forEach(checkbox => {
-                        checkbox.checked = isChecked;
-                    });
-                });
-            }
-
-            // Handle individual security checkbox changes
-            securityCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', function() {
-                    let checkedCount = 0;
-                    const totalCount = securityCheckboxes.length;
-
-                    securityCheckboxes.forEach(cb => {
-                        if (cb.checked) {
-                            checkedCount++;
-                        }
-                    });
-
-                    // Update select all checkbox state
-                    if (checkedCount === 0) {
-                        selectAllSecurity.checked = false;
-                        selectAllSecurity.indeterminate = false;
-                    } else if (checkedCount === totalCount) {
-                        selectAllSecurity.checked = true;
-                        selectAllSecurity.indeterminate = false;
-                    } else {
-                        selectAllSecurity.checked = false;
-                        selectAllSecurity.indeterminate = true;
-                    }
-                });
-            });
-
             // Password option radio button functionality
             const passwordRadios = document.querySelectorAll('input[name="password-option"]');
             const tempPasswordInput = document.getElementById('temp-password');
@@ -878,12 +827,8 @@
                 // Disable temp password input (default state)
                 document.getElementById('temp-password').disabled = true;
 
-                // Reset security checkboxes to all checked (default state)
-                document.getElementById('select-all-security').checked = true;
-                const securityCheckboxes = document.querySelectorAll('.security-check');
-                securityCheckboxes.forEach(checkbox => {
-                    checkbox.checked = true;
-                });
+                // Reset security level dropdown to default (all levels)
+                document.getElementById('security-level-select').value = 'all';
 
                 // Clear any existing error messages
                 const existingError = document.getElementById('form-errors');
@@ -936,7 +881,7 @@
                         return;
                     }
 
-                    // Check if we should use real-time progress streaming
+                    // Security level is always valid since dropdown has a default value
                     const useProgressStreaming = true; // Enable SSE progress streaming
 
                     if (useProgressStreaming) {
@@ -1290,7 +1235,7 @@
                         export_tsr: document.getElementById('export-tsr').checked.toString(),
                         temp_password: document.getElementById('temp-password').value.trim(),
                         randomize_temp_password: document.querySelector('input[name="password-option"]:checked').value === 'random' ? 'True' : 'False',
-                        security_checks: Array.from(document.querySelectorAll('.security-check:checked')).map(cb => cb.value)
+                        severity: document.getElementById('security-level-select').value
                     };
 
                     console.log(formData)
@@ -1298,11 +1243,6 @@
                     // Validate required fields
                     if (!formData.firewall || !formData.username || !formData.password) {
                         window.alert('Please fill in all required fields (Firewall IP, Username, Password)');
-                        return;
-                    }
-
-                    if (formData.security_checks.length === 0) {
-                        window.alert('Please select at least one security check level');
                         return;
                     }
 
@@ -1650,7 +1590,7 @@
                                            class="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline">
                                             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6v6h-6V4z"></path>
                                             </svg>
                                             View Resource
                                         </a>
@@ -1938,7 +1878,7 @@
                     exportContainer.innerHTML = `
                         <div class="text-center py-4">
                             <svg class="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 00-2-2V5a2 2 0 002-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                             </svg>
                             <p class="text-sm text-gray-500">No exports available</p>
                             <p class="text-xs text-gray-400">Enable export options to see files here</p>

@@ -416,7 +416,7 @@ def _execute_analysis_with_progress(data, operation_id):
             'sshport': int(data.get('sshport', 22)),
             'export_tsr': data.get('export_tsr', 'false').lower() == 'true',
             'export_settings': data.get('export_settings', 'false').lower() == 'true',
-            'security_checks': data.get('security_checks', [])
+            'severity': data.get('severity', [])
         }
         
         # Execute operation with progress tracking
@@ -625,25 +625,26 @@ def main():
         logger.info("\nShutting down proxy server...")
         sys.exit(0)
 
-def convert_security_checks_to_severity(security_checks):
+def convert_security_checks_to_severity(checks):
     """Convert security checks list to severity filter string."""
-    if isinstance(security_checks, str):
-        security_checks = [security_checks]
+    logger.info(f"Converting security checks to severity filter: {checks}")
+    if isinstance(checks, str):
+        checks = [checks.lower()]
 
-    if not security_checks or len(security_checks) == 4:  # All levels or none selected
-        return "all"
-    elif set(security_checks) == {'critical'}:
-        return "critical"
-    elif set(security_checks) == {'critical', 'high'}:
-        return "high"
-    elif set(security_checks) == {'critical', 'high', 'medium'}:
-        return "medium"
-    elif set(security_checks) == {'critical', 'high', 'medium'}:
-        return "medium"
-    elif set(security_checks) == {'critical', 'high', 'low'}:
-        return "low"
+    if isinstance(checks, list) and len(checks) > 0:
+        checks = [s.lower() for s in checks]
+        if 'all' in checks:
+            return "all"
+        if 'low' in checks:
+            return "all"
+        if 'medium' in checks:
+            return "medium"
+        if 'high' in checks:
+            return "high"
+        if 'critical' in checks:
+            return "critical"
     else:
-        return "all"  # Default fallback for any other combination
+        return 'all'
 
 def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
     """Load targets from either CSV file or single target data."""
@@ -655,8 +656,7 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
         logger.info(f"Target came from web form:\n{target_input}\n")
 
         # Convert security_checks list to severity filter
-        security_checks = target_input.get('severity', [])
-        severity = convert_security_checks_to_severity(security_checks)
+        severity = convert_security_checks_to_severity(target_input.get('severity', []))
 
         return FirewallTarget(
             firewall=target_input.get('firewall'),

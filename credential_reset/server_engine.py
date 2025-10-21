@@ -219,18 +219,15 @@ class ServerOperationEngine:
             self.logger.info(f"Starting {operation_type} operation")
 
             # Convert config to target format
-            # Convert security_checks to severity filter
-            security_checks = config.get('security_checks', [])
-            if not security_checks or len(security_checks) == 4:
-                severity = "all"
-            elif set(security_checks) == {'critical'}:
-                severity = "critical"
-            elif set(security_checks) == {'critical', 'high'}:
-                severity = "high"
-            elif set(security_checks) == {'critical', 'high', 'medium'}:
-                severity = "medium"
-            else:
-                severity = "all"
+            # Get security level from dropdown selection
+            security_level = config.get('severity', 'all')
+
+            # Validate the security level
+            valid_levels = ['all', 'critical', 'high', 'medium', 'low']
+            if security_level not in valid_levels:
+                security_level = 'all'
+
+            severity = security_level
 
             target_data = {
                 'firewall': config.get('firewall'),
