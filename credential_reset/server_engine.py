@@ -229,7 +229,8 @@ class ServerOperationEngine:
                 'unbind_totp': config.get('unbind_totp', False),
                 'force_password_change': config.get('force_password_change', False),
                 'export_settings': config.get('export_settings', False),
-                'export_tsr': config.get('export_tsr', False)
+                'export_tsr': config.get('export_tsr', False),
+                'verbose': config.get('verbose', False)
             }
 
             if progress_tracker:
