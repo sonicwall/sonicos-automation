@@ -40,6 +40,7 @@ class FirewallTarget:
     export_tsr: bool = False
     export_settings: bool = False
     verbose: bool = False
+    severity: str = "all"
 
 
 def initialize_session(target: FirewallTarget, target_numbers: tuple, **kwargs):

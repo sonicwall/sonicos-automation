@@ -625,6 +625,19 @@ def main():
         logger.info("\nShutting down proxy server...")
         sys.exit(0)
 
+def convert_security_checks_to_severity(security_checks):
+    """Convert security checks list to severity filter string."""
+    if not security_checks or len(security_checks) == 4:  # All levels or none selected
+        return "all"
+    elif set(security_checks) == {'critical'}:
+        return "critical"
+    elif set(security_checks) == {'critical', 'high'}:
+        return "high"
+    elif set(security_checks) == {'critical', 'high', 'medium'}:
+        return "medium"
+    else:
+        return "all"  # Default fallback for any other combination
+
 def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
     """Load targets from either CSV file or single target data."""
     if not isinstance(target_input, dict) and path.isfile(target_input):
@@ -633,6 +646,11 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
     elif isinstance(target_input, dict):
         # Target came from web form data
         logger.debug(f"Target came from web form: {target_input}")
+
+        # Convert security_checks list to severity filter
+        security_checks = target_input.get('security_checks', [])
+        severity = convert_security_checks_to_severity(security_checks)
+
         return FirewallTarget(
             firewall=target_input.get('firewall'),
             username=target_input.get('username'),
@@ -645,7 +663,8 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
             force_password_change=normalize_boolean(target_input.get('force_password_change')),
             export_tsr=normalize_boolean(target_input.get('export_tsr', False)),
             export_settings=normalize_boolean(target_input.get('export_settings', False)),
-            verbose=normalize_boolean(target_input.get('verbose', False))
+            verbose=normalize_boolean(target_input.get('verbose', False)),
+            severity=severity
         )
     else:
         # Single target from command line - this case may need proper args handling
@@ -660,7 +679,8 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
             force_password_change=False,
             export_tsr=False,
             export_settings=False,
-            verbose=False
+            verbose=False,
+            severity="all"
         )
 
 # TODO: Integrate argument parsing with web form data handling

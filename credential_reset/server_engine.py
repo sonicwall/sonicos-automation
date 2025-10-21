@@ -219,6 +219,19 @@ class ServerOperationEngine:
             self.logger.info(f"Starting {operation_type} operation")
 
             # Convert config to target format
+            # Convert security_checks to severity filter
+            security_checks = config.get('security_checks', [])
+            if not security_checks or len(security_checks) == 4:
+                severity = "all"
+            elif set(security_checks) == {'critical'}:
+                severity = "critical"
+            elif set(security_checks) == {'critical', 'high'}:
+                severity = "high"
+            elif set(security_checks) == {'critical', 'high', 'medium'}:
+                severity = "medium"
+            else:
+                severity = "all"
+
             target_data = {
                 'firewall': config.get('firewall'),
                 'username': config.get('username'),
@@ -230,7 +243,8 @@ class ServerOperationEngine:
                 'force_password_change': config.get('force_password_change', False),
                 'export_settings': config.get('export_settings', False),
                 'export_tsr': config.get('export_tsr', False),
-                'verbose': config.get('verbose', False)
+                'verbose': config.get('verbose', False),
+                'severity': severity
             }
 
             if progress_tracker:
@@ -404,28 +418,18 @@ class ServerOperationEngine:
                 }
             }
 
-            # Create a mock args object with attributes expected by Playbook class
-            class MockArgs:
-                def __init__(self):
-                    self.verbose = config.get('verbose', False)
-                    self.security_checks = config.get('security_checks', ['critical', 'high', 'medium', 'low'])
-                    # Add other attributes that Playbook might expect
-                    self.no_summary = False
-                    self.export_tsr = config.get('export_tsr', False)
-                    self.export_settings = config.get('export_settings', False)
-
-            mock_args = MockArgs()
             target_numbers = (1, 1)  # Single target (1 of 1)
             silent = True  # Keep output minimal for web interface
 
             # Initialize the playbook class exactly like reset_credentials.py does
+            # Now we can use target directly as args since it has all required attributes
             pb = Playbook(target=target,
                           target_numbers=target_numbers,
                           silent=silent,
                           api_base=api_base,
                           alt_session=alt_session,
                           api_session=api_session,
-                          args=mock_args,
+                          args=target,  # Pass target as args since it now has severity, verbose, etc.
                           routine_results=routine_results,
                           firewall_info=firewall_info)
 
