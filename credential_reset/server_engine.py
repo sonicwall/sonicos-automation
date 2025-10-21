@@ -299,12 +299,12 @@ class ServerOperationEngine:
                 results = {"error": f"Unknown operation type: {operation_type}"}
 
             if progress_tracker:
-                progress_tracker.update("Finalizing operation...", 85)
+                progress_tracker.update("Finalizing operation. Initializing cleanup...", 91)
 
             # Cleanup
             try:
                 if progress_tracker:
-                    progress_tracker.update("Closing API session...", 85)
+                    progress_tracker.update("Closing API session...", 92)
                 logout(api_base, api_session, firewall_generation=firewall_info.get('firewall_generation'))
             except Exception as e:
                 self.logger.error(f"Error during logout: {e}")
@@ -312,7 +312,7 @@ class ServerOperationEngine:
             # Reset API flag if needed
             if constants.get_autoenabled_sonicos_api():
                 if progress_tracker:
-                    progress_tracker.update("Disabling SonicOS API...", 90)
+                    progress_tracker.update("Disabling SonicOS API...", 94)
                 disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
                 constants.set_autoenabled_sonicos_api(False)
 
@@ -324,6 +324,7 @@ class ServerOperationEngine:
             operation_result["firewall_info"] = firewall_info
 
             if progress_tracker:
+                progress_tracker.update("Preparing results...", 100)
                 progress_tracker.complete(success=True, message="Operation completed successfully", result_data=operation_result)
 
             return operation_result

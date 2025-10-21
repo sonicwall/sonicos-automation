@@ -206,10 +206,11 @@
         <!-- Dashboard Section -->
         <div id="dashboard-section" class="section">
             <div class="mb-8">
-                <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to SonicWall Credential Reset Tool</h2>
+                <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to the SonicWall Credential Reset Tool</h2>
                 <p class="text-lg text-gray-600 mb-6">
-                    Comprehensive security analysis and credential management for SonicWall firewalls.
-                    Analyze configurations, reset user credentials, and generate detailed security reports.
+                    This web-based interface allows you to easily force password resets in bulk, apply a new temporary password,
+                    reset TOTP bindings in bulk, and perform a remediation playbook analysis on SonicWall firewalls.
+                    Analyze configurations, reset user credentials, and generate detailed reports with action items based on the current configuration.
                 </p>
             </div>
 
@@ -359,13 +360,13 @@
 
                     <!-- Security Analysis Options -->
                     <div class="border-t pt-6 mb-6">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Security Analysis Options</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Playbook Options</h3>
 
                         <!-- Select All Checkbox -->
                         <div class="mb-4 pb-2 border-b border-gray-200">
                             <label class="flex items-center">
                                 <input type="checkbox" id="select-all-security" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked>
-                                <span class="ml-2 text-sm font-semibold text-gray-900">Select All Security Levels</span>
+                                <span class="ml-2 text-sm font-semibold text-gray-900">Select All</span>
                             </label>
                         </div>
 
@@ -502,7 +503,7 @@
                     <!-- NEW: Report Tab Content -->
                     <div id="tab-content-report" class="tab-content hide">
                         <div class="mb-4 flex justify-between items-center">
-                            <h3 class="text-lg font-semibold text-gray-900">Security Analysis Report</h3>
+                            <h3 class="text-lg font-semibold text-gray-900">Playbook Results Report</h3>
                             <div class="space-x-3">
                                 <button id="toggle-report-view" class="bg-gray-100 text-gray-700 px-3 py-1 rounded-md text-sm hover:bg-gray-200">
                                     Show Raw
@@ -523,7 +524,7 @@
                         <div id="report-container" class="border border-gray-200 rounded-lg p-6 bg-white">
                             <!-- Rendered Markdown Content -->
                             <div id="markdown-rendered" class="markdown-content prose max-w-none">
-                                <p class="text-gray-500 italic">No report available. Run a security analysis to generate a report.</p>
+                                <p class="text-gray-500 italic">No report available. Run a playbook analysis to generate a report.</p>
                             </div>
 
                             <!-- Raw Markdown Content (hidden by default) -->
@@ -570,11 +571,9 @@
                         <li>All operations are performed client-side - no data is sent to external servers</li>
                         <li>Credentials are not stored after the session ends</li>
                         <li>Passwords meet complexity requirements automatically</li>
-                        <li>Comprehensive security analysis based on SonicWall best practices</li>
+                        <li>Comprehensive analysis based on the Essential Credential Reset and Remediation Playbook KB articles</li>
                     </ul>
 
-                    <h3>Supported SonicOS Versions</h3>
-                    <p>This tool supports SonicOS Generation 5, 6, and 7 firewalls with API or SSH access.</p>
                 </div>
             </div>
         </div>
@@ -1236,7 +1235,7 @@
 
                     try {
                         // Show progress modal immediately
-                        showProgressModal("Security Analysis Progress");
+                        showProgressModal("Playbook Operation Progress");
 
                         // Disable button and show loading state
                         runAnalysisBtn.disabled = true;
@@ -1262,7 +1261,7 @@
                         }
 
                     } catch (error) {
-                        console.error('Analysis start error:', error);
+                        console.error('Playbook analysis start error:', error);
                         hideProgressModal();
                         handleAnalysisError(error.message);
                     } finally {
@@ -1316,7 +1315,7 @@
                             // Auto-hide modal after brief delay
                             setTimeout(() => {
                                 hideProgressModal();
-                            }, 30000);
+                            }, 4000);
                         } else {
                             addOperationStep("✗ Analysis failed", "error");
                             handleAnalysisError("Analysis failed");
@@ -1375,7 +1374,7 @@
                 }
 
                 // Display success message with summary
-                let summaryMessage = "Security analysis completed successfully!";
+                let summaryMessage = "Playbook analysis completed successfully!";
 
                 if (result.results && result.results.security_analysis) {
                     const analysis = result.results.security_analysis;
@@ -1383,7 +1382,8 @@
                 }
 
                 // Show brief success notification
-                window.alert(summaryMessage);
+                // window.alert(summaryMessage);
+                console.log(summaryMessage);
             }
 
 
@@ -1535,7 +1535,7 @@
 
                 // If no meaningful data, show placeholder
                 if (!summaryHTML) {
-                    summaryHTML = '<p class="text-gray-500 italic">No security analysis summary available.</p>';
+                    summaryHTML = '<p class="text-gray-500 italic">No playbook analysis summary available.</p>';
                 }
 
                 summaryContainer.innerHTML = summaryHTML;
@@ -1584,8 +1584,18 @@
                 }
 
                 try {
-                    // Show rendered markdown by default
-                    const renderedHtml = marked.parse(markdownContent);
+                    // Show rendered markdown by default - use correct Marked.js API
+                    let renderedHtml;
+                    if (typeof marked.parse === 'function') {
+                        // Newer versions of Marked.js
+                        renderedHtml = marked.parse(markdownContent);
+                    } else if (typeof marked === 'function') {
+                        // Older versions of Marked.js
+                        renderedHtml = marked(markdownContent);
+                    } else {
+                        throw new Error('Marked.js library not properly loaded');
+                    }
+
                     document.getElementById('markdown-rendered').innerHTML = renderedHtml;
                     document.getElementById('markdown-code').textContent = markdownContent;
 
@@ -1598,8 +1608,14 @@
                     console.log('Markdown report displayed successfully');
                 } catch (error) {
                     console.error('Error rendering markdown:', error);
-                    document.getElementById('markdown-rendered').innerHTML =
-                        `<p class="text-red-500">Error rendering report: ${error.message}</p>`;
+                    // Fallback: display as preformatted text if markdown rendering fails
+                    const fallbackHtml = `
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
+                            <p class="text-yellow-800 font-medium">Markdown rendering failed. Displaying raw content:</p>
+                        </div>
+                        <pre class="bg-gray-50 p-4 rounded-md text-sm overflow-x-auto whitespace-pre-wrap">${markdownContent}</pre>
+                    `;
+                    document.getElementById('markdown-rendered').innerHTML = fallbackHtml;
                 }
             }
 
@@ -1669,7 +1685,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SonicWall Security Analysis Report</title>
+    <title>SonicWall Remediation Playbook Report</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
@@ -1712,7 +1728,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SonicWall Security Analysis Report</title>
+    <title>SonicWall Remediation Playbook Report</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; page-break-inside: avoid; }
