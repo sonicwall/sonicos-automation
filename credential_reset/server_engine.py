@@ -72,7 +72,7 @@ class ServerOperationEngine:
 
             # Load the target from form data
             target = load_targets(target_data)
-            target_numbers = (1, 1)  # Single target (1 of 1)
+            target_numbers = (1, 1) # Single target (1 of 1)
 
             # Validate required fields
             errors = []
@@ -418,8 +418,8 @@ class ServerOperationEngine:
                 }
             }
 
-            target_numbers = (1, 1)  # Single target (1 of 1)
-            silent = True  # Keep output minimal for web interface
+            target_numbers = (1, 1) # Single target (1 of 1)
+            silent = True # Keep output minimal for web interface
 
             # Initialize the playbook class exactly like reset_credentials.py does
             # Now we can use target directly as args since it has all required attributes
@@ -429,7 +429,7 @@ class ServerOperationEngine:
                           api_base=api_base,
                           alt_session=alt_session,
                           api_session=api_session,
-                          args=target,  # Pass target as args since it now has severity, verbose, etc.
+                          args=target, # Pass target as args since it now has severity, verbose, etc.
                           routine_results=routine_results,
                           firewall_info=firewall_info)
 
@@ -590,9 +590,23 @@ class ServerOperationEngine:
                 self.logger.error(f"Failed to generate markdown report: {e}")
                 markdown_report = f"# Report Generation Error\n\nFailed to generate markdown report: {str(e)}"
 
+            # Generate summary data for the frontend
+            try:
+                if progress_tracker:
+                    progress_tracker.update("Generating summary data...", 90)
+
+                summary_data = self._generate_summary_data(converted_results, check_results, routine_results)
+
+                if progress_tracker:
+                    progress_tracker.update("Summary data generated", 92)
+            except Exception as e:
+                self.logger.error(f"Failed to generate summary data: {e}")
+                summary_data = {}
+
             return {
                 "security_analysis": security_analysis,
                 "markdown_report": markdown_report,  # NEW: Add markdown report
+                "summary_data": summary_data,  # NEW: Add summary data for frontend
                 "analysis_timestamp": constants.generate_timestamp(),
                 "tsr_result": tsr_result
             }
@@ -648,6 +662,111 @@ class ServerOperationEngine:
         except Exception as e:
             self.logger.error(f"Error converting results for markdown: {e}")
             return {}
+
+    def _generate_summary_data(self, converted_results: Dict, check_results: Dict, routine_results: Dict) -> Dict:
+        """
+        Generate summary data for the frontend summary tab.
+
+        Args:
+            converted_results: Results converted for markdown generation
+            check_results: Raw check results from playbook
+            routine_results: Routine operation results
+
+        Returns:
+            Dictionary containing summary data for frontend display
+        """
+        try:
+            summary = {
+                "overview": {
+                    "total_checks": len(check_results),
+                    "completed_checks": sum(1 for r in check_results.values() if r.get('status') == 'completed'),
+                    "failed_checks": sum(1 for r in check_results.values() if r.get('status') == 'error'),
+                    "unavailable_checks": sum(1 for r in check_results.values() if r.get('status') == 'not_available')
+                },
+                "severity_breakdown": {
+                    "critical": 0,
+                    "high": 0,
+                    "medium": 0,
+                    "low": 0
+                },
+                "findings": [],
+                "device_info": {},
+                "recommendations": []
+            }
+
+            # Extract device information
+            if routine_results:
+                for firewall_ip, info in routine_results.items():
+                    if isinstance(info, dict):
+                        summary["device_info"] = {
+                            "firewall": firewall_ip,
+                            "device_model": info.get('device_model', 'Unknown'),
+                            "firmware_version": info.get('firmware_version', 'Unknown'),
+                            "serial_number": info.get('serial_number', 'Unknown'),
+                            "generation": info.get('firewall_generation', 'Unknown')
+                        }
+                        break
+
+            # Count findings by severity and generate findings list
+            for method_name, result_data in check_results.items():
+                if result_data.get('status') == 'completed' and result_data.get('result'):
+                    severity = result_data.get('severity', 'low')
+                    description = result_data.get('description', method_name)
+                    result = result_data.get('result')
+
+                    # Count items found
+                    item_count = 0
+                    if isinstance(result, list):
+                        item_count = len(result)
+                    elif isinstance(result, dict):
+                        # Handle various dict structures
+                        for key, value in result.items():
+                            if isinstance(value, list):
+                                item_count += len(value)
+                            elif isinstance(value, dict):
+                                for subkey, subvalue in value.items():
+                                    if isinstance(subvalue, list):
+                                        item_count += len(subvalue)
+                                    elif subvalue:
+                                        item_count += 1
+                            elif value:
+                                item_count += 1
+                    elif result:
+                        item_count = 1
+
+                    if item_count > 0:
+                        summary["severity_breakdown"][severity] += item_count
+                        summary["findings"].append({
+                            "check": description,
+                            "severity": severity,
+                            "count": item_count,
+                            "method": method_name
+                        })
+
+            # Generate recommendations based on findings
+            total_findings = sum(summary["severity_breakdown"].values())
+            if total_findings > 0:
+                if summary["severity_breakdown"]["critical"] > 0:
+                    summary["recommendations"].append("Address critical security findings immediately")
+                if summary["severity_breakdown"]["high"] > 0:
+                    summary["recommendations"].append("Review high-priority configurations")
+                if total_findings > 10:
+                    summary["recommendations"].append("Consider a comprehensive security review")
+                summary["recommendations"].append("Download the detailed report for specific remediation steps")
+            else:
+                summary["recommendations"].append("No security configuration items found that require attention")
+
+            return summary
+
+        except Exception as e:
+            self.logger.error(f"Error generating summary data: {e}")
+            return {
+                "overview": {"total_checks": 0, "completed_checks": 0, "failed_checks": 0, "unavailable_checks": 0},
+                "severity_breakdown": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+                "findings": [],
+                "device_info": {},
+                "recommendations": ["Error generating summary data"]
+            }
 
     def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None) -> Dict:
         """Execute credential reset operation."""
