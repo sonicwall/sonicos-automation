@@ -600,7 +600,7 @@ class ServerOperationEngine:
                 if progress_tracker:
                     progress_tracker.update("Generating summary data...", 90)
 
-                summary_data = self._generate_summary_data(converted_results, check_results, routine_results)
+                summary_data = self._generate_summary_data(converted_results, check_results, routine_results, markdown_report)
 
                 if progress_tracker:
                     progress_tracker.update("Summary data generated", 92)
@@ -746,7 +746,54 @@ class ServerOperationEngine:
             self.logger.error(f"Error converting results for markdown: {e}")
             return {}
 
-    def _generate_summary_data(self, converted_results: Dict, check_results: Dict, routine_results: Dict) -> Dict:
+    def _extract_recommendations_from_markdown(self, markdown_report: str) -> list:
+        """
+        Extract recommendations from the markdown report.
+
+        Args:
+            markdown_report: The generated markdown report content
+
+        Returns:
+            List of recommendation strings extracted from the markdown report
+        """
+        try:
+            if not markdown_report:
+                return []
+
+            lines = markdown_report.split('\n')
+            recommendations = []
+            in_recommendations_section = False
+
+            for line in lines:
+                line = line.strip()
+
+                # Start of recommendations section
+                if line == "## Recommendations":
+                    in_recommendations_section = True
+                    continue
+
+                # End of recommendations section (next major section)
+                if in_recommendations_section and line.startswith("## ") and line != "## Recommendations":
+                    break
+
+                # Extract numbered recommendations
+                if in_recommendations_section and line:
+                    # Handle numbered list items (1. **Immediately** update...)
+                    if line.startswith(("1.", "2.", "3.", "4.", "5.")):
+                        # Remove the number and clean up markdown formatting
+                        recommendation = line.split(".", 1)[1].strip()
+                        # Remove markdown bold formatting
+                        recommendation = recommendation.replace("**", "")
+                        if recommendation:
+                            recommendations.append(recommendation)
+
+            return recommendations if recommendations else []
+
+        except Exception as e:
+            self.logger.error(f"Error extracting recommendations from markdown: {e}")
+            return []
+
+    def _generate_summary_data(self, converted_results: Dict, check_results: Dict, routine_results: Dict, markdown_report: str = None) -> Dict:
         """
         Generate summary data for the frontend summary tab.
 
@@ -754,6 +801,7 @@ class ServerOperationEngine:
             converted_results: Results converted for markdown generation
             check_results: Raw check results from playbook
             routine_results: Routine operation results
+            markdown_report: Optional markdown report content to extract from
 
         Returns:
             Dictionary containing summary data for frontend display
@@ -835,24 +883,10 @@ class ServerOperationEngine:
             total_findings = sum(summary["severity_breakdown"].values())
             completed_checks = summary["overview"]["completed_checks"]
 
-            # Enhanced recommendations logic
-            if total_findings > 0:
-                if summary["severity_breakdown"]["critical"] > 0:
-                    summary["recommendations"].append("Address critical security findings immediately")
-                if summary["severity_breakdown"]["high"] > 0:
-                    summary["recommendations"].append("Review high-priority configurations")
-                if summary["severity_breakdown"]["medium"] > 0:
-                    summary["recommendations"].append("Review medium-priority configurations when possible")
-                if total_findings > 10:
-                    summary["recommendations"].append("Consider a comprehensive security review")
-                summary["recommendations"].append("Download the detailed report for specific remediation steps")
-            else:
-                # No items found - this is actually good!
-                if completed_checks > 0:
-                    summary["recommendations"].append("No security configuration items found that require attention")
-                    summary["recommendations"].append("Your firewall appears to have a clean security configuration")
-                else:
-                    summary["recommendations"].append("Run security checks to analyze your firewall configuration")
+            # Get recommendations from markdown report if available
+            summary["recommendations"] = self._get_recommendations_from_markdown(
+                converted_results, check_results, routine_results, markdown_report
+            )
 
             # Always add this recommendation
             summary["recommendations"].append("Review the detailed report for complete analysis results")
@@ -877,6 +911,116 @@ class ServerOperationEngine:
                 "device_info": {},
                 "recommendations": ["Error generating summary data"]
             }
+
+    def _get_recommendations_from_markdown(self, converted_results: Dict, check_results: Dict, routine_results: Dict, markdown_report: str = None) -> list:
+        """
+        Get recommendations by extracting them from the markdown report.
+        Falls back to generic recommendations if markdown extraction fails.
+
+        Args:
+            converted_results: Results converted for markdown generation
+            check_results: Raw check results from playbook
+            routine_results: Routine operation results
+            markdown_report: Optional markdown report content to extract from
+
+        Returns:
+            List of recommendation strings
+        """
+        try:
+            # Try to extract recommendations from the provided markdown report
+            if markdown_report:
+                recommendations = self._extract_recommendations_from_markdown(markdown_report)
+                if recommendations:
+                    return recommendations
+
+            # If no markdown report provided or extraction failed, generate it temporarily
+            try:
+                from credential_reset.report_markdown import generate_markdown_summary
+                from types import SimpleNamespace
+
+                # Get firewall info for the markdown generator
+                firewall_ip = None
+                firewall_info = {}
+                if routine_results:
+                    for ip, info in routine_results.items():
+                        if isinstance(info, dict):
+                            firewall_ip = ip
+                            firewall_info = info
+                            break
+
+                if firewall_ip and firewall_info:
+                    # Create mock args for markdown generation
+                    args = SimpleNamespace(severity="all")
+
+                    # Generate markdown report
+                    temp_markdown = generate_markdown_summary(
+                        converted_results, firewall_ip, firewall_info, args
+                    )
+
+                    if temp_markdown:
+                        recommendations = self._extract_recommendations_from_markdown(temp_markdown)
+                        if recommendations:
+                            return recommendations
+
+            except Exception as e:
+                self.logger.warning(f"Could not generate temporary markdown for recommendations: {e}")
+
+            # Fall back to generic recommendations
+            return self._generate_fallback_recommendations(check_results)
+
+        except Exception as e:
+            self.logger.error(f"Error getting recommendations from markdown: {e}")
+            return self._generate_fallback_recommendations(check_results)
+
+    def _generate_fallback_recommendations(self, check_results: Dict) -> list:
+        """Generate fallback recommendations when markdown extraction fails."""
+        try:
+            # Count findings by severity for fallback logic
+            severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+            total_findings = 0
+            completed_checks = 0
+
+            for method_name, result_data in check_results.items():
+                if result_data.get('status') == 'completed':
+                    completed_checks += 1
+                    result = result_data.get('result')
+                    if result:
+                        severity = result_data.get('severity', 'low')
+                        # Simple count logic for fallback
+                        count = 1
+                        if isinstance(result, list):
+                            count = len(result)
+                        elif isinstance(result, dict):
+                            count = len([v for v in result.values() if v])
+
+                        if count > 0:
+                            severity_counts[severity] += count
+                            total_findings += count
+
+            recommendations = []
+
+            if total_findings > 0:
+                if severity_counts["critical"] > 0:
+                    recommendations.append("Immediately update all critical security configurations identified")
+                if severity_counts["high"] > 0:
+                    recommendations.append("Review and update high-priority security configurations")
+                if severity_counts["medium"] > 0:
+                    recommendations.append("Review medium-priority configurations when possible")
+                if total_findings > 10:
+                    recommendations.append("Consider a comprehensive security review")
+                recommendations.append("Download the detailed report for specific remediation steps")
+            else:
+                if completed_checks > 0:
+                    recommendations.append("No security configuration items found that require attention")
+                    recommendations.append("Your firewall appears to have a clean security configuration")
+                else:
+                    recommendations.append("Run security checks to analyze your firewall configuration")
+
+            return recommendations
+
+        except Exception as e:
+            self.logger.error(f"Error generating fallback recommendations: {e}")
+            return ["Review the detailed report for analysis results"]
 
     def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None) -> Dict:
         """Execute credential reset operation."""

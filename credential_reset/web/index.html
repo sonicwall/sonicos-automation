@@ -1535,7 +1535,37 @@
                 if (summaryData.brief_summary) {
                     const briefSummary = summaryData.brief_summary;
 
-                    // Action Items Section - TABLE FORMAT
+                    // Recommendations Section - NOW FIRST
+                    if (summaryData.recommendations && summaryData.recommendations.length > 0) {
+                        summaryHTML += `
+                            <div class="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
+                                <h3 class="text-lg font-semibold text-violet-900 mb-3">
+                                    <span class="inline-flex items-center">
+                                        <svg class="w-5 h-5 mr-2 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        Recommendations
+                                    </span>
+                                </h3>
+                                <ul class="space-y-2">
+                        `;
+
+                        summaryData.recommendations.forEach(recommendation => {
+                            summaryHTML += `
+                                <li class="flex items-start">
+                                    <span class="text-violet-600 mr-2">•</span>
+                                    <span class="text-violet-800">${recommendation}</span>
+                                </li>
+                            `;
+                        });
+
+                        summaryHTML += `
+                                </ul>
+                            </div>
+                        `;
+                    }
+
+                    // Action Items Section - TABLE FORMAT - NOW SECOND
                     if (briefSummary.action_items && briefSummary.action_items.length > 0) {
                         summaryHTML += `
                             <div class="mb-6">
@@ -1676,34 +1706,6 @@
                             </div>
                         </div>
                     `;
-                }
-
-                // Recommendations Section
-                if (summaryData.recommendations && summaryData.recommendations.length > 0) {
-                    summaryHTML += `
-                        <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                            <h3 class="text-lg font-semibold text-green-900 mb-3">Recommendations</h3>
-                            <ul class="space-y-2">
-                    `;
-
-                    summaryData.recommendations.forEach(recommendation => {
-                        summaryHTML += `
-                            <li class="flex items-start">
-                                <span class="text-green-600 mr-2">•</span>
-                                <span class="text-green-800">${recommendation}</span>
-                            </li>
-                        `;
-                    });
-
-                    summaryHTML += `
-                            </ul>
-                        </div>
-                    `;
-                }
-
-                // If no meaningful data, show placeholder
-                if (!summaryHTML) {
-                    summaryHTML = '<p class="text-gray-500 italic">No playbook analysis summary available.</p>';
                 }
 
                 summaryContainer.innerHTML = summaryHTML;
@@ -1934,7 +1936,7 @@
                     exportContainer.innerHTML = `
                         <div class="text-center py-4">
                             <svg class="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                             </svg>
                             <p class="text-sm text-gray-500">No exports available</p>
                             <p class="text-xs text-gray-400">Enable export options to see files here</p>
