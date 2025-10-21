@@ -1480,13 +1480,51 @@
                 if (summaryData.device_info && Object.keys(summaryData.device_info).length > 0) {
                     const device = summaryData.device_info;
                     summaryHTML += `
-                        <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <h3 class="text-lg font-semibold text-blue-900 mb-3">Device Information</h3>
-                            <div class="grid grid-cols-2 gap-4 text-sm">
-                                <div><span class="font-medium">Firewall:</span> ${device.firewall || 'Unknown'}</div>
-                                <div><span class="font-medium">Model:</span> ${device.device_model || 'Unknown'}</div>
-                                <div><span class="font-medium">Firmware:</span> ${device.firmware_version || 'Unknown'}</div>
-                                <div><span class="font-medium">Serial Number:</span> ${device.serial_number || 'Unknown'}</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <!-- Device Information Card (Left) -->
+                            <div class="bg-white rounded-lg card-shadow p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                                    <span class="inline-flex items-center">
+                                        <svg class="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 4h6v6h-6V4z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        Device Information
+                                    </span>
+                                </h3>
+                                <div class="space-y-3 text-sm">
+                                    <div class="flex justify-between">
+                                        <span class="font-medium text-gray-700">Firewall:</span>
+                                        <span class="text-gray-900">${device.firewall || 'Unknown'}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="font-medium text-gray-700">Model:</span>
+                                        <span class="text-gray-900">${device.device_model || 'Unknown'}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="font-medium text-gray-700">Firmware:</span>
+                                        <span class="text-gray-900">${device.firmware_version || 'Unknown'}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="font-medium text-gray-700">Serial Number:</span>
+                                        <span class="text-gray-900">${device.serial_number || 'Unknown'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Log and Configuration Exports Card (Right) -->
+                            <div class="bg-white rounded-lg card-shadow p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                                    <span class="inline-flex items-center">
+                                        <svg class="w-5 h-5 mr-2 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zM3 7a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" clip-rule="evenodd"></path>
+                                            <path d="M13 3H7v2h6V3z"></path>
+                                        </svg>
+                                        Log and Configuration Exports
+                                    </span>
+                                </h3>
+                                <div id="export-status-content" class="space-y-4">
+                                    <!-- Export content will be populated by JavaScript -->
+                                </div>
                             </div>
                         </div>
                     `;
@@ -1570,7 +1608,7 @@
                                     </td>
                                     <td class="px-6 py-4">
                                         <div class="text-xs font-medium text-gray-900">${item.finding}</div>
-<!--                                        <div class="text-xs text-gray-500 mt-1">${item.check_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>-->
+<!--                                        <div class="text-xs text-gray-500 mt-1">${item.check_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div-->
                                     </td>
                                     <td class="px-6 py-4">
                                         <div class="text-xs text-gray-900">${item.action}</div>
@@ -1603,7 +1641,7 @@
                                     <span class="inline-flex items-center">
                                         <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-                                        </svg>
+                                    </svg>
                                         Action Items (0)
                                     </span>
                                 </h3>
@@ -1669,6 +1707,10 @@
                 }
 
                 summaryContainer.innerHTML = summaryHTML;
+
+                // Populate export status in the new card
+                populateExportStatus(summaryData.exports);
+
                 console.log('Summary data displayed successfully');
             }
 
@@ -1884,11 +1926,137 @@
             // Initialize tab functionality and report controls
             initializeTabs();
 
-            // Report functionality event listeners
-            document.getElementById('toggle-report-view')?.addEventListener('click', toggleReportView);
-            document.getElementById('download-report-md')?.addEventListener('click', downloadMarkdownReport);
-            document.getElementById('download-report-html')?.addEventListener('click', downloadHtmlReport);
-            document.getElementById('print-report')?.addEventListener('click', printReport);
+            // Function to populate export status in the summary card
+            function populateExportStatus(exportData) {
+                const exportContainer = document.getElementById('export-status-content');
+
+                if (!exportData || Object.keys(exportData).length === 0) {
+                    exportContainer.innerHTML = `
+                        <div class="text-center py-4">
+                            <svg class="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            <p class="text-sm text-gray-500">No exports available</p>
+                            <p class="text-xs text-gray-400">Enable export options to see files here</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let exportHTML = '';
+
+                // Configuration Exports Section
+                const configExports = exportData.config_exports || {};
+                const hasConfigExports = Object.keys(configExports).length > 0;
+
+                exportHTML += `
+                    <div class="border-b border-gray-200 pb-3 mb-3">
+                        <h4 class="text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                            <svg class="w-4 h-4 mr-1 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4z"></path>
+                            </svg>
+                            Configuration Files
+                        </h4>
+                        <div class="space-y-1">
+                `;
+
+                if (hasConfigExports) {
+                    Object.entries(configExports).forEach(([key, file]) => {
+                        const statusClass = file.available ? 'text-green-600' : 'text-gray-400';
+                        const iconClass = file.available ? 'text-green-500' : 'text-gray-300';
+
+                        exportHTML += `
+                            <div class="flex items-center justify-between text-xs">
+                                <div class="flex items-center">
+                                    <svg class="w-3 h-3 mr-1 ${iconClass}" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span class="${statusClass}">${file.name || key}</span>
+                                </div>
+                                ${file.available ? `<span class="text-gray-500">${file.size || 'Unknown size'}</span>` : '<span class="text-gray-400">Not available</span>'}
+                            </div>
+                        `;
+                    });
+                } else {
+                    exportHTML += '<div class="text-xs text-gray-400">No configuration exports</div>';
+                }
+
+                exportHTML += `
+                        </div>
+                    </div>
+                `;
+
+                // Log Exports Section
+                const logExports = exportData.log_exports || {};
+                const hasLogExports = Object.keys(logExports).length > 0;
+
+                exportHTML += `
+                    <div class="mb-3">
+                        <h4 class="text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                            <svg class="w-4 h-4 mr-1 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.586l-1.707 1.707A1 1 0 019 17H5a2 2 0 01-2-2V5z" clip-rule="evenodd"></path>
+                            </svg>
+                            Log Files
+                        </h4>
+                        <div class="space-y-1">
+                `;
+
+                if (hasLogExports) {
+                    Object.entries(logExports).forEach(([key, file]) => {
+                        const statusClass = file.available ? 'text-green-600' : 'text-gray-400';
+                        const iconClass = file.available ? 'text-green-500' : 'text-gray-300';
+
+                        exportHTML += `
+                            <div class="flex items-center justify-between text-xs">
+                                <div class="flex items-center">
+                                    <svg class="w-3 h-3 mr-1 ${iconClass}" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span class="${statusClass}">${file.name || key}</span>
+                                </div>
+                                ${file.available ? `<span class="text-gray-500">${file.size || 'Unknown size'}</span>` : '<span class="text-gray-400">Not available</span>'}
+                            </div>
+                        `;
+                    });
+                } else {
+                    exportHTML += '<div class="text-xs text-gray-400">No log exports</div>';
+                }
+
+                exportHTML += `
+                        </div>
+                    </div>
+                `;
+
+                // Quick Actions
+                const hasAnyExports = hasConfigExports || hasLogExports;
+                if (hasAnyExports) {
+                    exportHTML += `
+                        <div class="pt-2 border-t border-gray-200">
+                            <button onclick="downloadAllExports()" class="w-full bg-blue-600 text-white text-xs px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors">
+                                Download All
+                            </button>
+                        </div>
+                    `;
+                }
+
+                exportContainer.innerHTML = exportHTML;
+            }
+
+            // Function to handle download all exports
+            function downloadAllExports() {
+                // This will integrate with existing download functionality
+                console.log('Downloading all available exports...');
+                // Navigate to downloads tab for detailed view
+                showTab('exports');
+            }
+
+            // Helper function to show specific tab
+            function showTab(tabName) {
+                const tabButton = document.getElementById(`tab-${tabName}`);
+                if (tabButton) {
+                    tabButton.click();
+                }
+            }
         });
     </script>
 
