@@ -37,6 +37,8 @@ class FirewallTarget:
     randomize_temp_password: bool = False
     unbind_totp: bool = False
     force_password_change: bool = False
+    export_tsr: bool = False
+    export_settings: bool = False
 
 
 def initialize_session(target: FirewallTarget, target_numbers: tuple, **kwargs):
@@ -188,4 +190,3 @@ def get_local_users(api_session, api_base: str, firewall_generation: int, firewa
         return None
 
     return users
-

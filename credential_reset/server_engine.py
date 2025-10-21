@@ -345,15 +345,8 @@ class ServerOperationEngine:
                     progress_tracker.update("Preferences export requested...", 30)
                     progress_tracker.add_substep("Exporting preferences file...", "running")
                 from credential_reset.export_helper import export_settings_if_enabled
-                # Create a mock args object with the required attributes
-                class MockArgs:
-                    def __init__(self):
-                        self.export_settings = True
-                        self.verbose = False
-
-                mock_args = MockArgs()
                 target_numbers = (1, 1)
-                settings_result = export_settings_if_enabled(api_session, api_base, mock_args, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
+                settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
                 if progress_tracker:
                     progress_tracker.add_substep("Preferences export completed", "completed", "success")
                     progress_tracker.clear_substeps()

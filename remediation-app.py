@@ -642,7 +642,9 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
                                                   randomize=normalize_boolean(target_input.get('randomize_temp_password'))),
             randomize_temp_password=normalize_boolean(target_input.get('randomize_temp_password')),
             unbind_totp=normalize_boolean(target_input.get('unbind_totp')),
-            force_password_change=normalize_boolean(target_input.get('force_password_change'))
+            force_password_change=normalize_boolean(target_input.get('force_password_change')),
+            export_tsr=normalize_boolean(target_input.get('export_tsr', False)),
+            export_settings=normalize_boolean(target_input.get('export_settings', False))
         )
     else:
         # Single target from command line - this case may need proper args handling
@@ -654,7 +656,9 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
             temp_password="",
             randomize_temp_password=False,
             unbind_totp=False,
-            force_password_change=False
+            force_password_change=False,
+            export_tsr=False,
+            export_settings=False
         )
 
 # TODO: Integrate argument parsing with web form data handling
