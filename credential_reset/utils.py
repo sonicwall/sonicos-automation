@@ -233,6 +233,7 @@ SECURITY_CHECK_SEVERITIES = {
 def should_run_check(check_name: str, target_severity: str) -> bool:
     """
     Determine if a security check should be run based on the target severity.
+    Uses hierarchical filtering - runs checks at target severity level and higher priority levels.
 
     Args:
         check_name (str): Name of the security check
@@ -246,13 +247,24 @@ def should_run_check(check_name: str, target_severity: str) -> bool:
 
     check_severity = SECURITY_CHECK_SEVERITIES.get(check_name)
     if check_severity is None:
-        # If severity is not defined, default to running it for 'all'
-        return target_severity == 'all'
+        # If severity is not defined, default to running it for medium and above
+        # This ensures undefined checks don't get skipped on higher severity filters
+        return target_severity in ['all', 'medium', 'high', 'critical']
 
-    return check_severity == target_severity
+    # Define severity hierarchy (higher index = higher priority)
+    severity_levels = ['low', 'medium', 'high', 'critical']
+
+    try:
+        check_level_index = severity_levels.index(check_severity)
+        target_level_index = severity_levels.index(target_severity)
+
+        # Run if check severity >= target severity (higher or equal priority)
+        return check_level_index >= target_level_index
+    except ValueError:
+        # Fallback for invalid severity levels
+        return target_severity == 'all'
 
 
 def get_check_severity(check_name: str) -> str:
     """Get the severity level of a given security check."""
     return SECURITY_CHECK_SEVERITIES.get(check_name, 'unknown')
-

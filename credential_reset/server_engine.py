@@ -438,126 +438,148 @@ class ServerOperationEngine:
                 progress_tracker.update("Running security analysis checks...", 45)
 
             # Execute playbook methods based on security levels selected
-            security_levels = config.get('security_checks', ['critical', 'high', 'medium', 'low'])
+            # Use dynamic approach - let each method decide if it should run based on severity filter
 
-            # Track progress through security checks
-            total_checks = 0
+            # Define all available security check methods (without hardcoded severity categorization)
+            security_check_methods = [
+                ('list_ldap_servers', 'LDAP Servers'),
+                ('list_radius_servers', 'RADIUS Servers'),
+                ('list_tacacs_servers', 'TACACS+ Servers'),
+                ('list_vpn_policies', 'VPN Policies'),
+                ('check_wan_interfaces', 'WAN Interfaces'),
+                ('check_aws_api', 'AWS API'),
+                ('check_cloud_secure_edge', 'Cloud Secure Edge'),
+                ('list_dynamic_dns', 'Dynamic DNS'),
+                ('check_clearpass_nac', 'ClearPass/NAC'),
+                ('check_email_logging', 'Email Logging'),
+                ('check_packet_monitor_ftp_logging', 'Packet Monitor FTP'),
+                ('check_tsr_exp_scheduled_exports', 'TSR Scheduled Exports'),
+                ('check_deao', 'Dynamic External Address Objects'),
+                ('check_dyn_botnet_list_server', 'Dynamic Botnet List'),
+                ('list_custom_ntp_servers', 'Custom NTP Servers'),
+                ('check_gms_ipsec_tunnel', 'GMS IPsec Tunnel'),
+                ('check_extended_switches', 'Extended Switches'),
+                ('check_extended_switch_users', 'Extended Switch Users'),
+                ('check_extended_switch_radius', 'Extended Switch RADIUS'),
+                ('check_wlan_radius_servers', 'WLAN RADIUS Servers'),
+                ('check_ext_guest_auth', 'External Guest Authentication'),
+                ('list_sso_agents', 'SSO Agents'),
+                ('list_ts_agents', 'Terminal Server Agents'),
+                ('list_sso_radius_clients', 'SSO RADIUS Clients'),
+                ('list_sso_api_clients', '3rd Party SSO API'),
+                ('list_radius_accounting_servers', 'RADIUS Accounting'),
+                ('list_tacacs_accounting_servers', 'TACACS+ Accounting'),
+                ('check_appflow_sfr_reporting', 'AppFlow SFR Reporting'),
+                ('check_sec_services_proxy', 'Security Services Proxy'),
+                ('list_advanced_routing_protocols', 'Advanced Routing'),
+                ('check_cellular_wwan', 'Cellular WWAN'),
+                ('check_internal_wlan_radio', 'Internal WLAN Radio'),
+                ('check_internal_wlan_vaps', 'Internal WLAN VAPs'),
+                ('check_internal_wlan_vap_profiles', 'Internal WLAN VAP Profiles'),
+                ('check_sonicpoint_vaps', 'SonicPoint VAPs'),
+                ('check_sonicpoint_vap_profiles', 'SonicPoint VAP Profiles'),
+                ('check_sonicpoint_profiles', 'SonicPoint Profiles'),
+                ('check_sonicpoint_objects', 'SonicPoint Objects')
+            ]
+
+            # Import severity filtering utilities
+            from credential_reset.utils import should_run_check, get_check_severity
+
+            # Filter methods based on severity - only count methods that will actually run
+            methods_to_run = []
+            for method_name, display_name in security_check_methods:
+                # Map method names to check names used in severity definitions
+                check_name = self._map_method_to_check_name(method_name)
+                if should_run_check(check_name, target.severity):
+                    methods_to_run.append((method_name, display_name, check_name))
+
+            total_checks = len(methods_to_run)
             completed_checks = 0
-
-            # Define security check categories and their severity levels
-            security_check_methods = {
-                'critical': [
-                    ('list_ldap_servers', 'LDAP Servers'),
-                    ('list_radius_servers', 'RADIUS Servers'),
-                    ('list_tacacs_servers', 'TACACS+ Servers'),
-                    ('list_snmpv3_users', 'SNMPv3 Users'),
-                    ('check_clearpass_nac', 'ClearPass/NAC'),
-                    ('list_sso_agents', 'SSO Agents'),
-                    ('list_ts_agents', 'Terminal Server Agents')
-                ],
-                'high': [
-                    ('list_vpn_policies', 'VPN Policies'),
-                    ('check_wan_interfaces', 'WAN Interfaces'),
-                    ('check_aws_api', 'AWS API'),
-                    ('check_cloud_secure_edge', 'Cloud Secure Edge'),
-                    ('check_email_logging', 'Email Logging'),
-                    ('check_gms_ipsec_tunnel', 'GMS IPsec Tunnel')
-                ],
-                'medium': [
-                    ('list_dynamic_dns', 'Dynamic DNS'),
-                    ('check_packet_monitor_ftp_logging', 'Packet Monitor FTP'),
-                    ('check_tsr_exp_scheduled_exports', 'TSR Scheduled Exports'),
-                    ('check_deao', 'Dynamic External Address Objects'),
-                    ('check_dyn_botnet_list_server', 'Dynamic Botnet List'),
-                    ('list_custom_ntp_servers', 'Custom NTP Servers')
-                ],
-                'low': [
-                    ('check_extended_switches', 'Extended Switches'),
-                    ('check_extended_switch_users', 'Extended Switch Users'),
-                    ('check_extended_switch_radius', 'Extended Switch RADIUS'),
-                    ('check_wlan_radius_servers', 'WLAN RADIUS Servers'),
-                    ('check_ext_guest_auth', 'External Guest Authentication'),
-                    ('list_sso_radius_clients', 'SSO RADIUS Clients'),
-                    ('list_sso_api_clients', '3rd Party SSO API'),
-                    ('list_radius_accounting_servers', 'RADIUS Accounting'),
-                    ('list_tacacs_accounting_servers', 'TACACS+ Accounting'),
-                    ('check_appflow_sfr_reporting', 'AppFlow SFR Reporting'),
-                    ('check_sec_services_proxy', 'Security Services Proxy'),
-                    ('list_advanced_routing_protocols', 'Advanced Routing'),
-                    ('check_cellular_wwan', 'Cellular WWAN'),
-                    ('check_internal_wlan_radio', 'Internal WLAN Radio'),
-                    ('check_internal_wlan_vaps', 'Internal WLAN VAPs'),
-                    ('check_internal_wlan_vap_profiles', 'Internal WLAN VAP Profiles'),
-                    ('check_sonicpoint_vaps', 'SonicPoint VAPs'),
-                    ('check_sonicpoint_vap_profiles', 'SonicPoint VAP Profiles'),
-                    ('check_sonicpoint_profiles', 'SonicPoint Profiles'),
-                    ('check_sonicpoint_objects', 'SonicPoint Objects')
-                ]
-            }
-
-            # Count total checks to perform
-            for level in security_levels:
-                if level in security_check_methods:
-                    total_checks += len(security_check_methods[level])
 
             # Execute security checks
             check_results = {}
+            skipped_checks = []
 
-            for level in security_levels:
-                if level in security_check_methods:
-                    for method_name, check_description in security_check_methods[level]:
-                        try:
-                            if progress_tracker:
-                                progress_percent = 45 + int((completed_checks / total_checks) * 35)
-                                progress_tracker.update(f"Checking {check_description}...", progress_percent)
+            for method_name, check_description, check_name in methods_to_run:
+                try:
+                    if progress_tracker:
+                        progress_percent = 45 + int((completed_checks / total_checks) * 35)
+                        progress_tracker.update(f"Checking {check_description}...", progress_percent)
 
-                            # Execute the playbook method
-                            if hasattr(pb, method_name):
-                                method = getattr(pb, method_name)
-                                result = method()
-                                check_results[method_name] = {
-                                    'description': check_description,
-                                    'severity': level,
-                                    'result': result,
-                                    'status': 'completed'
-                                }
+                    # Execute the playbook method if it exists
+                    if hasattr(pb, method_name):
+                        method = getattr(pb, method_name)
+                        result = method()
 
-                            else:
-                                if progress_tracker:
-                                    progress_tracker.add_substep(f"{check_description} check not available", "completed", "warning")
-                                    progress_tracker.clear_substeps()
-                                check_results[method_name] = {
-                                    'description': check_description,
-                                    'severity': level,
-                                    'result': None,
-                                    'status': 'not_available'
-                                }
+                        # Get actual severity from centralized definitions
+                        actual_severity = get_check_severity(check_name)
 
-                            completed_checks += 1
+                        check_results[method_name] = {
+                            'description': check_description,
+                            'severity': actual_severity,
+                            'result': result,
+                            'status': 'completed'
+                        }
 
-                        except Exception as e:
-                            self.logger.error(f"Error running {method_name}: {e}")
-                            if progress_tracker:
-                                progress_tracker.add_substep(f"{check_description} check failed: {str(e)}", "error", "error")
-                            check_results[method_name] = {
-                                'description': check_description,
-                                'severity': level,
-                                'result': None,
-                                'status': 'error',
-                                'error': str(e)
-                            }
-                            completed_checks += 1
+                    else:
+                        if progress_tracker:
+                            progress_tracker.add_substep(f"{check_description} check not available", "completed", "warning")
+                            progress_tracker.clear_substeps()
+
+                        actual_severity = get_check_severity(check_name)
+                        check_results[method_name] = {
+                            'description': check_description,
+                            'severity': actual_severity,
+                            'result': None,
+                            'status': 'not_available'
+                        }
+
+                    completed_checks += 1
+
+                except Exception as e:
+                    self.logger.error(f"Error running {method_name}: {e}")
+                    if progress_tracker:
+                        progress_tracker.add_substep(f"{check_description} check failed: {str(e)}", "error", "error")
+
+                    actual_severity = get_check_severity(check_name)
+                    check_results[method_name] = {
+                        'description': check_description,
+                        'severity': actual_severity,
+                        'result': None,
+                        'status': 'error',
+                        'error': str(e)
+                    }
+                    completed_checks += 1
+
+            # Log skipped checks for debugging
+            all_methods = set(method[0] for method in security_check_methods)
+            executed_methods = set(method[0] for method in methods_to_run)
+            skipped_methods = all_methods - executed_methods
+
+            for method_name in skipped_methods:
+                check_name = self._map_method_to_check_name(method_name)
+                actual_severity = get_check_severity(check_name)
+                skipped_checks.append({
+                    'method': method_name,
+                    'check_name': check_name,
+                    'severity': actual_severity,
+                    'reason': f'Filtered out (severity: {actual_severity}, filter: {target.severity})'
+                })
 
             if progress_tracker:
                 progress_tracker.clear_substeps()
                 progress_tracker.update("Security analysis completed", 80)
+
+            self.logger.info(f"Security analysis completed: {completed_checks}/{len(security_check_methods)} checks executed, {len(skipped_checks)} skipped")
 
             # Build the security analysis result
             security_analysis = {
                 "playbook_results": check_results,
                 "routine_results": routine_results,
                 "checks_performed": list(check_results.keys()),
-                "security_levels_analyzed": security_levels,
+                "skipped_checks": skipped_checks,
+                "severity_filter": target.severity,
+                "total_available_checks": len(security_check_methods),
                 "total_checks": total_checks,
                 "completed_checks": completed_checks,
                 "configuration_analysis": {
@@ -1695,6 +1717,59 @@ class ServerOperationEngine:
             "completed_items": completed_items
         }
 
+    def _map_method_to_check_name(self, method_name: str) -> str:
+        """
+        Map playbook method names to check names used in severity definitions.
+
+        Args:
+            method_name: The playbook method name (e.g., 'list_ldap_servers')
+
+        Returns:
+            The corresponding check name used in SECURITY_CHECK_SEVERITIES (e.g., 'ldap_servers')
+        """
+        # Mapping from method names to check names in utils.py SECURITY_CHECK_SEVERITIES
+        method_to_check_mapping = {
+            'list_ldap_servers': 'ldap_servers',
+            'list_radius_servers': 'radius_servers',
+            'list_tacacs_servers': 'tacacs_servers',
+            'list_vpn_policies': 'vpn_policies',
+            'check_wan_interfaces': 'wan_interfaces',
+            'check_aws_api': 'aws_api',
+            'check_cloud_secure_edge': 'cloud_secure_edge',
+            'list_dynamic_dns': 'ddns_services',
+            'check_clearpass_nac': 'clearpass_nac',
+            'check_email_logging': 'email_logging',
+            'check_packet_monitor_ftp_logging': 'packet_monitor_ftp',
+            'check_tsr_exp_scheduled_exports': 'scheduled_exports',
+            'check_deao': 'dynamic_address_objects',
+            'check_dyn_botnet_list_server': 'dynamic_botnet_list_server',
+            'list_custom_ntp_servers': 'ntp_servers',
+            'check_gms_ipsec_tunnel': 'gms_ipsec_tunnel',
+            'check_extended_switches': 'extended_switches',
+            'check_extended_switch_users': 'extended_switch_users',
+            'check_extended_switch_radius': 'extended_switch_radius',
+            'check_wlan_radius_servers': 'wlan_radius_servers',
+            'check_ext_guest_auth': 'guest_services_auth',
+            'list_sso_agents': 'sso_agents',
+            'list_ts_agents': 'ts_agents',
+            'list_sso_radius_clients': 'sso_radius_clients',
+            'list_sso_api_clients': 'sso_api_clients',
+            'list_radius_accounting_servers': 'radius_accounting_servers',
+            'list_tacacs_accounting_servers': 'tacacs_accounting_servers',
+            'check_appflow_sfr_reporting': 'sfr_reporting',
+            'check_sec_services_proxy': 'security_services_proxy',
+            'list_advanced_routing_protocols': 'advanced_routing',
+            'check_cellular_wwan': 'cellular_wwan',
+            'check_internal_wlan_radio': 'internal_wlan_radio',
+            'check_internal_wlan_vaps': 'internal_wlan_vaps',
+            'check_internal_wlan_vap_profiles': 'internal_wlan_vap_profiles',
+            'check_sonicpoint_vaps': 'sonicpoint_vaps',
+            'check_sonicpoint_vap_profiles': 'sonicpoint_vap_profiles',
+            'check_sonicpoint_profiles': 'sonicpoint_profiles',
+            'check_sonicpoint_objects': 'sonicpoint_objects'
+        }
+
+        return method_to_check_mapping.get(method_name, method_name.replace('list_', '').replace('check_', ''))
 
 # Create a singleton instance for Flask to use
 server_operation_engine = ServerOperationEngine()
