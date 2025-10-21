@@ -12,6 +12,9 @@
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
     <!-- Custom styles -->
     <style>
         .gradient-bg {
@@ -60,6 +63,109 @@
 
         .status-info {
             @apply text-blue-600 bg-blue-100;
+        }
+
+        /* NEW: Markdown Report Styles */
+        .markdown-content {
+            line-height: 1.6;
+        }
+
+        .markdown-content h1 {
+            @apply text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200;
+        }
+
+        .markdown-content h2 {
+            @apply text-xl font-bold text-gray-900 mb-3 mt-6;
+        }
+
+        .markdown-content h3 {
+            @apply text-lg font-semibold text-gray-900 mb-2 mt-4;
+        }
+
+        .markdown-content table {
+            @apply w-full border-collapse border border-gray-300 mb-4;
+        }
+
+        .markdown-content th {
+            @apply bg-gray-50 border border-gray-300 px-4 py-2 text-left font-semibold;
+        }
+
+        .markdown-content td {
+            @apply border border-gray-300 px-4 py-2;
+        }
+
+        .markdown-content ul {
+            @apply list-disc list-inside mb-4 space-y-1;
+        }
+
+        .markdown-content li {
+            @apply text-gray-700;
+        }
+
+        .markdown-content code {
+            @apply bg-gray-100 px-1 py-0.5 rounded text-sm font-mono;
+        }
+
+        .markdown-content pre {
+            @apply bg-gray-50 p-4 rounded-md overflow-x-auto;
+        }
+
+        .markdown-content blockquote {
+            @apply border-l-4 border-blue-500 pl-4 italic text-gray-700 mb-4;
+        }
+
+        .markdown-content a {
+            @apply text-blue-600 hover:text-blue-800 underline;
+        }
+
+        /* Priority-based styling */
+        .priority-critical {
+            @apply text-red-600 font-semibold;
+        }
+
+        .priority-high {
+            @apply text-orange-600 font-semibold;
+        }
+
+        .priority-medium {
+            @apply text-yellow-600 font-semibold;
+        }
+
+        .priority-low {
+            @apply text-green-600 font-semibold;
+        }
+
+        /* Tab styling */
+        .tab-button.tab-active {
+            @apply border-blue-500 text-blue-600;
+        }
+
+        .tab-button.tab-inactive {
+            @apply border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300;
+        }
+
+        .tab-content {
+            @apply block;
+        }
+
+        .tab-content.hide {
+            @apply hidden;
+        }
+
+        /* Print styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            .markdown-content {
+                font-size: 12pt;
+                line-height: 1.4;
+            }
+
+            .markdown-content table {
+                page-break-inside: avoid;
+            }
         }
     </style>
 </head>
@@ -363,6 +469,76 @@
 
                 <div id="results-content">
                     <p class="text-gray-500 italic">No results available. Run an operation to see results here.</p>
+                </div>
+
+                <!-- NEW: Results Tabs -->
+                <div id="results-tabs-container" class="hide mt-6">
+                    <div class="border-b border-gray-200 mb-6">
+                        <nav class="flex space-x-8">
+                            <button id="tab-summary" class="tab-button tab-active border-b-2 border-blue-500 py-2 px-1 text-sm font-medium text-blue-600">
+                                Summary
+                            </button>
+                            <button id="tab-detailed" class="tab-button tab-inactive border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Detailed Results
+                            </button>
+                            <button id="tab-report" class="tab-button tab-inactive border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Report
+                            </button>
+                            <button id="tab-exports" class="tab-button tab-inactive border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Downloads
+                            </button>
+                        </nav>
+                    </div>
+
+                    <!-- Tab Content -->
+                    <div id="tab-content-summary" class="tab-content">
+                        <!-- Existing summary content will go here -->
+                    </div>
+
+                    <div id="tab-content-detailed" class="tab-content hide">
+                        <!-- Existing detailed results will go here -->
+                    </div>
+
+                    <!-- NEW: Report Tab Content -->
+                    <div id="tab-content-report" class="tab-content hide">
+                        <div class="mb-4 flex justify-between items-center">
+                            <h3 class="text-lg font-semibold text-gray-900">Security Analysis Report</h3>
+                            <div class="space-x-3">
+                                <button id="toggle-report-view" class="bg-gray-100 text-gray-700 px-3 py-1 rounded-md text-sm hover:bg-gray-200">
+                                    Show Raw
+                                </button>
+                                <button id="download-report-md" class="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700">
+                                    Download Markdown
+                                </button>
+                                <button id="download-report-html" class="bg-green-600 text-white px-3 py-1 rounded-md text-sm hover:bg-green-700">
+                                    Download HTML
+                                </button>
+                                <button id="print-report" class="bg-gray-600 text-white px-3 py-1 rounded-md text-sm hover:bg-gray-700">
+                                    Print
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Report Display Container -->
+                        <div id="report-container" class="border border-gray-200 rounded-lg p-6 bg-white">
+                            <!-- Rendered Markdown Content -->
+                            <div id="markdown-rendered" class="markdown-content prose max-w-none">
+                                <p class="text-gray-500 italic">No report available. Run a security analysis to generate a report.</p>
+                            </div>
+
+                            <!-- Raw Markdown Content (hidden by default) -->
+                            <div id="markdown-raw" class="hide">
+                                <pre class="bg-gray-50 p-4 rounded-md text-sm overflow-x-auto font-mono"><code id="markdown-code"></code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-content-exports" class="tab-content hide">
+                        <!-- TSR/Settings download links will go here -->
+                        <div id="exports-list">
+                            <p class="text-gray-500 italic">No export files available. Enable TSR or Settings export to see download links here.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1187,31 +1363,229 @@
             function handleAnalysisResult(result) {
                 console.log('Playbook run completed:', result);
 
+                // NEW: Display markdown report and show results tabs
+                if (result.results && result.results.markdown_report) {
+                    displayMarkdownReport(result.results.markdown_report);
+                    showSection('results-section'); // Auto-navigate to results
+                }
+
                 // Display success message with summary
                 let summaryMessage = "Security analysis completed successfully!";
 
                 if (result.results && result.results.security_analysis) {
                     const analysis = result.results.security_analysis;
-                    const userSecurity = analysis.user_security;
-                    const configAnalysis = analysis.configuration_analysis;
-
-                    summaryMessage += `\n\nResults Summary:`;
-                    summaryMessage += `\n• Users analyzed: ${userSecurity.users_found}`;
-                    summaryMessage += `\n• Security issues found: ${userSecurity.issues.length}`;
-                    summaryMessage += `\n• Configuration checks: ${configAnalysis.checks_performed.length}`;
-
-                    if (userSecurity.issues.length > 0) {
-                        summaryMessage += `\n\nSecurity Issues:`;
-                        userSecurity.issues.forEach(issue => {
-                            summaryMessage += `\n• [${issue.severity.toUpperCase()}] ${issue.issue}`;
-                        });
-                    }
+                    summaryMessage += `\n\nA detailed markdown report has been generated and is available in the Results section.`;
                 }
 
-                // Show results in an alert for now (in a real app, this would be a proper results display)
+                // Show brief success notification
                 window.alert(summaryMessage);
             }
 
+            // NEW: Markdown Report Management Functions
+            let currentMarkdownContent = '';
+            let currentReportView = 'rendered'; // 'rendered' or 'raw'
+
+            // Initialize tab functionality
+            function initializeTabs() {
+                const tabButtons = document.querySelectorAll('.tab-button');
+                const tabContents = document.querySelectorAll('.tab-content');
+
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', function() {
+                        const tabId = this.id.replace('tab-', 'tab-content-');
+
+                        // Update tab buttons
+                        tabButtons.forEach(btn => {
+                            btn.classList.remove('tab-active');
+                            btn.classList.add('tab-inactive');
+                            btn.classList.remove('border-blue-500', 'text-blue-600');
+                            btn.classList.add('border-transparent', 'text-gray-500');
+                        });
+                        this.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
+                        this.classList.add('tab-active', 'border-blue-500', 'text-blue-600');
+
+                        // Update tab content
+                        tabContents.forEach(content => {
+                            content.classList.add('hide');
+                        });
+                        const targetContent = document.getElementById(tabId);
+                        if (targetContent) {
+                            targetContent.classList.remove('hide');
+                        }
+                    });
+                });
+            }
+
+            // Display markdown report in the results tab
+            function displayMarkdownReport(markdownContent) {
+                currentMarkdownContent = markdownContent;
+
+                if (!markdownContent) {
+                    document.getElementById('markdown-rendered').innerHTML =
+                        '<p class="text-gray-500 italic">No report generated for this operation.</p>';
+                    return;
+                }
+
+                try {
+                    // Show rendered markdown by default
+                    const renderedHtml = marked.parse(markdownContent);
+                    document.getElementById('markdown-rendered').innerHTML = renderedHtml;
+                    document.getElementById('markdown-code').textContent = markdownContent;
+
+                    // Apply priority styling to tables
+                    applyPriorityStyling();
+
+                    // Show report tab and results tabs container
+                    document.getElementById('results-tabs-container').classList.remove('hide');
+
+                    console.log('Markdown report displayed successfully');
+                } catch (error) {
+                    console.error('Error rendering markdown:', error);
+                    document.getElementById('markdown-rendered').innerHTML =
+                        `<p class="text-red-500">Error rendering report: ${error.message}</p>`;
+                }
+            }
+
+            // Apply priority-based styling to markdown tables
+            function applyPriorityStyling() {
+                const tables = document.querySelectorAll('#markdown-rendered table');
+                tables.forEach(table => {
+                    const rows = table.querySelectorAll('tbody tr');
+                    rows.forEach(row => {
+                        const priorityCell = row.querySelector('td:first-child');
+                        if (priorityCell) {
+                            const priority = priorityCell.textContent.toLowerCase().trim();
+                            if (['critical', 'high', 'medium', 'low'].includes(priority)) {
+                                priorityCell.classList.add(`priority-${priority}`);
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Toggle between rendered and raw markdown view
+            function toggleReportView() {
+                const renderedDiv = document.getElementById('markdown-rendered');
+                const rawDiv = document.getElementById('markdown-raw');
+                const toggleBtn = document.getElementById('toggle-report-view');
+
+                if (currentReportView === 'rendered') {
+                    renderedDiv.classList.add('hide');
+                    rawDiv.classList.remove('hide');
+                    toggleBtn.textContent = 'Show Rendered';
+                    currentReportView = 'raw';
+                } else {
+                    rawDiv.classList.add('hide');
+                    renderedDiv.classList.remove('hide');
+                    toggleBtn.textContent = 'Show Raw';
+                    currentReportView = 'rendered';
+                }
+            }
+
+            // Download markdown report
+            function downloadMarkdownReport() {
+                if (!currentMarkdownContent) {
+                    alert('No report available to download.');
+                    return;
+                }
+
+                const blob = new Blob([currentMarkdownContent], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sonicwall-security-report-${new Date().toISOString().split('T')[0]}.md`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            // Download HTML report
+            function downloadHtmlReport() {
+                if (!currentMarkdownContent) {
+                    alert('No report available to download.');
+                    return;
+                }
+
+                const renderedHtml = marked.parse(currentMarkdownContent);
+                const fullHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SonicWall Security Analysis Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        h1, h2, h3 { color: #333; }
+        .priority-critical { color: #dc2626; font-weight: bold; }
+        .priority-high { color: #ea580c; font-weight: bold; }
+        .priority-medium { color: #ca8a04; font-weight: bold; }
+        .priority-low { color: #16a34a; font-weight: bold; }
+    </style>
+</head>
+<body>
+    ${renderedHtml}
+</body>
+</html>`;
+
+                const blob = new Blob([fullHtml], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sonicwall-security-report-${new Date().toISOString().split('T')[0]}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            // Print report
+            function printReport() {
+                if (!currentMarkdownContent) {
+                    alert('No report available to print.');
+                    return;
+                }
+
+                const printWindow = window.open('', '_blank');
+                const renderedHtml = marked.parse(currentMarkdownContent);
+
+                printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SonicWall Security Analysis Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; page-break-inside: avoid; }
+        th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+        th { background-color: #f0f0f0; font-weight: bold; }
+        h1, h2, h3 { color: #000; page-break-after: avoid; }
+        .priority-critical { color: #000; font-weight: bold; }
+        .priority-high { color: #000; font-weight: bold; }
+        .priority-medium { color: #000; font-weight: bold; }
+        .priority-low { color: #000; font-weight: bold; }
+        @media print { body { margin: 0; } }
+    </style>
+</head>
+<body>
+    ${renderedHtml}
+</body>
+</html>`);
+
+                printWindow.document.close();
+                printWindow.print();
+            }
+
+            // Initialize tab functionality and report controls
+            initializeTabs();
+
+            // Report functionality event listeners
+            document.getElementById('toggle-report-view')?.addEventListener('click', toggleReportView);
+            document.getElementById('download-report-md')?.addEventListener('click', downloadMarkdownReport);
+            document.getElementById('download-report-html')?.addEventListener('click', downloadHtmlReport);
+            document.getElementById('print-report')?.addEventListener('click', printReport);
         });
     </script>
 

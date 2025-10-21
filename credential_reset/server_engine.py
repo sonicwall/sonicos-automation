@@ -565,8 +565,34 @@ class ServerOperationEngine:
                 }
             }
 
+            # NEW: Generate markdown report
+            markdown_report = None
+            try:
+                if progress_tracker:
+                    progress_tracker.update("Generating markdown report...", 85)
+
+                from credential_reset.report_markdown import generate_markdown_summary
+
+                # Convert playbook results to format expected by report generator
+                converted_results = self._convert_results_for_markdown(check_results, routine_results, firewall_info)
+
+                markdown_report = generate_markdown_summary(
+                    results=converted_results,
+                    firewall=target.firewall,
+                    firewall_info=firewall_info,
+                    args=target
+                )
+
+                if progress_tracker:
+                    progress_tracker.update("Markdown report generated", 88)
+
+            except Exception as e:
+                self.logger.error(f"Failed to generate markdown report: {e}")
+                markdown_report = f"# Report Generation Error\n\nFailed to generate markdown report: {str(e)}"
+
             return {
                 "security_analysis": security_analysis,
+                "markdown_report": markdown_report,  # NEW: Add markdown report
                 "analysis_timestamp": constants.generate_timestamp(),
                 "tsr_result": tsr_result
             }
@@ -576,6 +602,52 @@ class ServerOperationEngine:
             if progress_tracker:
                 progress_tracker.add_substep(f"Analysis failed: {str(e)}", "error", "error")
             return {"error": f"Security analysis failed: {str(e)}"}
+
+    def _convert_results_for_markdown(self, check_results: Dict, routine_results: Dict, firewall_info: Dict) -> Dict:
+        """
+        Convert playbook check results to format expected by markdown generator.
+
+        Args:
+            check_results: Dictionary of security check results
+            routine_results: Dictionary containing routine operation results
+            firewall_info: Dictionary containing firewall information
+
+        Returns:
+            Dictionary in format expected by generate_markdown_summary
+        """
+        try:
+            converted = {}
+
+            # Add basic firewall info
+            converted.update(routine_results)
+
+            # Map check results to expected format for markdown generator
+            for method_name, result_data in check_results.items():
+                if result_data.get('result') is not None and result_data.get('status') == 'completed':
+                    # Remove 'list_' and 'check_' prefixes to match expected keys
+                    clean_key = method_name.replace('list_', '').replace('check_', '')
+                    converted[clean_key] = result_data['result']
+
+            # Add any additional fields that the markdown generator expects
+            # These may need to be populated from actual results in a real implementation
+            if not converted.get('total_user_count'):
+                converted['total_user_count'] = 0
+            if not converted.get('total_users_forced_to_update_password'):
+                converted['total_users_forced_to_update_password'] = 0
+            if not converted.get('skipped_user_count'):
+                converted['skipped_user_count'] = 0
+            if not converted.get('totp_unbind_attempted'):
+                converted['totp_unbind_attempted'] = False
+            if not converted.get('totp_unbind_successful_count'):
+                converted['totp_unbind_successful_count'] = 0
+            if not converted.get('totp_unbind_failed_count'):
+                converted['totp_unbind_failed_count'] = 0
+
+            return converted
+
+        except Exception as e:
+            self.logger.error(f"Error converting results for markdown: {e}")
+            return {}
 
     def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None) -> Dict:
         """Execute credential reset operation."""
