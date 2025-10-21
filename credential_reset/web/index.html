@@ -71,15 +71,28 @@
         }
 
         .markdown-content h1 {
-            @apply text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
         }
 
         .markdown-content h2 {
-            @apply text-xl font-bold text-gray-900 mb-3 mt-6;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 0.75rem;
+            margin-top: 1.5rem;
         }
 
         .markdown-content h3 {
-            @apply text-lg font-semibold text-gray-900 mb-2 mt-4;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 0.5rem;
+            margin-top: 1rem;
         }
 
         .markdown-content table {
@@ -522,7 +535,7 @@
                         <!-- Report Display Container -->
                         <div id="report-container" class="border border-gray-200 rounded-lg p-6 bg-white">
                             <!-- Rendered Markdown Content -->
-                            <div id="markdown-rendered" class="markdown-content prose max-w-none">
+                            <div id="markdown-rendered" class="markdown-content max-w-none">
                                 <p class="text-gray-500 italic">No report available. Run a playbook analysis to generate a report.</p>
                             </div>
 
@@ -548,7 +561,7 @@
             <div class="bg-white rounded-lg card-shadow p-6">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Help & Documentation</h2>
 
-                <div class="prose max-w-none">
+                <div class="max-w-none">
                     <h3>Getting Started</h3>
                     <p>This tool provides an intuitive web interface for the SonicWall Credential Reset functionality. You can either process a single firewall or multiple firewalls using a CSV file.</p>
 
@@ -1497,11 +1510,11 @@
 <!--                                        ${item.count > 1 ? `<div class="text-xs text-gray-500 mt-1">${item.count} items</div>` : ''}-->
                                     </td>
                                     <td class="px-6 py-4">
-                                        <div class="text-sm font-medium text-gray-900">${item.finding}</div>
+                                        <div class="text-xs font-medium text-gray-900">${item.finding}</div>
 <!--                                        <div class="text-xs text-gray-500 mt-1">${item.check_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>-->
                                     </td>
                                     <td class="px-6 py-4">
-                                        <div class="text-sm text-gray-900">${item.action}</div>
+                                        <div class="text-xs text-gray-900">${item.action}</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <a href="${item.resource_link}" target="_blank"
