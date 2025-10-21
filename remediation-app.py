@@ -627,6 +627,9 @@ def main():
 
 def convert_security_checks_to_severity(security_checks):
     """Convert security checks list to severity filter string."""
+    if isinstance(security_checks, str):
+        security_checks = [security_checks]
+
     if not security_checks or len(security_checks) == 4:  # All levels or none selected
         return "all"
     elif set(security_checks) == {'critical'}:
@@ -635,6 +638,10 @@ def convert_security_checks_to_severity(security_checks):
         return "high"
     elif set(security_checks) == {'critical', 'high', 'medium'}:
         return "medium"
+    elif set(security_checks) == {'critical', 'high', 'medium'}:
+        return "medium"
+    elif set(security_checks) == {'critical', 'high', 'low'}:
+        return "low"
     else:
         return "all"  # Default fallback for any other combination
 
@@ -645,10 +652,10 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
         return parse_csv_targets(target_input)
     elif isinstance(target_input, dict):
         # Target came from web form data
-        logger.debug(f"Target came from web form: {target_input}")
+        logger.info(f"Target came from web form:\n{target_input}\n")
 
         # Convert security_checks list to severity filter
-        security_checks = target_input.get('security_checks', [])
+        security_checks = target_input.get('severity', [])
         severity = convert_security_checks_to_severity(security_checks)
 
         return FirewallTarget(

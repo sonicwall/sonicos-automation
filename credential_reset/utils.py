@@ -247,9 +247,9 @@ def should_run_check(check_name: str, target_severity: str) -> bool:
 
     check_severity = SECURITY_CHECK_SEVERITIES.get(check_name)
     if check_severity is None:
-        # If severity is not defined, default to running it for medium and above
-        # This ensures undefined checks don't get skipped on higher severity filters
-        return target_severity in ['all', 'medium', 'high', 'critical']
+        # If severity is not defined, only run it when target is 'all'
+        # This prevents undefined checks from running on specific severity filters
+        return False
 
     # Define severity hierarchy (higher index = higher priority)
     severity_levels = ['low', 'medium', 'high', 'critical']
@@ -258,7 +258,7 @@ def should_run_check(check_name: str, target_severity: str) -> bool:
         check_level_index = severity_levels.index(check_severity)
         target_level_index = severity_levels.index(target_severity)
 
-        # Run if check severity >= target severity (higher or equal priority)
+        # Run if check severity >= target severity (equal or higher priority)
         return check_level_index >= target_level_index
     except ValueError:
         # Fallback for invalid severity levels

@@ -1293,6 +1293,8 @@
                         security_checks: Array.from(document.querySelectorAll('.security-check:checked')).map(cb => cb.value)
                     };
 
+                    console.log(formData)
+
                     // Validate required fields
                     if (!formData.firewall || !formData.username || !formData.password) {
                         window.alert('Please fill in all required fields (Firewall IP, Username, Password)');
