@@ -1653,7 +1653,9 @@
                 summaryContainer.innerHTML = summaryHTML;
 
                 // Populate export status in the new card
-                populateExportStatus(summaryData.exports);
+                // Transform the actual export data structure to match what populateExportStatus expects
+                const transformedExports = transformExportData(summaryData);
+                populateExportStatus(transformedExports);
 
                 console.log('Summary data displayed successfully');
             }
@@ -2000,6 +2002,47 @@
                 if (tabButton) {
                     tabButton.click();
                 }
+            }
+
+            // Transform export data from actual structure to expected format
+            function transformExportData(summaryData) {
+                if (!summaryData) {
+                    return {};
+                }
+
+                const transformedData = {
+                    config_exports: {},
+                    log_exports: {}
+                };
+
+                // Transform TSR data
+                if (summaryData.tsr_downloaded !== undefined) {
+                    transformedData.log_exports.tsr = {
+                        available: summaryData.tsr_downloaded,
+                        name: summaryData.tsr_file_name ? summaryData.tsr_file_name.split('/').pop() : 'TSR Report',
+                        size: 'Unknown size'
+                    };
+                }
+
+                // Transform trace logs data
+                if (summaryData.trace_logs_downloaded !== undefined) {
+                    transformedData.log_exports.trace_logs = {
+                        available: summaryData.trace_logs_downloaded,
+                        name: summaryData.tracelog_filename ? summaryData.tracelog_filename.split('/').pop() : 'Trace Logs',
+                        size: 'Unknown size'
+                    };
+                }
+
+                // Transform settings/preferences data
+                if (summaryData.settings_exported !== undefined) {
+                    transformedData.config_exports.preferences = {
+                        available: summaryData.settings_exported,
+                        name: summaryData.prefs_file_name ? summaryData.prefs_file_name.split('/').pop() : 'Preferences Export',
+                        size: 'Unknown size'
+                    };
+                }
+
+                return transformedData;
             }
         });
     </script>

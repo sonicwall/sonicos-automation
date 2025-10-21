@@ -344,28 +344,28 @@ class ServerOperationEngine:
             tsr_result = {}
             if config.get('export_tsr', False):
                 if progress_tracker:
-                    progress_tracker.update("TSR export requested...", 30)
-                    progress_tracker.add_substep("Exporting Tech Support Report...", "running")
+                    progress_tracker.update("Tech Support Report (TSR) export requested...", 31)
+                    # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
                 target_numbers = (1, 1)
                 tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
                 if progress_tracker:
-                    progress_tracker.add_substep("TSR export completed", "completed", "success")
+                    progress_tracker.add_substep("Export complete", "completed", "success")
                     progress_tracker.clear_substeps()
 
             # Export Settings if requested (before analysis)
             if config.get('export_settings', False):
                 if progress_tracker:
-                    progress_tracker.update("Preferences export requested...", 30)
-                    progress_tracker.add_substep("Exporting preferences file...", "running")
+                    progress_tracker.update("Preferences export requested...", 32)
+                    # progress_tracker.add_substep("Exporting preferences file...", "running")
                 from credential_reset.export_helper import export_settings_if_enabled
                 target_numbers = (1, 1)
                 settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
                 if progress_tracker:
-                    progress_tracker.add_substep("Preferences export completed", "completed", "success")
+                    progress_tracker.add_substep("Export complete", "completed", "success")
                     progress_tracker.clear_substeps()
 
             if progress_tracker:
-                progress_tracker.update("Initializing playbook...", 35)
+                progress_tracker.update("Initializing playbook...", 33)
 
             # If the firewall is a GEN6, establish an alternate API session.
             alt_session = None
