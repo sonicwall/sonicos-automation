@@ -857,6 +857,15 @@ class ServerOperationEngine:
             # Always add this recommendation
             summary["recommendations"].append("Review the detailed report for complete analysis results")
 
+            # Extract brief summary items
+            from types import SimpleNamespace
+            # Create a mock args object for should_run_check compatibility
+            args = SimpleNamespace(severity="all")
+            brief_summary = self._extract_brief_summary_items(converted_results, check_results, routine_results, args)
+
+            # Add brief summary to existing summary structure
+            summary["brief_summary"] = brief_summary
+
             return summary
 
         except Exception as e:
@@ -894,6 +903,188 @@ class ServerOperationEngine:
         except Exception as e:
             self.logger.error(f"Credential reset failed: {e}")
             return {"error": f"Credential reset failed: {str(e)}"}
+
+    def _extract_brief_summary_items(self, converted_results: Dict, check_results: Dict, routine_results: Dict, args) -> Dict:
+        """
+        Extract brief summary items (action items, review items, completed items)
+        matching the markdown report structure.
+        """
+        from credential_reset.utils import should_run_check
+
+        action_items = []
+        review_items = []
+        completed_items = []
+
+        def get_count(data):
+            try:
+                if isinstance(data, dict):
+                    for key in data.keys():
+                        if isinstance(data[key], dict):
+                            for subkey in data[key].keys():
+                                val = data[key][subkey]
+                                if isinstance(val, list):
+                                    return len(val)
+                elif isinstance(data, list):
+                    return len(data)
+                return 0
+            except Exception:
+                return 0
+
+        # LDAP Servers
+        if should_run_check('ldap_servers', args.severity):
+            count = get_count(converted_results.get('ldap_servers', {}))
+            if count > 0:
+                action_items.append({
+                    "priority": "Critical",
+                    "finding": f"{count} Server(s) Configured",
+                    "action": "LDAP server(s) require bind password updates",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_LDAP_Authentication",
+                    "count": count,
+                    "check_type": "ldap_servers"
+                })
+
+        # RADIUS Servers
+        if should_run_check('radius_servers', args.severity):
+            count = get_count(converted_results.get('radius_servers', {}))
+            if count > 0:
+                action_items.append({
+                    "priority": "Critical",
+                    "finding": f"{count} Server(s) Configured",
+                    "action": "RADIUS server(s) require shared secret updates",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Authentication",
+                    "count": count,
+                    "check_type": "radius_servers"
+                })
+
+        # TACACS Servers
+        if should_run_check('tacacs_servers', args.severity):
+            count = get_count(converted_results.get('tacacs_servers', {}))
+            if count > 0:
+                action_items.append({
+                    "priority": "Critical",
+                    "finding": f"{count} Server(s) Configured",
+                    "action": "TACACS server(s) require shared secret updates",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication",
+                    "count": count,
+                    "check_type": "tacacs_servers"
+                })
+
+        # VPN Policies
+        if should_run_check('vpn_policies', args.severity):
+            vpn_policies = converted_results.get('vpn', {}).get('policy', [])
+            if len(vpn_policies) > 0:
+                s2s_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('site_to_site', {}).get('name')])
+                s2s_disabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+                groupvpn_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('group_vpn', {}).get('name')])
+                groupvpn_disabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+                tunnelint_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('tunnel_interface', {}).get('name')])
+                tunnelint_disabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
+
+                action_items.append({
+                    "priority": "Critical",
+                    "finding": f"{len(vpn_policies)} Policies Found<br>- {groupvpn_count} GroupVPN, {groupvpn_disabled_count} Disabled<br>- {s2s_count} Site-to-Site, {s2s_disabled_count} Disabled<br>- {tunnelint_count} Tunnel Interface, {tunnelint_disabled_count} Disabled",
+                    "action": "VPN policies require pre-shared key, authentication/encryption key updates",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared",
+                    "count": len(vpn_policies),
+                    "check_type": "vpn_policies"
+                })
+
+        # Dynamic DNS
+        if should_run_check('ddns_services', args.severity):
+            ddns_v4 = get_count(converted_results.get('ddns_services_v4', []))
+            ddns_v6 = get_count(converted_results.get('ddns_services_v6', []))
+            total_ddns = ddns_v4 + ddns_v6
+            if total_ddns > 0:
+                action_items.append({
+                    "priority": "High",
+                    "finding": f"{total_ddns} Profile(s)",
+                    "action": "Dynamic DNS profile(s) require credential updates",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835",
+                    "count": total_ddns,
+                    "check_type": "ddns_services"
+                })
+
+        # WAN Interfaces (L2TP/PPPoE/PPTP)
+        if should_run_check('wan_interfaces', args.severity):
+            interesting_wan_ints = [i for i in converted_results.get('interesting_wan_list', [])]
+            if len(interesting_wan_ints) > 0:
+                action_items.append({
+                    "priority": "Critical",
+                    "finding": f"{len(interesting_wan_ints)} WAN interface(s)",
+                    "action": f"{', '.join(interesting_wan_ints)} require credential updates for L2TP/PPPoE/PPTP connections",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a",
+                    "count": len(interesting_wan_ints),
+                    "check_type": "wan_interfaces"
+                })
+
+        # AWS API Logging
+        if should_run_check('aws_api', args.severity):
+            if converted_results.get('log', {}).get('aws', {}).get('enable', False):
+                action_items.append({
+                    "priority": "Critical",
+                    "finding": "Enabled",
+                    "action": "AWS API Logging is enabled - Update the secret key in the AWS Console",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/aws-integration-with-sonicwall-sonicos-6-5-x/181024232124532",
+                    "count": 1,
+                    "check_type": "aws_api"
+                })
+
+        # Cloud Secure Edge
+        if should_run_check('cloud_secure_edge', args.severity):
+            if converted_results.get('cloud_secure_edge', {}).get('created', False):
+                action_items.append({
+                    "priority": "Critical",
+                    "finding": "Enabled",
+                    "action": "Cloud Secure Edge is enabled - Reset the CSE connector's API token",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE",
+                    "count": 1,
+                    "check_type": "cloud_secure_edge"
+                })
+
+        # SNMPv3 Users
+        if should_run_check('snmp_users', args.severity):
+            count = get_count(converted_results.get('snmp', {}).get('user', []))
+            if count > 0:
+                action_items.append({
+                    "priority": "High",
+                    "finding": f"{count} Users Found",
+                    "action": "SNMPv3 user(s) require authentication/privacy password updates",
+                    "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP",
+                    "count": count,
+                    "check_type": "snmp_users"
+                })
+
+        # Force Password Change (Completed Items)
+        try:
+            users_updated = converted_results.get('total_users_forced_to_update_password', 0)
+            users_skipped = converted_results.get('skipped_user_count', 0)
+            total_users = converted_results.get('total_user_count', 0)
+
+            if users_updated > 0 or users_skipped > 0:
+                completed_items.append(f"<strong>{users_updated} local user(s)</strong> forced to change password on next login. <strong>{users_skipped} user(s)</strong> skipped (e.g., non-local users).")
+            elif total_users == 0:
+                review_items.append("No local users found or not executed. Ensure the 'Force Password Change' action is enabled. This is strongly recommended for all local users.")
+        except Exception:
+            pass
+
+        # TOTP Unbind (Completed Items)
+        try:
+            totp_unbind_attempted = converted_results.get('totp_unbind_attempted', False)
+            if totp_unbind_attempted:
+                failed = converted_results.get('totp_unbind_failed_count', 0)
+                success = converted_results.get('totp_unbind_successful_count', 0)
+                if success > 0 or failed > 0:
+                    completed_items.append(f"<strong>{success} user(s)</strong> had TOTP unbound successfully. <strong>{failed} user(s)</strong> failed to unbind TOTP.")
+            else:
+                review_items.append("TOTP unbind was not attempted. Enable TOTP unbinding in the input CSV file or using CLI arguments. This is strongly recommended for all users.")
+        except Exception:
+            pass
+
+        return {
+            "action_items": action_items,
+            "review_items": review_items,
+            "completed_items": completed_items
+        }
 
 
 # Create a singleton instance for Flask to use
