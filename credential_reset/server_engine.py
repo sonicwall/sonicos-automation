@@ -567,6 +567,7 @@ class ServerOperationEngine:
 
             # NEW: Generate markdown report
             markdown_report = None
+            converted_results = {}  # Initialize early to avoid reference before assignment
             try:
                 if progress_tracker:
                     progress_tracker.update("Generating markdown report...", 85)
@@ -589,6 +590,9 @@ class ServerOperationEngine:
             except Exception as e:
                 self.logger.error(f"Failed to generate markdown report: {e}")
                 markdown_report = f"# Report Generation Error\n\nFailed to generate markdown report: {str(e)}"
+                # Ensure converted_results is available for summary generation even if markdown fails
+                if not converted_results:
+                    converted_results = self._convert_results_for_markdown(check_results, routine_results, firewall_info)
 
             # Generate summary data for the frontend
             try:
@@ -630,32 +634,110 @@ class ServerOperationEngine:
             Dictionary in format expected by generate_markdown_summary
         """
         try:
+            # Start with firewall-specific data from routine_results
             converted = {}
+            for firewall_ip, info in routine_results.items():
+                if isinstance(info, dict):
+                    converted.update(info)
+                    break
 
-            # Add basic firewall info
-            converted.update(routine_results)
+            # Map playbook method results to keys expected by markdown generator
+            method_mapping = {
+                'list_ldap_servers': 'ldap_servers',
+                'list_radius_servers': 'radius_servers',
+                'list_tacacs_servers': 'tacacs_servers',
+                'list_snmpv3_users': 'snmpv3_users',
+                'check_clearpass_nac': 'clearpass_nac',
+                'list_sso_agents': 'sso_agents',
+                'list_ts_agents': 'ts_agents',
+                'list_vpn_policies': 'vpn',  # Special case - VPN data structure
+                'check_wan_interfaces': 'interesting_wan_list',
+                'check_aws_api': 'log',  # AWS is nested under log
+                'check_cloud_secure_edge': 'cloud_secure_edge',
+                'check_email_logging': 'log_automation_data',
+                'check_gms_ipsec_tunnel': 'gms_ipsec_tunnel',
+                'list_dynamic_dns': 'ddns_services_v4',  # DDNS has v4/v6 variants
+                'check_packet_monitor_ftp_logging': 'packet_monitor_ftp_set',
+                'check_tsr_exp_scheduled_exports': 'tsr_scheduled_exports',
+                'check_deao': 'deao',
+                'check_dyn_botnet_list_server': 'botnet_list_server',
+                'list_custom_ntp_servers': 'custom_ntp_servers',
+                'check_extended_switches': 'extended_switches',
+                'check_extended_switch_users': 'extended_switch_users',
+                'check_extended_switch_radius': 'extended_switch_radius',
+                'check_wlan_radius_servers': 'wlan_radius_servers',
+                'check_ext_guest_auth': 'ext_guest_auth',
+                'list_sso_radius_clients': 'sso_radius_clients',
+                'list_sso_api_clients': 'sso_api_clients',
+                'list_radius_accounting_servers': 'radius_accounting_servers',
+                'list_tacacs_accounting_servers': 'tacacs_accounting_servers',
+                'check_appflow_sfr_reporting': 'appflow_sfr_reporting',
+                'check_sec_services_proxy': 'sec_services_proxy',
+                'list_advanced_routing_protocols': 'advanced_routing_protocols',
+                'check_cellular_wwan': 'cellular_wwan',
+                'check_internal_wlan_radio': 'internal_wlan_radio',
+                'check_internal_wlan_vaps': 'internal_wlan_vaps',
+                'check_internal_wlan_vap_profiles': 'internal_wlan_vap_profiles',
+                'check_sonicpoint_vaps': 'sonicpoint_vaps',
+                'check_sonicpoint_vap_profiles': 'sonicpoint_vap_profiles',
+                'check_sonicpoint_profiles': 'sonicpoint_profiles',
+                'check_sonicpoint_objects': 'sonicpoint_objects'
+            }
 
-            # Map check results to expected format for markdown generator
+            # Process completed check results
             for method_name, result_data in check_results.items():
-                if result_data.get('result') is not None and result_data.get('status') == 'completed':
-                    # Remove 'list_' and 'check_' prefixes to match expected keys
-                    clean_key = method_name.replace('list_', '').replace('check_', '')
-                    converted[clean_key] = result_data['result']
+                if result_data.get('status') == 'completed' and result_data.get('result') is not None:
+                    result = result_data['result']
 
-            # Add any additional fields that the markdown generator expects
-            # These may need to be populated from actual results in a real implementation
-            if not converted.get('total_user_count'):
-                converted['total_user_count'] = 0
-            if not converted.get('total_users_forced_to_update_password'):
-                converted['total_users_forced_to_update_password'] = 0
-            if not converted.get('skipped_user_count'):
-                converted['skipped_user_count'] = 0
-            if not converted.get('totp_unbind_attempted'):
-                converted['totp_unbind_attempted'] = False
-            if not converted.get('totp_unbind_successful_count'):
-                converted['totp_unbind_successful_count'] = 0
-            if not converted.get('totp_unbind_failed_count'):
-                converted['totp_unbind_failed_count'] = 0
+                    # Map to expected key name
+                    if method_name in method_mapping:
+                        expected_key = method_mapping[method_name]
+
+                        # Handle special cases for complex data structures
+                        if method_name == 'list_vpn_policies':
+                            # VPN policies need to be nested under vpn.policy
+                            converted['vpn'] = {'policy': result if isinstance(result, list) else []}
+                        elif method_name == 'check_aws_api':
+                            # AWS API is nested under log.aws
+                            if 'log' not in converted:
+                                converted['log'] = {}
+                            converted['log']['aws'] = result
+                        elif method_name == 'list_dynamic_dns':
+                            # DDNS might need to be split into v4/v6
+                            converted['ddns_services_v4'] = result if isinstance(result, list) else []
+                            converted['ddns_services_v6'] = []  # Separate v6 check if available
+                        elif method_name == 'check_wan_interfaces':
+                            # WAN interfaces should be a list of interface names
+                            if isinstance(result, list):
+                                converted[expected_key] = result
+                            elif isinstance(result, dict):
+                                # Extract interface names from dict if needed
+                                converted[expected_key] = list(result.keys()) if result else []
+                            else:
+                                converted[expected_key] = []
+                        else:
+                            converted[expected_key] = result
+                    else:
+                        # Fallback: remove prefixes for unmapped methods
+                        clean_key = method_name.replace('list_', '').replace('check_', '')
+                        converted[clean_key] = result
+
+            # Add default values for fields the markdown generator expects
+            default_fields = {
+                'total_user_count': 0,
+                'total_users_forced_to_update_password': 0,
+                'skipped_user_count': 0,
+                'totp_unbind_attempted': False,
+                'totp_unbind_successful_count': 0,
+                'totp_unbind_failed_count': 0,
+                'tsr_downloaded': False,
+                'trace_logs_downloaded': False,
+                'settings_exported': False
+            }
+
+            for key, default_value in default_fields.items():
+                if key not in converted:
+                    converted[key] = default_value
 
             return converted
 
@@ -708,15 +790,18 @@ class ServerOperationEngine:
                         break
 
             # Count findings by severity and generate findings list
+            # Fixed logic: Process ALL completed checks, not just those with truthy results
             for method_name, result_data in check_results.items():
-                if result_data.get('status') == 'completed' and result_data.get('result'):
+                if result_data.get('status') == 'completed':  # Removed the 'and result_data.get('result')' condition
                     severity = result_data.get('severity', 'low')
                     description = result_data.get('description', method_name)
                     result = result_data.get('result')
 
-                    # Count items found
+                    # Count items found - handle None, empty lists, empty dicts properly
                     item_count = 0
-                    if isinstance(result, list):
+                    if result is None:
+                        item_count = 0
+                    elif isinstance(result, list):
                         item_count = len(result)
                     elif isinstance(result, dict):
                         # Handle various dict structures
@@ -731,9 +816,11 @@ class ServerOperationEngine:
                                         item_count += 1
                             elif value:
                                 item_count += 1
-                    elif result:
+                    elif result:  # For boolean or other truthy results
                         item_count = 1
 
+                    # Add to severity breakdown and findings list
+                    # This now counts ONLY items that were actually found (item_count > 0)
                     if item_count > 0:
                         summary["severity_breakdown"][severity] += item_count
                         summary["findings"].append({
@@ -745,16 +832,29 @@ class ServerOperationEngine:
 
             # Generate recommendations based on findings
             total_findings = sum(summary["severity_breakdown"].values())
+            completed_checks = summary["overview"]["completed_checks"]
+
+            # Enhanced recommendations logic
             if total_findings > 0:
                 if summary["severity_breakdown"]["critical"] > 0:
                     summary["recommendations"].append("Address critical security findings immediately")
                 if summary["severity_breakdown"]["high"] > 0:
                     summary["recommendations"].append("Review high-priority configurations")
+                if summary["severity_breakdown"]["medium"] > 0:
+                    summary["recommendations"].append("Review medium-priority configurations when possible")
                 if total_findings > 10:
                     summary["recommendations"].append("Consider a comprehensive security review")
                 summary["recommendations"].append("Download the detailed report for specific remediation steps")
             else:
-                summary["recommendations"].append("No security configuration items found that require attention")
+                # No items found - this is actually good!
+                if completed_checks > 0:
+                    summary["recommendations"].append("No security configuration items found that require attention")
+                    summary["recommendations"].append("Your firewall appears to have a clean security configuration")
+                else:
+                    summary["recommendations"].append("Run security checks to analyze your firewall configuration")
+
+            # Always add this recommendation
+            summary["recommendations"].append("Review the detailed report for complete analysis results")
 
             return summary
 
