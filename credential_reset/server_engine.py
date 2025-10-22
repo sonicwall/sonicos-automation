@@ -357,6 +357,7 @@ class ServerOperationEngine:
                     # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
                 target_numbers = (1, 1)
                 tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
+                logger.info(f"DEBUG: TSR result: {tsr_result}")
                 export_results.update(tsr_result)  # Merge TSR results into export_results
                 if progress_tracker:
                     progress_tracker.add_substep("Export complete", "completed", "success")
@@ -371,6 +372,7 @@ class ServerOperationEngine:
                 target_numbers = (1, 1)
                 settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
                 export_results.update(settings_result)  # Merge settings results into export_results
+                logger.info(f"DEBUG: Settings export result: {settings_result}")
                 if progress_tracker:
                     progress_tracker.add_substep("Export complete", "completed", "success")
                     progress_tracker.clear_substeps()
@@ -642,6 +644,7 @@ class ServerOperationEngine:
                 if progress_tracker:
                     progress_tracker.update("Generating summary data...", 90)
 
+                logger.info(f"DEBUG: Exported results: {export_results}")
                 summary_data = self._generate_summary_data(converted_results, check_results, routine_results, markdown_report, export_results)
 
                 if progress_tracker:
@@ -868,6 +871,39 @@ class ServerOperationEngine:
                 "recommendations": []
             }
 
+            # Process export results if provided
+            if export_results:
+                # Add export status section
+                summary["export_status"] = {
+                    "tsr": {
+                        "requested": 'tsr_downloaded' in export_results,
+                        "successful": export_results.get('tsr_downloaded', False),
+                        "file_path": export_results.get('tsr_file_name'),
+                    },
+                    "settings": {
+                        "requested": 'settings_exported' in export_results,
+                        "successful": export_results.get('settings_exported', False),
+                        "file_path": export_results.get('prefs_file_name')
+                    },
+                    "trace_logs": {
+                        "requested": 'trace_logs_downloaded' in export_results,
+                        "successful": export_results.get('trace_logs_downloaded', False),
+                        "file_path": export_results.get('tracelog_filename')
+                    }
+                }
+
+                # Update overview with export metrics
+                total_exports = sum(1 for key in ['tsr_downloaded', 'settings_exported', 'trace_logs_downloaded']
+                                   if key in export_results)
+                successful_exports = sum(1 for key in ['tsr_downloaded', 'settings_exported', 'trace_logs_downloaded']
+                                        if export_results.get(key, False))
+
+                summary["overview"].update({
+                    "total_exports": total_exports,
+                    "successful_exports": successful_exports,
+                    "failed_exports": total_exports - successful_exports
+                })
+
             # Extract device information
             if routine_results:
                 for firewall_ip, info in routine_results.items():
@@ -930,6 +966,25 @@ class ServerOperationEngine:
             summary["recommendations"] = self._get_recommendations_from_markdown(
                 converted_results, check_results, routine_results, markdown_report
             )
+
+            # Add export-related recommendations if export results are available
+            if export_results:
+                export_recommendations = []
+
+                # Add recommendations for successfully exported files
+                export_types = [
+                    ('TSR', 'tsr_file_name', 'tsr_downloaded', 'Tech Support Report'),
+                    ('Settings', 'prefs_file_name', 'settings_exported', 'firewall configuration'),
+                ]
+
+                for export_name, file_key, status_key, description in export_types:
+                    if export_results.get(status_key, False) and file_key in export_results:
+                        export_recommendations.append(f"Save the exported {description} file to a secure location for your records")
+                    elif status_key in export_results and not export_results.get(status_key, False):
+                        export_recommendations.append(f"Note: {export_name} export was requested but failed")
+
+                # Insert export recommendations at the beginning
+                summary["recommendations"] = export_recommendations + summary["recommendations"]
 
             # Always add this recommendation
             summary["recommendations"].append("Review the detailed report for complete analysis results")
