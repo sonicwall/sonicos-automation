@@ -15,27 +15,27 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Firewall IP/Hostname</label>
-                <input type="text" id="firewall-ip" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <input type="text" id="firewall-ip" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                        placeholder="192.168.1.1 or firewall.company.com" required>
                 <p class="text-xs text-gray-500 mt-1">Enter the IP address/hostname (and optionally :port) of the SonicWall firewall.</p>
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">SSH Port</label>
-                <input type="number" id="ssh-port" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <input type="number" id="ssh-port" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                        value="22" min="1" max="65535">
                 <p class="text-xs text-gray-500 mt-1">Used as a failback for auto-enabling/disabling SonicOS API. <strong>To disable, use port 0.</strong></p>
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Admin Username</label>
-                <input type="text" id="admin-username" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <input type="text" id="admin-username" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                        placeholder="admin" required>
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Admin Password</label>
-                <input type="password" id="admin-password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <input type="password" id="admin-password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                        placeholder="Enter admin password" required>
             </div>
         </div>
@@ -48,28 +48,28 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-4">
                     <label class="flex items-center">
-                        <input type="checkbox" id="force-password-change" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <input type="checkbox" id="force-password-change" class="rounded border-gray-300 text-orange-600 focus:ring-orange-500">
                         <span class="ml-2 text-sm text-gray-700">Reset Local User Passwords & Force Password Change</span>
                         <span class="ml-2 inline-block bg-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full" title="This option commits changes to the firewall">Config Change</span>
                     </label>
                         <span class="text-xs text-gray-500 mt-1">Attempts to change the password for all local users and require a password update on next login.</span>
 
                     <label class="flex items-center">
-                        <input type="checkbox" id="unbind-totp" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <input type="checkbox" id="unbind-totp" class="rounded border-gray-300 text-orange-600 focus:ring-orange-500">
                         <span class="ml-2 text-sm text-gray-700">Clear Local User TOTP Bindings</span>
                         <span class="ml-2 inline-block bg-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full" title="This option commits changes to the firewall">Config Change</span>
                     </label>
                         <span class="text-xs text-gray-500 mt-1">Attempts to reset all local user TOTP bindings.</span>
 
                     <label class="flex items-center">
-                        <input type="checkbox" id="export-settings" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <input type="checkbox" id="export-settings" class="rounded border-gray-300 text-orange-600 focus:ring-orange-500">
                         <span class="ml-2 text-sm text-gray-700">Export Settings</span>
                         <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
                     </label>
                         <span class="text-xs text-gray-500 mt-1">Downloads the preferences file before/after running the playbook.</span>
 
                     <label class="flex items-center">
-                        <input type="checkbox" id="export-tsr" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <input type="checkbox" id="export-tsr" class="rounded border-gray-300 text-orange-600 focus:ring-orange-500">
                         <span class="ml-2 text-sm text-gray-700">Export Tech Support Report (TSR)</span>
                         <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
                     </label>
@@ -82,15 +82,15 @@
 
                     <div class="space-y-2">
                         <label class="flex items-center">
-                            <input type="radio" name="password-option" value="random" id="random-password" class="text-blue-600 focus:ring-blue-500" checked>
+                            <input type="radio" name="password-option" value="random" id="random-password" class="text-orange-600 focus:ring-orange-500" checked>
                             <span class="ml-2 text-sm text-gray-700">Generate Random Password</span>
                             <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="radio" name="password-option" value="custom" id="custom-password" class="text-blue-600 focus:ring-blue-500">
+                            <input type="radio" name="password-option" value="custom" id="custom-password" class="text-orange-600 focus:ring-orange-500">
                             <span class="ml-2 text-sm text-gray-700">Use Custom Password:</span>
                         </label>
-                        <input type="password" id="temp-password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ml-6"
+                        <input type="password" id="temp-password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ml-6"
                                placeholder="Enter temporary password" disabled>
                     </div>
                     <p class="text-xs text-gray-500 mt-1">Password must meet complexity requirements (12+ chars, uppercase, lowercase, digit, special char)</p>
@@ -106,7 +106,7 @@
                 <label for="security-level-select" class="block text-sm font-medium text-gray-700 mb-2">
                     Priority Level Filter
                 </label>
-                <select id="security-level-select" class="w-1/4 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <select id="security-level-select" class="w-1/4 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500">
                     <option value="all" selected>All</option>
                     <option value="critical">Critical</option>
                     <option value="high">High and above</option>

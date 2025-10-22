@@ -2,7 +2,7 @@
 
 /* Gradient background for navigation */
 .gradient-bg {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
 }
 
 /* Hide/show utility classes */
@@ -317,9 +317,9 @@
     margin-right: 0.5rem;
 }
 
-.status-success {
-    background-color: #10b981;
-}
+/*.status-success {*/
+/*    background-color: #6b7280;*/
+/*}*/
 
 .status-error {
     background-color: #ef4444;
