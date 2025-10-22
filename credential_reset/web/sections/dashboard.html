@@ -1,0 +1,52 @@
+<div id="dashboard-section" class="section">
+    <div class="mb-8">
+        <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to the SonicWall Credential Reset Tool</h2>
+        <p class="text-lg text-gray-600 mb-6">
+            This web-based interface allows you to easily force password resets in bulk, apply a new temporary password,
+            reset TOTP bindings in bulk, and perform a remediation playbook analysis on SonicWall firewalls.
+            Analyze configurations, reset user credentials, and generate detailed reports with action items based on the current configuration.
+        </p>
+    </div>
+
+    <!-- Quick Start Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg card-shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" onclick="showSection('single-section')">
+            <div class="text-blue-600 mb-4">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">Single Target</h3>
+            <p class="text-gray-600">Configure and manage credentials for a single SonicWall firewall</p>
+        </div>
+
+        <div class="bg-white rounded-lg card-shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" onclick="showSection('batch-section')">
+            <div class="text-green-600 mb-4">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">Batch Operations</h3>
+            <p class="text-gray-600">Process multiple firewalls using CSV file upload</p>
+        </div>
+
+        <div id="results-card" class="bg-white rounded-lg card-shadow p-6 hover:shadow-lg transition-shadow cursor-pointer opacity-50" onclick="handleResultsCardClick()">
+            <div class="text-purple-600 mb-4">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 012 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">View Results</h3>
+            <p class="text-gray-600">Review operation results and download reports</p>
+            <p id="results-card-status" class="text-sm text-gray-400 mt-2 italic">Run a playbook to view results</p>
+        </div>
+    </div>
+
+    <!-- Recent Operations -->
+    <div class="bg-white rounded-lg card-shadow p-6">
+        <h3 class="text-xl font-semibold text-gray-900 mb-4">Recent Operations</h3>
+        <div id="recent-operations" class="space-y-3">
+            <p class="text-gray-500 italic">No recent operations found. Start by configuring a target firewall.</p>
+        </div>
+    </div>
+</div>
