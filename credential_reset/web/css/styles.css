@@ -1,0 +1,275 @@
+/* Base Utility Styles */
+.gradient-bg {
+    background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
+}
+
+.card-shadow {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar {
+    transition: width 0.3s ease-in-out;
+}
+
+.hide {
+    display: none !important;
+}
+
+.show {
+    display: block !important;
+}
+
+/* Tab and Form States */
+.tab-active {
+    @apply bg-blue-600 text-white;
+}
+
+.tab-inactive {
+    @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+}
+
+.drag-over {
+    @apply border-blue-500 bg-blue-50;
+}
+
+/* Status Indicator Styles */
+.status-success {
+    @apply text-green-600 bg-green-100;
+}
+
+.status-error {
+    @apply text-red-600 bg-red-100;
+}
+
+.status-warning {
+    @apply text-yellow-600 bg-yellow-100;
+}
+
+.status-info {
+    @apply text-blue-600 bg-blue-100;
+}
+
+/* Markdown Report Styles */
+.markdown-content {
+    line-height: 1.6;
+}
+
+.markdown-content h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.markdown-content h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.markdown-content h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 0.5rem;
+    margin-top: 1rem;
+}
+
+.markdown-content table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #d1d5db;
+    margin-bottom: 1rem;
+}
+
+.markdown-content th {
+    background-color: #f9fafb;
+    border: 1px solid #d1d5db;
+    padding: 0.5rem 1rem;
+    text-align: left;
+    font-weight: 600;
+}
+
+.markdown-content td {
+    border: 1px solid #d1d5db;
+    padding: 0.5rem 1rem;
+}
+
+/* Enhanced list styling with nested support */
+.markdown-content ul {
+    list-style-type: disc;
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+.markdown-content ol {
+    list-style-type: decimal;
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+.markdown-content li {
+    color: #374151;
+    margin-bottom: 0.25rem;
+    line-height: 1.6;
+}
+
+/* Nested list styling */
+.markdown-content ul ul,
+.markdown-content ol ul {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    list-style-type: circle;
+}
+
+.markdown-content ul ol,
+.markdown-content ol ol {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    list-style-type: lower-alpha;
+}
+
+.markdown-content ul ul ul,
+.markdown-content ol ul ul {
+    list-style-type: square;
+}
+
+.markdown-content p {
+    margin-bottom: 1rem;
+    color: #374151;
+    line-height: 1.6;
+}
+
+.markdown-content a {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
+.markdown-content a:hover {
+    color: #1e40af;
+}
+
+.markdown-content code {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.markdown-content pre {
+    background-color: #f3f4f6;
+    padding: 1rem;
+    border-radius: 0.375rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #d1d5db;
+    padding-left: 1rem;
+    font-style: italic;
+    color: #4b5563;
+    margin-bottom: 1rem;
+}
+
+.markdown-content hr {
+    border-color: #d1d5db;
+    margin: 1.5rem 0;
+}
+
+/* Action Item Styles */
+.action-item-card {
+    @apply border-l-4 p-3 bg-gray-50 rounded-r-lg mb-2;
+}
+
+.action-item-critical {
+    @apply border-red-500 bg-red-50;
+}
+
+.action-item-high {
+    @apply border-orange-500 bg-orange-50;
+}
+
+.action-item-medium {
+    @apply border-yellow-500 bg-yellow-50;
+}
+
+.action-item-low {
+    @apply border-green-500 bg-green-50;
+}
+
+.priority-badge {
+    @apply px-2 py-1 rounded text-xs font-semibold uppercase;
+}
+
+.priority-critical {
+    @apply bg-red-600 text-white;
+}
+
+.priority-high {
+    @apply bg-orange-600 text-white;
+}
+
+.priority-medium {
+    @apply bg-yellow-600 text-white;
+}
+
+.priority-low {
+    @apply bg-green-600 text-white;
+}
+
+/* Export Styles */
+.export-download-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: white;
+    background-color: #2563eb;
+    border: 1px solid transparent;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.export-download-btn:hover {
+    background-color: #1d4ed8;
+}
+
+.export-download-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #9ca3af;
+}
+
+.export-download-loading {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Navigation Styles */
+.nav-btn-disabled {
+    @apply opacity-50 cursor-not-allowed;
+    pointer-events: none;
+}
+
+.nav-btn-enabled {
+    @apply opacity-100 cursor-pointer;
+    pointer-events: auto;
+}
+
+/* Highlight state for Results when enabled */
+.nav-btn-highlight {
+    @apply bg-yellow-400 text-gray-900 animate-pulse;
+}

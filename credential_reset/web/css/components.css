@@ -1,0 +1,91 @@
+/* Action Item Components */
+.action-item-card {
+    @apply border-l-4 p-3 bg-gray-50 rounded-r-lg mb-2;
+}
+
+.action-item-critical {
+    @apply border-red-500 bg-red-50;
+}
+
+.action-item-high {
+    @apply border-orange-500 bg-orange-50;
+}
+
+.action-item-medium {
+    @apply border-yellow-500 bg-yellow-50;
+}
+
+.action-item-low {
+    @apply border-green-500 bg-green-50;
+}
+
+/* Priority Badges */
+.priority-badge {
+    @apply px-2 py-1 rounded text-xs font-semibold uppercase;
+}
+
+.priority-critical {
+    @apply bg-red-600 text-white;
+}
+
+.priority-high {
+    @apply bg-orange-600 text-white;
+}
+
+.priority-medium {
+    @apply bg-yellow-600 text-white;
+}
+
+.priority-low {
+    @apply bg-green-600 text-white;
+}
+
+/* Export Download Buttons */
+.export-download-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: white;
+    background-color: #2563eb;
+    border: 1px solid transparent;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.export-download-btn:hover {
+    background-color: #1d4ed8;
+}
+
+.export-download-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #9ca3af;
+}
+
+.export-download-loading {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Navigation Button States */
+.nav-btn-disabled {
+    @apply opacity-50 cursor-not-allowed;
+    pointer-events: none;
+}
+
+.nav-btn-enabled {
+    @apply opacity-100 cursor-pointer;
+    pointer-events: auto;
+}
+
+.nav-btn-highlight {
+    @apply bg-yellow-400 text-gray-900 animate-pulse;
+}
