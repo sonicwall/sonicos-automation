@@ -1,0 +1,30 @@
+<div class="bg-white rounded-lg card-shadow p-6">
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Help & Documentation</h2>
+
+    <div class="max-w-none">
+        <h3>Getting Started</h3>
+        <p>This tool provides an intuitive web interface for the SonicWall Credential Reset functionality. You can either process a single firewall or multiple firewalls using a CSV file.</p>
+
+        <h3>CSV Format</h3>
+        <p>The CSV file should contain the following columns:</p>
+        <ul>
+            <li><code>target_fw</code> - IP address or hostname of the firewall</li>
+            <li><code>admin_user</code> - Admin username</li>
+            <li><code>admin_password</code> - Admin password</li>
+            <li><code>target_ssh_mgmt_port</code> - SSH management port (default: 22)</li>
+            <li><code>temporary_password</code> - Temporary password to set (leave empty for random)</li>
+            <li><code>unbind_totp</code> - Whether to unbind TOTP (true/false)</li>
+            <li><code>force_password_change</code> - Whether to force password change (true/false)</li>
+            <li><code>randomize_temp_password</code> - Whether to generate random password (true/false)</li>
+        </ul>
+
+        <h3>Security Features</h3>
+        <ul>
+            <li>All operations are performed client-side - no data is sent to external servers</li>
+            <li>Credentials are not stored after the session ends</li>
+            <li>Passwords meet complexity requirements automatically</li>
+            <li>Comprehensive analysis based on the Essential Credential Reset and Remediation Playbook KB articles</li>
+        </ul>
+
+    </div>
+</div>
