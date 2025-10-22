@@ -1478,7 +1478,7 @@
                                 </div>
                             </div>
 
-                            <!-- Log and Configuration Exports Card (Right) -->
+                            <!-- Log, Diagnostic, and Configuration Exports Card (Right) -->
                             <div class="bg-white rounded-lg card-shadow p-6">
                                 <h3 class="text-lg font-semibold text-gray-900 mb-4">
                                     <span class="inline-flex items-center">
@@ -1486,7 +1486,7 @@
                                             <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zM3 7a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" clip-rule="evenodd"></path>
                                             <path d="M13 3H7v2h6V3z"></path>
                                         </svg>
-                                        Log and Configuration Exports
+                                        Exported Files
                                     </span>
                                 </h3>
                                 <div id="export-status-content" class="space-y-4">
@@ -1972,7 +1972,7 @@
                 exportHTML += `
                     <div class="mb-3">
                         <h4 class="text-sm font-semibold text-gray-800 mb-2 flex items-center">
-                            Log Files
+                            Diagnostic Files
                         </h4>
                         <div class="space-y-1">
                 `;
@@ -1985,6 +1985,9 @@
                         exportHTML += `
                             <div class="flex items-center justify-between text-xs">
                                 <div class="flex items-center">
+                                <svg class="w-3 h-3 mr-1 ${iconClass}" fill="currentColor" viewBox="0 0 24 24">
+                                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zM3 7a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" clip-rule="evenodd"></path>
+                                </svg>
                                 <span class="${statusClass}">${file.name || key}</span>
                             </div>
                             <div class="flex items-center space-x-2">
