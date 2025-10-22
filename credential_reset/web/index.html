@@ -22,35 +22,8 @@
     <link rel="stylesheet" href="css/report.css">
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <!-- Navigation Header -->
-    <nav class="gradient-bg shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <h1 class="text-white text-xl font-bold">SonicWall Credential Reset Tool</h1>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <button id="nav-dashboard" class="nav-btn text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
-                        Dashboard
-                    </button>
-                    <button id="nav-single" class="nav-btn text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
-                        Single Target
-                    </button>
-                    <button id="nav-batch" class="nav-btn text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
-                        Batch Operations
-                    </button>
-                    <button id="nav-results" class="nav-btn nav-btn-disabled text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
-                        Results
-                    </button>
-                    <button id="nav-help" class="nav-btn text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
-                        Help
-                    </button>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <!-- Navigation Header - Content loaded from sections/navigation.html -->
+    <div id="navigation-header"></div>
 
     <!-- Main Content Container -->
     <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -76,35 +49,57 @@
 
     </div>
 
-    <!-- Progress Modal -->
-    <div id="progress-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hide z-50">
-        <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-lg card-shadow p-8 max-w-lg w-full mx-4">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Operation Progress</h3>
-
-                <div id="progress-info" class="mb-4">
-                    <p id="current-target" class="text-sm text-gray-600 mb-2">Initializing...</p>
-                    <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
-                        <div id="progress-bar" class="bg-blue-600 h-2 rounded-full progress-bar" style="width: 0%"></div>
-                    </div>
-                    <p id="progress-percentage" class="text-xs text-gray-500">0%</p>
-                </div>
-
-                <div id="operation-steps" class="space-y-1 mb-4 max-h-64 overflow-y-auto">
-                    <!-- Steps will be populated here -->
-                </div>
-
-                <div class="flex justify-end">
-                    <button id="cancel-operation-btn" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Progress Modal - Content loaded from sections/progress.html -->
+    <div id="progress-modal-container"></div>
 
     <!-- JavaScript for navigation (before PyScript) -->
     <script>
+        // Function to load navigation content
+        async function loadNavigationContent() {
+            try {
+                const response = await fetch('sections/navigation.html');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const navigationHTML = await response.text();
+                document.getElementById('navigation-header').innerHTML = navigationHTML;
+
+                // Set up navigation event listeners after loading
+                setupNavigationEventListeners();
+            } catch (error) {
+                console.error('Error loading navigation:', error);
+                // Fallback: create a basic navigation structure
+                document.getElementById('navigation-header').innerHTML = `
+                    <nav class="gradient-bg shadow-lg">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div class="flex justify-between h-16">
+                                <div class="flex items-center">
+                                    <h1 class="text-white text-xl font-bold">SonicWall Credential Reset Tool</h1>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+                `;
+            }
+        }
+
+        // Function to set up navigation event listeners
+        function setupNavigationEventListeners() {
+            // Add click event listeners to navigation buttons
+            const navButtons = document.querySelectorAll('.nav-btn');
+            navButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const sectionId = this.id.replace('nav-', '') + '-section';
+                    showSection(sectionId);
+                });
+            });
+        }
+
+        // Load navigation content when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadNavigationContent();
+        });
+
         // Progress Modal Functions
         function showProgressModal(title = "Operation Progress") {
             const modal = document.getElementById('progress-modal');
@@ -112,6 +107,80 @@
             modalTitle.textContent = title;
             modal.classList.remove('hide');
             resetProgressModal();
+        // Function to load progress modal content
+        async function loadProgressModalContent() {
+            try {
+                const response = await fetch('sections/progress.html');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const progressHTML = await response.text();
+                document.getElementById('progress-modal-container').innerHTML = progressHTML;
+
+                // Set up progress modal event listeners after loading
+                setupProgressModalEventListeners();
+            } catch (error) {
+                console.error('Error loading progress modal:', error);
+                // Fallback: create a basic progress modal structure
+            loadProgressModalContent();
+                document.getElementById('progress-modal-container').innerHTML = `
+                    <div id="progress-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hide z-50">
+                        <div class="flex items-center justify-center min-h-screen p-4">
+                            <div class="bg-white rounded-lg p-8 max-w-lg w-full mx-4">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Operation Progress</h3>
+                                <div class="mb-4">
+                                    <p id="current-target" class="text-sm text-gray-600 mb-2">Initializing...</p>
+                                    <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                                        <div id="progress-bar" class="bg-blue-600 h-2 rounded-full" style="width: 0%"></div>
+                                    </div>
+                                    <p id="progress-percentage" class="text-xs text-gray-500">0%</p>
+                                </div>
+                                <div id="operation-steps" class="space-y-1 mb-4 max-h-64 overflow-y-auto"></div>
+                                <div class="flex justify-end">
+                                    <button id="cancel-operation-btn" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                setupProgressModalEventListeners();
+            }
+        }
+
+        // Function to set up progress modal event listeners
+        function setupProgressModalEventListeners() {
+            // Cancel operation button functionality
+            const cancelOperationBtn = document.getElementById('cancel-operation-btn');
+            if (cancelOperationBtn) {
+                cancelOperationBtn.addEventListener('click', function() {
+                    console.log('Operation cancelled by user');
+
+                    // Close any active SSE streams
+                    if (window.currentProgressStream) {
+                        console.log('Closing active progress stream');
+                        window.currentProgressStream.close();
+                        window.currentProgressStream = null;
+                    }
+
+                    hideProgressModal();
+
+                    // Reset any ongoing operations
+                    const testBtn = document.getElementById('test-connection-btn');
+                    const analysisBtn = document.getElementById('run-analysis-btn');
+
+                    if (testBtn && testBtn.disabled) {
+                        testBtn.disabled = false;
+                        testBtn.innerHTML = 'Test Connection';
+                    }
+
+                    if (analysisBtn && analysisBtn.disabled) {
+                        analysisBtn.disabled = false;
+                        analysisBtn.innerHTML = 'Run Playbook';
+                    }
+                });
+            }
+        }
+
         }
 
         function hideProgressModal() {
@@ -1749,7 +1818,7 @@
                             </div>
                         </div>
                         <button onclick="this.parentElement.parentElement.remove()" class="ml-4 ${isSuccess ? 'text-green-500 hover:text-green-700' : 'text-yellow-500 hover:text-yellow-700'}">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L9 10.586l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                             </svg>
                         </button>

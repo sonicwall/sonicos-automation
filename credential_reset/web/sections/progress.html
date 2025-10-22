@@ -1,0 +1,26 @@
+<!-- Progress Modal -->
+<div id="progress-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hide z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg card-shadow p-8 max-w-lg w-full mx-4">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Operation Progress</h3>
+
+            <div id="progress-info" class="mb-4">
+                <p id="current-target" class="text-sm text-gray-600 mb-2">Initializing...</p>
+                <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                    <div id="progress-bar" class="bg-blue-600 h-2 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+                <p id="progress-percentage" class="text-xs text-gray-500">0%</p>
+            </div>
+
+            <div id="operation-steps" class="space-y-1 mb-4 max-h-64 overflow-y-auto">
+                <!-- Steps will be populated here -->
+            </div>
+
+            <div class="flex justify-end">
+                <button id="cancel-operation-btn" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
