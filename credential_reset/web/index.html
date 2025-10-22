@@ -513,7 +513,7 @@
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Upload CSV File</label>
                     <div id="csv-drop-zone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors cursor-pointer">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 24 24">
                             <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         <div class="mt-4">
@@ -1613,7 +1613,7 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <a href="${item.resource_link}" target="_blank"
                                            class="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="00 24">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                       d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6v6h-6V4z"></path>
                                             </svg>
@@ -2030,11 +2030,178 @@
             }
 
             // Function to handle download all exports
-            function downloadAllExports() {
-                // This will integrate with existing download functionality
-                console.log('Downloading all available exports...');
-                // Navigate to downloads tab for detailed view
-                showTab('exports');
+            async function downloadAllExports() {
+                console.log('Starting download of all available exports...');
+
+                // Get the current export data from the DOM
+                const exportContainer = document.getElementById('export-status-content');
+                if (!exportContainer) {
+                    console.error('Export container not found');
+                    return;
+                }
+
+                // Find all download buttons that are currently available
+                const downloadButtons = exportContainer.querySelectorAll('button[onclick*="downloadExportFile"]');
+
+                if (downloadButtons.length === 0) {
+                    console.log('No export files available for download');
+                    // Show a user-friendly message
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'fixed top-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-md shadow-lg z-50';
+                    messageDiv.innerHTML = `
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            <div>
+                                <strong>No Downloads Available</strong>
+                                <div class="text-sm">No export files are currently available for download.</div>
+                            </div>
+                            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-yellow-500 hover:text-yellow-700">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L9 10.586l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                    document.body.appendChild(messageDiv);
+
+                    // Remove message after 5 seconds
+                    setTimeout(() => {
+                        if (messageDiv.parentElement) {
+                            messageDiv.parentElement.removeChild(messageDiv);
+                        }
+                    }, 5000);
+                    return;
+                }
+
+                // Show progress message
+                const progressDiv = document.createElement('div');
+                progressDiv.className = 'fixed top-4 right-4 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-md shadow-lg z-50';
+                progressDiv.id = 'download-all-progress';
+                progressDiv.innerHTML = `
+                    <div class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" stroke-dasharray="31.416" stroke-dashoffset="31.416" stroke-width="2" fill="none"/>
+                        </svg>
+                        <div>
+                            <strong>Downloading All Files</strong>
+                            <div class="text-sm">Downloading <span id="download-progress">0</span> of ${downloadButtons.length} files...</div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(progressDiv);
+
+                let successCount = 0;
+                let failCount = 0;
+
+                // Download each file with a small delay to avoid overwhelming the server
+                for (let i = 0; i < downloadButtons.length; i++) {
+                    const button = downloadButtons[i];
+                    const progressSpan = document.getElementById('download-progress');
+                    if (progressSpan) {
+                        progressSpan.textContent = i + 1;
+                    }
+
+                    try {
+                        // Extract the onclick function call parameters
+                        const onclickAttr = button.getAttribute('onclick');
+                        const match = onclickAttr.match(/downloadExportFile\('([^']+)',\s*'([^']+)',\s*'([^']+)'\)/);
+
+                        if (match) {
+                            const [, category, fileKey, fileName] = match;
+                            console.log(`Downloading file ${i + 1}/${downloadButtons.length}: ${fileName}`);
+
+                            // Call the existing download function
+                            await downloadExportFile(category, fileKey, fileName);
+                            successCount++;
+
+                            // Small delay between downloads
+                            if (i < downloadButtons.length - 1) {
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                        } else {
+                            console.error('Could not parse download button onclick:', onclickAttr);
+                            failCount++;
+                        }
+                    } catch (error) {
+                        console.error('Error downloading file:', error);
+                        failCount++;
+                    }
+                }
+
+                // Remove progress message and show completion message
+                const progressElement = document.getElementById('download-all-progress');
+                if (progressElement) {
+                    progressElement.remove();
+                }
+
+                // Show completion message
+                const completionDiv = document.createElement('div');
+                const isSuccess = failCount === 0;
+                completionDiv.className = `fixed top-4 right-4 ${isSuccess ? 'bg-green-100 border-green-400 text-green-700' : 'bg-yellow-100 border-yellow-400 text-yellow-700'} px-4 py-3 rounded-md shadow-lg z-50`;
+                completionDiv.innerHTML = `
+                    <div class="flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                            ${isSuccess ?
+                                '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zmM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>' :
+                                '<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>'
+                            }
+                        </svg>
+                        <div>
+                            <strong>Download ${isSuccess ? 'Complete' : 'Finished'}</strong>
+                            <div class="text-sm">
+                                ${successCount} file${successCount !== 1 ? 's' : ''} downloaded successfully
+                                ${failCount > 0 ? `, ${failCount} failed` : ''}
+                            </div>
+                        </div>
+                        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 ${isSuccess ? 'text-green-500 hover:text-green-700' : 'text-yellow-500 hover:text-yellow-700'}">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L9 10.586l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(completionDiv);
+
+                // Remove completion message after 8 seconds
+                setTimeout(() => {
+                    if (completionDiv.parentElement) {
+                        completionDiv.parentElement.removeChild(completionDiv);
+                    }
+                }, 8000);
+
+                console.log(`Download all completed: ${successCount} successful, ${failCount} failed`);
+            }
+
+            // Function to transform export data structure to match what populateExportStatus expects
+            function transformExportData(summaryData) {
+                if (!summaryData) {
+                    return {};
+                }
+
+                const transformedData = {
+                    config_exports: {},
+                    log_exports: {}
+                };
+
+                // Transform TSR data
+                if (summaryData.export_status && summaryData.export_status.tsr && summaryData.export_status.tsr.successful !== undefined) {
+                    transformedData.log_exports.tsr = {
+                        available: summaryData.export_status.tsr.successful,
+                        name: summaryData.export_status.tsr.file_path ? summaryData.export_status.tsr.file_path.split('/').pop() : 'TSR',
+                    };
+                }
+
+                // Transform settings/preferences data
+                if (summaryData.export_status && summaryData.export_status.settings && summaryData.export_status.settings.successful !== undefined) {
+                    transformedData.config_exports.preferences = {
+                        available: summaryData.export_status.settings.successful,
+                        name: summaryData.export_status.settings.file_path ? summaryData.export_status.settings.file_path.split('/').pop() : 'Preferences Export',
+                    };
+                }
+
+                return transformedData;
             }
 
             // Function to download individual export files
@@ -2112,52 +2279,19 @@
                         <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-red-500 hover:text-red-700">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L9 10.586l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                        </svg>
+                            </svg>
                         </button>
                     </div>
                 `;
 
                 document.body.appendChild(errorDiv);
 
-                // Auto-remove after 5 seconds
+                // Remove error message after 10 seconds
                 setTimeout(() => {
                     if (errorDiv.parentElement) {
-                        errorDiv.remove();
+                        errorDiv.parentElement.removeChild(errorDiv);
                     }
-                }, 5000);
-            }
-
-            // Transform export data from actual structure to expected format
-            function transformExportData(summaryData) {
-                if (!summaryData) {
-                    return {};
-                }
-
-                const transformedData = {
-                    config_exports: {},
-                    log_exports: {}
-                };
-
-                // Transform TSR data
-                console.log("Hit!!!")
-                console.log(summaryData);
-                if (summaryData.export_status.tsr.successful !== undefined) {
-                    transformedData.log_exports.tsr = {
-                        available: summaryData.export_status.tsr.successful,
-                        name: summaryData.export_status.tsr.file_path ? summaryData.export_status.tsr.file_path.split('/').pop() : 'TSR',
-                    };
-                }
-                console.log("Hit END!!!")
-
-                // Transform settings/preferences data
-                if (summaryData.export_status.settings.successful !== undefined) {
-                    transformedData.config_exports.preferences = {
-                        available: summaryData.export_status.settings.successful,
-                        name: summaryData.export_status.settings.file_path ? summaryData.export_status.settings.file_path.split('/').pop() : 'Preferences Export',
-                    };
-                }
-
-                return transformedData;
+                }, 10000);
             }
         });
     </script>
