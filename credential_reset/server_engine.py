@@ -1273,7 +1273,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "High",
-                    "area": "Reporting, Monitoring, and Management",
+                    "area": "Monitoring & Management",
                     "finding": f"{count} Users Found",
                     "action": "SNMPv3 user(s) require authentication/privacy password updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP",
@@ -1343,7 +1343,7 @@ class ServerOperationEngine:
             if email_actions:
                 action_items.append({
                     "priority": "Medium",
-                    "area": "Reporting, Monitoring, and Management",
+                    "area": "Monitoring & Management",
                     "finding": "Configured",
                     "action": f"Email logging credentials require updates for the following protocols: {', '.join(email_actions)}",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038",
@@ -1357,7 +1357,7 @@ class ServerOperationEngine:
                 if converted_results.get('packet_monitor_ftp_set', False):
                     action_items.append({
                         "priority": "Medium",
-                        "area": "Reporting, Monitoring, and Management",
+                        "area": "Monitoring & Management",
                         "finding": "Configured",
                         "action": "Packet Monitor FTP credentials require updates",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password",
@@ -1373,7 +1373,7 @@ class ServerOperationEngine:
                 if converted_results.get('scheduled_exports_ftp_set', False):
                     action_items.append({
                         "priority": "Medium",
-                        "area": "Reporting, Monitoring, and Management",
+                        "area": "Monitoring & Management",
                         "finding": "Configured",
                         "action": "TSR/EXP Scheduled Exports credentials require updates",
                         "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm",
@@ -1706,7 +1706,7 @@ class ServerOperationEngine:
             if converted_results.get('sfr_data', {}).get('smtp_configured', False) or converted_results.get('sfr_data', {}).get('pop_configured', False):
                 action_items.append({
                     "priority": "Low",
-                    "area": "Reporting, Monitoring, and Management",
+                    "area": "Monitoring & Management",
                     "finding": "Configured",
                     "action": "AppFlow SFR Mailing is configured - Update the email server credentials",
                     "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-appflow_device/Content/appflow-d-flow-reporting-sfr-mailing.htm",

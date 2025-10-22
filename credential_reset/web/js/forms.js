@@ -750,18 +750,22 @@ function displaySummaryData(summaryData) {
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityBadgeClass}">
                                 ${item.priority}
                             </span>
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityBadgeClass}">
-                                ${item.priority}
-                            </span>
 <!--                                        ${item.count > 1 ? `<div class="text-xs text-gray-500 mt-1">${item.count} items</div>` : ''}-->
                         </td>
+
+                        <td class="px-6 py-4">
+                            <div class="text-xs text-gray-900">${item.area}</div>
+                        </td>
+
                         <td class="px-6 py-4">
                             <div class="text-xs font-medium text-gray-900">${item.finding}</div>
 <!--                                        <div class="text-xs text-gray-500 mt-1">${item.check_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div-->
                         </td>
+
                         <td class="px-6 py-4">
                             <div class="text-xs text-gray-900">${item.action}</div>
                         </td>
+
                         <td class="px-6 py-4 whitespace-nowrap">
                             <a href="${item.resource_link}" target="_blank"
                                class="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline">
