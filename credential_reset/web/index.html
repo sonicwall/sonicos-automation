@@ -1613,7 +1613,7 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <a href="${item.resource_link}" target="_blank"
                                            class="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="00 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                       d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6v6h-6V4z"></path>
                                             </svg>
@@ -2089,6 +2089,9 @@
                     button.innerHTML = originalContent;
                 }
             }
+
+            // Make function globally accessible for onclick handlers
+            window.downloadExportFile = downloadExportFile;
 
             // Function to handle download errors
             function handleDownloadError(errorMessage, fileName) {

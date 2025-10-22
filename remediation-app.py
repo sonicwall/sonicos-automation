@@ -426,6 +426,13 @@ def _execute_analysis_with_progress(data, operation_id):
             operation_id
         )
         
+        # Cache export results for file downloads if operation was successful
+        if result and result.get('success') and result.get('results'):
+            export_results = result['results'].get('export_results')
+            if export_results:
+                cache_export_results(operation_id, export_results)
+                logger.info(f"Cached export results for operation {operation_id}")
+
         # Mark operation as complete in progress manager
         from common.progress_tracker import progress_manager
         progress_manager.complete_operation(operation_id)
@@ -591,6 +598,97 @@ def test_connection_with_progress():
     except Exception as e:
         logger.error(f"test_connection_with_progress(): Error processing request: {e}")
         return {'success': False, 'error': str(e)}, 400
+
+
+# Global cache for storing export file paths by operation ID
+exported_files_cache = {}
+
+@app.route('/download/<category>/<file_key>')
+def download_file(category, file_key):
+    """
+    Download endpoint for exported files using cached file paths.
+
+    Args:
+        category: Either 'log' or 'config'
+        file_key: Key identifying the specific file (e.g., 'tsr', 'preferences')
+
+    Returns:
+        File download or 404 if not found
+    """
+    try:
+        logger.info(f"Download request: category={category}, file_key={file_key}")
+
+        # Look for the file in the exported files cache
+        file_path = None
+
+        # Search through cached export results for the requested file
+        for operation_id, export_data in exported_files_cache.items():
+            if category == 'log' and file_key == 'tsr':
+                file_path = export_data.get('tsr_file_name')
+            elif category == 'config' and file_key in ['preferences', 'settings']:
+                file_path = export_data.get('prefs_file_name')
+            elif category == 'log' and file_key == 'trace':
+                file_path = export_data.get('tracelog_filename')
+
+            if file_path and os.path.exists(file_path):
+                break
+
+        if not file_path:
+            # Fallback: search in the latest runs directory
+            runs_dir = os.path.join(BASE_DIR, 'runs')
+            if os.path.exists(runs_dir):
+                run_dirs = [d for d in os.listdir(runs_dir) if os.path.isdir(os.path.join(runs_dir, d))]
+                if run_dirs:
+                    run_dirs.sort(key=lambda x: os.path.getctime(os.path.join(runs_dir, x)), reverse=True)
+                    latest_run_dir = os.path.join(runs_dir, run_dirs[0])
+
+                    # Search for files by pattern
+                    import glob
+                    patterns = {
+                        ('log', 'tsr'): '*-tsr.wri',
+                        ('config', 'preferences'): '*-prefs.exp',
+                        ('config', 'settings'): '*-prefs.exp',
+                        ('log', 'trace'): '*-trace-*.log'
+                    }
+
+                    pattern = patterns.get((category, file_key))
+                    if pattern:
+                        search_path = os.path.join(latest_run_dir, pattern)
+                        matching_files = glob.glob(search_path)
+                        if matching_files:
+                            file_path = matching_files[0]
+
+        if not file_path or not os.path.exists(file_path):
+            logger.error(f"File not found: {category}/{file_key}")
+            return {'error': f'File not found: {file_key}'}, 404
+
+        logger.info(f"Serving file: {file_path}")
+
+        # Determine MIME type and filename
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+
+        filename = os.path.basename(file_path)
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype=mime_type
+        )
+
+    except Exception as e:
+        logger.error(f"Error serving download file {category}/{file_key}: {e}")
+        return {'error': f'Error serving file: {str(e)}'}, 500
+
+
+def cache_export_results(operation_id, export_results):
+    """Cache export results for later file downloads."""
+    global exported_files_cache
+    exported_files_cache[operation_id] = export_results
+    logger.info(f"Cached export results for operation {operation_id}: {export_results}")
 
 
 def main():
