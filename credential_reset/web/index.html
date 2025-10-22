@@ -273,6 +273,22 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+
+        /* Navigation disabled state */
+        .nav-btn-disabled {
+            @apply opacity-50 cursor-not-allowed;
+            pointer-events: none;
+        }
+
+        .nav-btn-enabled {
+            @apply opacity-100 cursor-pointer;
+            pointer-events: auto;
+        }
+
+        /* Highlight state for Results when enabled */
+        .nav-btn-highlight {
+            @apply bg-yellow-400 text-gray-900 animate-pulse;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -295,7 +311,7 @@
                     <button id="nav-batch" class="nav-btn text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
                         Batch Operations
                     </button>
-                    <button id="nav-results" class="nav-btn text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
+                    <button id="nav-results" class="nav-btn nav-btn-disabled text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
                         Results
                     </button>
                     <button id="nav-help" class="nav-btn text-white hover:text-gray-200 px-3 py-2 rounded-md text-sm font-medium">
@@ -342,7 +358,7 @@
                     <p class="text-gray-600">Process multiple firewalls using CSV file upload</p>
                 </div>
 
-                <div class="bg-white rounded-lg card-shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" onclick="showSection('results-section')">
+                <div id="results-card" class="bg-white rounded-lg card-shadow p-6 hover:shadow-lg transition-shadow cursor-pointer opacity-50" onclick="handleResultsCardClick()">
                     <div class="text-purple-600 mb-4">
                         <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 012 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
@@ -350,6 +366,7 @@
                     </div>
                     <h3 class="text-xl font-semibold text-gray-900 mb-2">View Results</h3>
                     <p class="text-gray-600">Review operation results and download reports</p>
+                    <p id="results-card-status" class="text-sm text-gray-400 mt-2 italic">Run a playbook to view results</p>
                 </div>
             </div>
 
@@ -561,10 +578,10 @@
         <!-- Results Section -->
         <div id="results-section" class="section hide">
             <div class="bg-white rounded-lg card-shadow p-6">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6">Operation Results</h2>
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Playbook Analysis Results</h2>
 
                 <div id="results-content">
-                    <p class="text-gray-500 italic">No results available. Run an operation to see results here.</p>
+                    <p class="text-gray-500 italic">Review the playbook's actions and recommendations.</p>
                 </div>
 
                 <!-- NEW: Results Tabs -->
@@ -769,6 +786,102 @@
             if (activeButton) {
                 activeButton.classList.add('bg-white', 'text-gray-900');
                 activeButton.classList.remove('text-white', 'hover:text-gray-200');
+            }
+        }
+
+        // Function to handle results card clicks on dashboard
+        function handleResultsCardClick() {
+            const resultsButton = document.getElementById('nav-results');
+            if (resultsButton && !resultsButton.classList.contains('nav-btn-disabled')) {
+                showSection('results-section');
+            }
+        }
+
+        // Function to disable the Results nav item
+        function disableResultsNav() {
+            const resultsButton = document.getElementById('nav-results');
+            const resultsCard = document.getElementById('results-card');
+            const resultsCardStatus = document.getElementById('results-card-status');
+
+            if (resultsButton) {
+                resultsButton.classList.add('nav-btn-disabled');
+                resultsButton.classList.remove('nav-btn-enabled', 'nav-btn-highlight');
+            }
+
+            if (resultsCard) {
+                resultsCard.classList.add('opacity-50');
+                resultsCard.classList.remove('opacity-100');
+                resultsCard.style.cursor = 'not-allowed';
+            }
+
+            if (resultsCardStatus) {
+                resultsCardStatus.textContent = 'Run a playbook to view results';
+                resultsCardStatus.classList.add('text-gray-400');
+                resultsCardStatus.classList.remove('text-green-600');
+            }
+        }
+
+        // Function to enable the Results nav item
+        function enableResultsNav() {
+            const resultsButton = document.getElementById('nav-results');
+            const resultsCard = document.getElementById('results-card');
+            const resultsCardStatus = document.getElementById('results-card-status');
+
+            if (resultsButton) {
+                resultsButton.classList.remove('nav-btn-disabled');
+                resultsButton.classList.add('nav-btn-enabled');
+            }
+
+            if (resultsCard) {
+                resultsCard.classList.remove('opacity-50');
+                resultsCard.classList.add('opacity-100');
+                resultsCard.style.cursor = 'pointer';
+            }
+
+            if (resultsCardStatus) {
+                resultsCardStatus.textContent = 'Results are available!';
+                resultsCardStatus.classList.remove('text-gray-400');
+                resultsCardStatus.classList.add('text-green-600');
+            }
+        }
+
+        // Function to highlight the Results nav item when results are ready
+        function highlightResultsNav() {
+            const resultsButton = document.getElementById('nav-results');
+            const resultsCard = document.getElementById('results-card');
+
+            if (resultsButton) {
+                resultsButton.classList.remove('nav-btn-disabled');
+                resultsButton.classList.add('nav-btn-enabled', 'nav-btn-highlight');
+
+                // Remove highlight after 3 seconds
+                setTimeout(() => {
+                    if (resultsButton) {
+                        resultsButton.classList.remove('nav-btn-highlight');
+                    }
+                }, 3000);
+            }
+
+            if (resultsCard) {
+                resultsCard.classList.remove('opacity-50');
+                resultsCard.classList.add('opacity-100');
+                resultsCard.style.cursor = 'pointer';
+
+                // Add temporary highlight effect to the card
+                resultsCard.classList.add('ring-2', 'ring-yellow-400', 'ring-opacity-75');
+                setTimeout(() => {
+                    if (resultsCard) {
+                        resultsCard.classList.remove('ring-2', 'ring-yellow-400', 'ring-opacity-75');
+                    }
+                }, 3000);
+            }
+
+            // Update the status text
+            const resultsCardStatus = document.getElementById('results-card-status');
+            if (resultsCardStatus) {
+                resultsCardStatus.textContent = 'Results are available!';
+                resultsCardStatus.classList.remove('text-gray-400');
+                resultsCardStatus.classList.add('text-green-600');
             }
         }
 
@@ -1013,6 +1126,12 @@
             navButtons.forEach(btn => {
                 btn.addEventListener('click', function(e) {
                     e.preventDefault();
+
+                    // Check if the button is disabled (for Results nav item)
+                    if (btn.classList.contains('nav-btn-disabled')) {
+                        return;
+                    }
+
                     const buttonId = this.id;
                     console.log('Nav button clicked:', buttonId);
 
@@ -1640,6 +1759,10 @@
                     if (result.results.markdown_report) {
                         displayMarkdownReport(result.results.markdown_report);
                     }
+
+                    // Enable and highlight the Results nav item
+                    highlightResultsNav();
+
                     showSection('results-section'); // Auto-navigate to results
                 }
 

@@ -967,25 +967,6 @@ class ServerOperationEngine:
                 converted_results, check_results, routine_results, markdown_report
             )
 
-            # Add export-related recommendations if export results are available
-            if export_results:
-                export_recommendations = []
-
-                # Add recommendations for successfully exported files
-                export_types = [
-                    ('TSR', 'tsr_file_name', 'tsr_downloaded', 'Tech Support Report'),
-                    ('Settings', 'prefs_file_name', 'settings_exported', 'firewall configuration'),
-                ]
-
-                for export_name, file_key, status_key, description in export_types:
-                    if export_results.get(status_key, False) and file_key in export_results:
-                        export_recommendations.append(f"Save the exported {description} file to a secure location for your records")
-                    elif status_key in export_results and not export_results.get(status_key, False):
-                        export_recommendations.append(f"Note: {export_name} export was requested but failed")
-
-                # Insert export recommendations at the beginning
-                summary["recommendations"] = export_recommendations + summary["recommendations"]
-
             # Always add this recommendation
             summary["recommendations"].append("Review the detailed report for complete analysis results")
 
