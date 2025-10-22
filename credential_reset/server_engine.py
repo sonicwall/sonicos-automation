@@ -377,18 +377,6 @@ class ServerOperationEngine:
                     progress_tracker.add_substep("Export complete", "completed", "success")
                     progress_tracker.clear_substeps()
 
-            # Export Trace Logs if requested (before analysis) - NEW FUNCTIONALITY
-            if config.get('export_tracelogs', False):
-                if progress_tracker:
-                    progress_tracker.update("Trace logs export requested...", 33)
-                from credential_reset.export_helper import export_tracelogs_if_enabled
-                target_numbers = (1, 1)
-                tracelogs_result = export_tracelogs_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
-                export_results.update(tracelogs_result)  # Merge trace logs results into export_results
-                if progress_tracker:
-                    progress_tracker.add_substep("Export complete", "completed", "success")
-                    progress_tracker.clear_substeps()
-
             if progress_tracker:
                 progress_tracker.update("Initializing playbook...", 34)
 
@@ -440,6 +428,9 @@ class ServerOperationEngine:
                     'serial_number': firewall_info.get('serial_number')
                 }
             }
+
+            # Add the export results to routine_results for reference
+            routine_results[target.firewall].update(export_results)
 
             target_numbers = (1, 1) # Single target (1 of 1)
             silent = True # Keep output minimal for web interface

@@ -29,13 +29,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         md_lines.append(f"### Log and Configuration Exports")
         md_lines.append(f"")
         tsr_location = f"[{results.get('tsr_file_name', '')}]({results.get('tsr_file_name', '')})"
-        tracelogs_location = f"[{results.get('tracelog_filename', '')}]({results.get('tracelog_filename', '')})"
         settings_location = f"[{results.get('prefs_file_name', '')}]({results.get('prefs_file_name', '')})"
-
-        if results.get('trace_logs_downloaded'):
-            md_lines.append(f"- **Trace Logs Downloaded:** {tracelogs_location}")
-        else:
-            md_lines.append(f"- **Trace Logs Downloaded:** No")
 
         if results.get('tsr_downloaded'):
             md_lines.append(f"- **TSR Downloaded:** {tsr_location}")
