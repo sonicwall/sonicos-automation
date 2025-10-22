@@ -40,7 +40,7 @@
     @apply bg-green-600 text-white;
 }
 
-/* Export Download Buttons */
+/* Download button styles for export files */
 .export-download-btn {
     display: inline-flex;
     align-items: center;
@@ -58,21 +58,6 @@
 
 .export-download-btn:hover {
     background-color: #1d4ed8;
-}
-
-.export-download-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background-color: #9ca3af;
-}
-
-.export-download-loading {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
 }
 
 /* Navigation Button States */

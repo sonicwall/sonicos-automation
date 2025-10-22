@@ -576,260 +576,260 @@ async function handleAnalysisResult(result) {
 }
 
 // Function to display summary data in the results section
-            function displaySummaryData(summaryData) {
-                console.log('Displaying summary data:', summaryData);
+function displaySummaryData(summaryData) {
+    console.log('Displaying summary data:', summaryData);
 
-                const summaryContainer = document.getElementById('tab-content-summary');
+    const summaryContainer = document.getElementById('tab-content-summary');
 
-                if (!summaryData || Object.keys(summaryData).length === 0) {
-                    summaryContainer.innerHTML = '<p class="text-gray-500 italic">No summary data available.</p>';
-                    return;
-                }
+    if (!summaryData || Object.keys(summaryData).length === 0) {
+        summaryContainer.innerHTML = '<p class="text-gray-500 italic">No summary data available.</p>';
+        return;
+    }
 
-                // Build summary HTML
-                let summaryHTML = '';
+    // Build summary HTML
+    let summaryHTML = '';
 
-                // Device Information Section
-                if (summaryData.device_info && Object.keys(summaryData.device_info).length > 0) {
-                    const device = summaryData.device_info;
-                    summaryHTML += `
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <!-- Device Information Card (Left) -->
-                            <div class="bg-white rounded-lg card-shadow p-6">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                                    <span class="inline-flex items-center">
-                                        <svg class="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 4h6v6h-6V4z" clip-rule="evenodd"></path>
-                                        </svg>
-                                        Device Information
-                                    </span>
-                                </h3>
-                                <div class="space-y-3 text-sm">
-                                    <div class="flex justify-between">
-                                        <span class="font-medium text-gray-700">Firewall:</span>
-                                        <span class="text-gray-900">${device.firewall || 'Unknown'}</span>
-                                    </div>
-                                    <div class="flex justify-between">
-                                        <span class="font-medium text-gray-700">Model:</span>
-                                        <span class="text-gray-900">${device.device_model || 'Unknown'}</span>
-                                    </div>
-                                    <div class="flex justify-between">
-                                        <span class="font-medium text-gray-700">Firmware:</span>
-                                        <span class="text-gray-900">${device.firmware_version || 'Unknown'}</span>
-                                    </div>
-                                    <div class="flex justify-between">
-                                        <span class="font-medium text-gray-700">Serial Number:</span>
-                                        <span class="text-gray-900">${device.serial_number || 'Unknown'}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Log, Diagnostic, and Configuration Exports Card (Right) -->
-                            <div class="bg-white rounded-lg card-shadow p-6">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                                    <span class="inline-flex items-center">
-                                        <svg class="w-5 h-5 mr-2 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zM3 7a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" clip-rule="evenodd"></path>
-                                            <path d="M13 3H7v2h6V3z"></path>
-                                        </svg>
-                                        Exported Files
-                                    </span>
-                                </h3>
-                                <div id="export-status-content" class="space-y-4">
-                                    <!-- Export content will be populated by JavaScript -->
-                                </div>
-                            </div>
+    // Device Information Section
+    if (summaryData.device_info && Object.keys(summaryData.device_info).length > 0) {
+        const device = summaryData.device_info;
+        summaryHTML += `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <!-- Device Information Card (Left) -->
+                <div class="bg-white rounded-lg card-shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <span class="inline-flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 4h6v6h-6V4z" clip-rule="evenodd"></path>
+                            </svg>
+                            Device Information
+                        </span>
+                    </h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex justify-between">
+                            <span class="font-medium text-gray-700">Firewall:</span>
+                            <span class="text-gray-900">${device.firewall || 'Unknown'}</span>
                         </div>
-                    `;
-                }
+                        <div class="flex justify-between">
+                            <span class="font-medium text-gray-700">Model:</span>
+                            <span class="text-gray-900">${device.device_model || 'Unknown'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-gray-700">Firmware:</span>
+                            <span class="text-gray-900">${device.firmware_version || 'Unknown'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-gray-700">Serial Number:</span>
+                            <span class="text-gray-900">${device.serial_number || 'Unknown'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Log, Diagnostic, and Configuration Exports Card (Right) -->
+                <div class="bg-white rounded-lg card-shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <span class="inline-flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zM3 7a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" clip-rule="evenodd"></path>
+                                <path d="M13 3H7v2h6V3z"></path>
+                            </svg>
+                            Exported Files
+                        </span>
+                    </h3>
+                    <div id="export-status-content" class="space-y-4">
+                        <!-- Export content will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        `;
+    }
 
 
-                // NEW: Brief Summary Section
-                if (summaryData.brief_summary) {
-                    const briefSummary = summaryData.brief_summary;
+    // NEW: Brief Summary Section
+    if (summaryData.brief_summary) {
+        const briefSummary = summaryData.brief_summary;
 
-                    // Recommendations Section - NOW FIRST
-                    if (summaryData.recommendations && summaryData.recommendations.length > 0) {
-                        summaryHTML += `
-                            <div class="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
-                                <h3 class="text-lg font-semibold text-violet-900 mb-3">
-                                    <span class="inline-flex items-center">
-                                        <svg class="w-5 h-5 mr-2 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" clip-rule="evenodd"></path>
-                                        </svg>
-                                        Recommendations
-                                    </span>
-                                </h3>
-                                <ul class="space-y-2">
-                        `;
+        // Recommendations Section - NOW FIRST
+        if (summaryData.recommendations && summaryData.recommendations.length > 0) {
+            summaryHTML += `
+                <div class="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
+                    <h3 class="text-lg font-semibold text-violet-900 mb-3">
+                        <span class="inline-flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Recommendations
+                        </span>
+                    </h3>
+                    <ul class="space-y-2">
+            `;
 
-                        summaryData.recommendations.forEach(recommendation => {
-                            summaryHTML += `
-                                <li class="flex items-start">
-                                    <span class="text-violet-600 mr-2">•</span>
-                                    <span class="text-violet-800">${recommendation}</span>
-                                </li>
-                            `;
-                        });
+            summaryData.recommendations.forEach(recommendation => {
+                summaryHTML += `
+                    <li class="flex items-start">
+                        <span class="text-violet-600 mr-2">•</span>
+                        <span class="text-violet-800">${recommendation}</span>
+                    </li>
+                `;
+            });
 
-                        summaryHTML += `
-                                </ul>
-                            </div>
-                        `;
-                    }
+            summaryHTML += `
+                    </ul>
+                </div>
+            `;
+        }
 
-                    // Action Items Section - TABLE FORMAT - NOW SECOND
-                    if (briefSummary.action_items && briefSummary.action_items.length > 0) {
-                        summaryHTML += `
-                            <div class="mb-6">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                                    <span class="inline-flex items-center">
-                                        <svg class="w-5 h-5 mr-2 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                                        </svg>
-                                        Action Items (${briefSummary.action_items.length})
-                                    </span>
-                                </h3>
-                                <p class="text-gray-600 mb-4 text-sm">The following items require immediate attention:</p>
+        // Action Items Section - TABLE FORMAT - NOW SECOND
+        if (briefSummary.action_items && briefSummary.action_items.length > 0) {
+            summaryHTML += `
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <span class="inline-flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            Action Items (${briefSummary.action_items.length})
+                        </span>
+                    </h3>
+                    <p class="text-gray-600 mb-4 text-sm">The following items require immediate attention:</p>
 
-                                <!-- Action Items Table -->
-                                <div class="overflow-x-auto shadow rounded-lg border border-gray-200">
-                                    <table class="min-w-full divide-y divide-gray-200 bg-white">
-                                        <thead class="bg-gray-50">
-                                            <tr>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Priority
-                                                </th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Finding
-                                                </th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Action Item
-                                                </th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Resources
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="bg-white divide-y divide-gray-200">
-                        `;
-
-                        briefSummary.action_items.forEach((item, index) => {
-                            // Determine severity styling
-                            let severityBadgeClass, severityTextClass;
-                            switch(item.priority.toLowerCase()) {
-                                case 'critical':
-                                    severityBadgeClass = 'bg-red-100 text-red-800';
-                                    severityTextClass = 'text-red-900';
-                                    break;
-                                case 'high':
-                                    severityBadgeClass = 'bg-orange-100 text-orange-800';
-                                    severityTextClass = 'text-orange-900';
-                                    break;
-                                case 'medium':
-                                    severityBadgeClass = 'bg-yellow-100 text-yellow-800';
-                                    severityTextClass = 'text-yellow-900';
-                                    break;
-                                case 'low':
-                                    severityBadgeClass = 'bg-green-100 text-green-800';
-                                    severityTextClass = 'text-green-900';
-                                    break;
-                                default:
-                                    severityBadgeClass = 'bg-gray-100 text-gray-800';
-                                    severityTextClass = 'text-gray-900';
-                            }
-
-                            const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-
-                            summaryHTML += `
-                                <tr class="${rowClass}">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityBadgeClass}">
-                                            ${item.priority}
-                                        </span>
-<!--                                        ${item.count > 1 ? `<div class="text-xs text-gray-500 mt-1">${item.count} items</div>` : ''}-->
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="text-xs font-medium text-gray-900">${item.finding}</div>
-<!--                                        <div class="text-xs text-gray-500 mt-1">${item.check_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div-->
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="text-xs text-gray-900">${item.action}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <a href="${item.resource_link}" target="_blank"
-                                           class="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6v6h-6V4z"></path>
-                                            </svg>
-                                            View Resource
-                                        </a>
-                                    </td>
+                    <!-- Action Items Table -->
+                    <div class="overflow-x-auto shadow rounded-lg border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200 bg-white">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Priority
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Finding
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Action Item
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Resources
+                                    </th>
                                 </tr>
-                            `;
-                        });
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+            `;
 
-                        summaryHTML += `
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        // Show message when no action items are found
-                        summaryHTML += `
-                            <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                                <h3 class="text-lg font-semibold text-green-900 mb-3">
-                                    <span class="inline-flex items-center">
-                                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zmM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                                    </svg>
-                                        Action Items (0)
-                                    </span>
-                                </h3>
-                                <p class="text-green-800 text-sm">No critical action items found. Your firewall configuration appears to be secure.</p>
-                            </div>
-                        `;
-                    }
+            briefSummary.action_items.forEach((item, index) => {
+                // Determine severity styling
+                let severityBadgeClass, severityTextClass;
+                switch(item.priority.toLowerCase()) {
+                    case 'critical':
+                        severityBadgeClass = 'bg-red-100 text-red-800';
+                        severityTextClass = 'text-red-900';
+                        break;
+                    case 'high':
+                        severityBadgeClass = 'bg-orange-100 text-orange-800';
+                        severityTextClass = 'text-orange-900';
+                        break;
+                    case 'medium':
+                        severityBadgeClass = 'bg-yellow-100 text-yellow-800';
+                        severityTextClass = 'text-yellow-900';
+                        break;
+                    case 'low':
+                        severityBadgeClass = 'bg-green-100 text-green-800';
+                        severityTextClass = 'text-green-900';
+                        break;
+                    default:
+                        severityBadgeClass = 'bg-gray-100 text-gray-800';
+                        severityTextClass = 'text-gray-900';
                 }
 
-                // Top Findings List
-                if (summaryData.findings && summaryData.findings.length > 0) {
-                    summaryHTML += `
-                        <div class="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-                            <h3 class="text-lg font-semibold text-gray-900 mb-3">Configuration Items Found</h3>
-                            <div class="space-y-2 max-h-64 overflow-y-auto">
-                    `;
+                const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
 
-                    summaryData.findings.forEach(finding => {
-                        const severityClass = `priority-${finding.severity}`;
-                        summaryHTML += `
-                            <div class="flex justify-between items-center p-2 border-l-4 border-${finding.severity === 'critical' ? 'red' : finding.severity === 'high' ? 'orange' : finding.severity === 'medium' ? 'yellow' : 'green'}-400 bg-gray-50">
-                                <div>
-                                    <span class="font-medium">${finding.check}</span>
-                                    <span class="ml-2 text-xs ${severityClass} uppercase">${finding.severity}</span>
-                                </div>
-                                <span class="text-sm font-semibold text-gray-600">${finding.count} item${finding.count > 1 ? 's' : ''}</span>
-                            </div>
-                        `;
-                    });
+                summaryHTML += `
+                    <tr class="${rowClass}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityBadgeClass}">
+                                ${item.priority}
+                            </span>
+<!--                                        ${item.count > 1 ? `<div class="text-xs text-gray-500 mt-1">${item.count} items</div>` : ''}-->
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-xs font-medium text-gray-900">${item.finding}</div>
+<!--                                        <div class="text-xs text-gray-500 mt-1">${item.check_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div-->
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-xs text-gray-900">${item.action}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <a href="${item.resource_link}" target="_blank"
+                               class="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6v6h-6V4z"></path>
+                                </svg>
+                                View Resource
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            });
 
-                    summaryHTML += `
-                            </div>
-                        </div>
-                    `;
-                }
+            summaryHTML += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Show message when no action items are found
+            summaryHTML += `
+                <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <h3 class="text-lg font-semibold text-green-900 mb-3">
+                        <span class="inline-flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zmM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                        </svg>
+                            Action Items (0)
+                        </span>
+                    </h3>
+                    <p class="text-green-800 text-sm">No critical action items found. Your firewall configuration appears to be secure.</p>
+                </div>
+            `;
+        }
+    }
 
-                summaryContainer.innerHTML = summaryHTML;
+    // Top Findings List
+    if (summaryData.findings && summaryData.findings.length > 0) {
+        summaryHTML += `
+            <div class="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+                <h3 class="text-lg font-semibold text-gray-900 mb-3">Configuration Items Found</h3>
+                <div class="space-y-2 max-h-64 overflow-y-auto">
+        `;
 
-                // Populate export status in the new card
-                // Transform the actual export data structure to match what populateExportStatus expects
-                const transformedExports = transformExportData(summaryData);
-                populateExportStatus(transformedExports);
+        summaryData.findings.forEach(finding => {
+            const severityClass = `priority-${finding.severity}`;
+            summaryHTML += `
+                <div class="flex justify-between items-center p-2 border-l-4 border-${finding.severity === 'critical' ? 'red' : finding.severity === 'high' ? 'orange' : finding.severity === 'medium' ? 'yellow' : 'green'}-400 bg-gray-50">
+                    <div>
+                        <span class="font-medium">${finding.check}</span>
+                        <span class="ml-2 text-xs ${severityClass} uppercase">${finding.severity}</span>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-600">${finding.count} item${finding.count > 1 ? 's' : ''}</span>
+                </div>
+            `;
+        });
 
-                console.log('Summary data displayed successfully');
-            }
+        summaryHTML += `
+                </div>
+            </div>
+        `;
+    }
+
+    summaryContainer.innerHTML = summaryHTML;
+
+    // Populate export status in the new card
+    // Transform the actual export data structure to match what populateExportStatus expects
+    const transformedExports = transformExportData(summaryData);
+    populateExportStatus(transformedExports);
+
+    console.log('Summary data displayed successfully');
+}
 
 // Helper function to create summary HTML from the actual data structure
 function createSummaryHTML(summaryData) {
