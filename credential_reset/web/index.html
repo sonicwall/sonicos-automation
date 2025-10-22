@@ -941,151 +941,6 @@
             }
         }
 
-        // GLOBAL: Function to handle download all exports - moved to global scope
-        async function downloadAllExports() {
-            console.log('Starting download of all available exports...');
-
-            // Get the current export data from the DOM
-            const exportContainer = document.getElementById('export-status-content');
-            if (!exportContainer) {
-                console.error('Export container not found');
-                return;
-            }
-
-            // Find all download buttons that are currently available
-            const downloadButtons = exportContainer.querySelectorAll('button[onclick*="downloadExportFile"]');
-
-            if (downloadButtons.length === 0) {
-                console.log('No export files available for download');
-                // Show a user-friendly message
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'fixed top-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-md shadow-lg z-50';
-                messageDiv.innerHTML = `
-                    <div class="flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                        </svg>
-                        <div>
-                            <strong>No Downloads Available</strong>
-                            <div class="text-sm">No export files are currently available for download.</div>
-                        </div>
-                        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-yellow-500 hover:text-yellow-700">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L9 10.586l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                            </svg>
-                        </button>
-                    </div>
-                `;
-                document.body.appendChild(messageDiv);
-
-                // Remove message after 5 seconds
-                setTimeout(() => {
-                    if (messageDiv.parentElement) {
-                        messageDiv.parentElement.removeChild(messageDiv);
-                    }
-                }, 5000);
-                return;
-            }
-
-            // Show progress message
-            const progressDiv = document.createElement('div');
-            progressDiv.className = 'fixed top-4 right-4 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-md shadow-lg z-50';
-            progressDiv.id = 'download-all-progress';
-            progressDiv.innerHTML = `
-                <div class="flex items-center">
-                    <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="10" stroke-dasharray="31.416" stroke-dashoffset="31.416" stroke-width="2" fill="none"/>
-                    </svg>
-                    <div>
-                        <strong>Downloading All Files</strong>
-                        <div class="text-sm">Downloading <span id="download-progress">0</span> of ${downloadButtons.length} files...</div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(progressDiv);
-
-            let successCount = 0;
-            let failCount = 0;
-
-            // Download each file with a small delay to avoid overwhelming the server
-            for (let i = 0; i < downloadButtons.length; i++) {
-                const button = downloadButtons[i];
-                const progressSpan = document.getElementById('download-progress');
-                if (progressSpan) {
-                    progressSpan.textContent = i + 1;
-                }
-
-                try {
-                    // Extract the onclick function call parameters
-                    const onclickAttr = button.getAttribute('onclick');
-                    const match = onclickAttr.match(/downloadExportFile\('([^']+)',\s*'([^']+)',\s*'([^']+)'\)/);
-
-                    if (match) {
-                        const [, category, fileKey, fileName] = match;
-                        console.log(`Downloading file ${i + 1}/${downloadButtons.length}: ${fileName}`);
-
-                        // Call the existing download function
-                        await downloadExportFile(category, fileKey, fileName);
-                        successCount++;
-
-                        // Small delay between downloads
-                        if (i < downloadButtons.length - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                        }
-                    } else {
-                        console.error('Could not parse download button onclick:', onclickAttr);
-                        failCount++;
-                    }
-                } catch (error) {
-                    console.error('Error downloading file:', error);
-                    failCount++;
-                }
-            }
-
-            // Remove progress message and show completion message
-            const progressElement = document.getElementById('download-all-progress');
-            if (progressElement) {
-                progressElement.remove();
-            }
-
-            // Show completion message
-            const completionDiv = document.createElement('div');
-            const isSuccess = failCount === 0;
-            completionDiv.className = `fixed top-4 right-4 ${isSuccess ? 'bg-green-100 border-green-400 text-green-700' : 'bg-yellow-100 border-yellow-400 text-yellow-700'} px-4 py-3 rounded-md shadow-lg z-50`;
-            completionDiv.innerHTML = `
-                <div class="flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        ${isSuccess ?
-                            '<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>' :
-                            '<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>'
-                        }
-                    </svg>
-                    <div>
-                        <strong>Download ${isSuccess ? 'Complete' : 'Finished'}</strong>
-                        <div class="text-sm">
-                            ${successCount} file${successCount !== 1 ? 's' : ''} downloaded successfully
-                            ${failCount > 0 ? `, ${failCount} failed` : ''}
-                        </div>
-                    </div>
-                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 ${isSuccess ? 'text-green-500 hover:text-green-700' : 'text-yellow-500 hover:text-yellow-700'}">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L9 10.586l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                        </svg>
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(completionDiv);
-
-            // Remove completion message after 8 seconds
-            setTimeout(() => {
-                if (completionDiv.parentElement) {
-                    completionDiv.parentElement.removeChild(completionDiv);
-                }
-            }, 8000);
-
-            console.log(`Download all completed: ${successCount} successful, ${failCount} failed`);
-        }
-
         // GLOBAL: Function to handle download errors - moved to global scope
         function handleDownloadError(errorMessage, fileName) {
             const errorDiv = document.createElement('div');
@@ -2369,17 +2224,6 @@
                     </div>
                 `;
 
-                // Quick Actions (keeping the existing Download All button)
-                const hasAnyExports = hasConfigExports || hasLogExports;
-                if (hasAnyExports) {
-                    exportHTML += `
-                        <div class="pt-2 border-t border-gray-200">
-                            <button onclick="downloadAllExports()" class="w-full bg-blue-600 text-white text-xs px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors">
-                                Download All
-                            </button>
-                        </div>
-                    `;
-                }
 
                 exportContainer.innerHTML = exportHTML;
             }
@@ -2561,7 +2405,6 @@
 
             // Make function globally accessible for onclick handlers
             window.downloadExportFile = downloadExportFile;
-            window.downloadAllExports = downloadAllExports;
 
             // Function to handle download errors
             function handleDownloadError(errorMessage, fileName) {
