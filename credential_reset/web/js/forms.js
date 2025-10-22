@@ -701,6 +701,9 @@ function displaySummaryData(summaryData) {
                                         Priority
                                     </th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Configuration Area
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Finding
                                     </th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -744,6 +747,9 @@ function displaySummaryData(summaryData) {
                 summaryHTML += `
                     <tr class="${rowClass}">
                         <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityBadgeClass}">
+                                ${item.priority}
+                            </span>
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityBadgeClass}">
                                 ${item.priority}
                             </span>

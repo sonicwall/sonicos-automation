@@ -1152,6 +1152,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Critical",
+                    "area": "Authentication",
                     "finding": f"{count} Server(s) Configured",
                     "action": "LDAP server(s) require bind password updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_LDAP_Authentication",
@@ -1165,6 +1166,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Critical",
+                    "area": "Authentication",
                     "finding": f"{count} Server(s) Configured",
                     "action": "RADIUS server(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Authentication",
@@ -1178,6 +1180,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Critical",
+                    "area": "Authentication",
                     "finding": f"{count} Server(s) Configured",
                     "action": "TACACS server(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_TACACS__Authentication",
@@ -1198,6 +1201,7 @@ class ServerOperationEngine:
 
                 action_items.append({
                     "priority": "Critical",
+                    "area": "VPN",
                     "finding": f"{len(vpn_policies)} Policies Found<br>- {groupvpn_count} GroupVPN, {groupvpn_disabled_count} Disabled<br>- {s2s_count} Site-to-Site, {s2s_disabled_count} Disabled<br>- {tunnelint_count} Tunnel Interface, {tunnelint_disabled_count} Disabled",
                     "action": "VPN policies require pre-shared key, authentication/encryption key updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared",
@@ -1211,6 +1215,7 @@ class ServerOperationEngine:
             if len(interesting_wan_ints) > 0:
                 action_items.append({
                     "priority": "Critical",
+                    "area": "Network Services",
                     "finding": f"{len(interesting_wan_ints)} WAN interface(s)",
                     "action": f"{', '.join(interesting_wan_ints)} require credential updates for L2TP/PPPoE/PPTP connections",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a",
@@ -1223,6 +1228,7 @@ class ServerOperationEngine:
             if converted_results.get('log', {}).get('aws', {}).get('enable', False):
                 action_items.append({
                     "priority": "Critical",
+                    "area": "Cloud & Integrations",
                     "finding": "Enabled",
                     "action": "AWS API Logging is enabled - Update the secret key in the AWS Console",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/aws-integration-with-sonicwall-sonicos-6-5-x/181024232124532",
@@ -1235,6 +1241,7 @@ class ServerOperationEngine:
             if converted_results.get('cloud_secure_edge', {}).get('created', False):
                 action_items.append({
                     "priority": "Critical",
+                    "area": "Cloud & Integrations",
                     "finding": "Enabled",
                     "action": "Cloud Secure Edge is enabled - Reset the CSE connector's API token",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE",
@@ -1252,6 +1259,7 @@ class ServerOperationEngine:
             if total_ddns > 0:
                 action_items.append({
                     "priority": "High",
+                    "area": "Network Services",
                     "finding": f"{total_ddns} Profile(s)",
                     "action": "Dynamic DNS profile(s) require credential updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835",
@@ -1265,6 +1273,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "High",
+                    "area": "Reporting, Monitoring, and Management",
                     "finding": f"{count} Users Found",
                     "action": "SNMPv3 user(s) require authentication/privacy password updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP",
@@ -1279,6 +1288,7 @@ class ServerOperationEngine:
                     clearpass_server_count = len(converted_results.get('clearpass_servers', []))
                     action_items.append({
                         "priority": "High",
+                        "area": "Network Services",
                         "finding": f"Enabled ({clearpass_server_count} Servers)",
                         "action": f"ClearPass/Network Access Control (NAC) is enabled with {clearpass_server_count} server(s) - {'update the shared secret on each configured entry' if clearpass_server_count > 0 else 'configure NAC entries or disable the feature if not in use'}",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440",
@@ -1293,6 +1303,7 @@ class ServerOperationEngine:
             if converted_results.get('cellular_attached', False):
                 action_items.append({
                     "priority": "High",
+                    "area": "Network Services",
                     "finding": "Modem Found",
                     "action": "Cellular WWAN is enabled - Update the cellular provider credentials",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a",
@@ -1307,6 +1318,7 @@ class ServerOperationEngine:
                 if dynamic_address_count > 0:
                     action_items.append({
                         "priority": "High",
+                        "area": "Network Services",
                         "finding": f"{dynamic_address_count} Object(s) Found",
                         "action": "Review and update credentials for Dynamic External Address Object(s)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280",
@@ -1331,6 +1343,7 @@ class ServerOperationEngine:
             if email_actions:
                 action_items.append({
                     "priority": "Medium",
+                    "area": "Reporting, Monitoring, and Management",
                     "finding": "Configured",
                     "action": f"Email logging credentials require updates for the following protocols: {', '.join(email_actions)}",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038",
@@ -1344,6 +1357,7 @@ class ServerOperationEngine:
                 if converted_results.get('packet_monitor_ftp_set', False):
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Reporting, Monitoring, and Management",
                         "finding": "Configured",
                         "action": "Packet Monitor FTP credentials require updates",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password",
@@ -1359,6 +1373,7 @@ class ServerOperationEngine:
                 if converted_results.get('scheduled_exports_ftp_set', False):
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Reporting, Monitoring, and Management",
                         "finding": "Configured",
                         "action": "TSR/EXP Scheduled Exports credentials require updates",
                         "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm",
@@ -1375,6 +1390,7 @@ class ServerOperationEngine:
                 if guest_auth:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{len(guest_auth)} Zone(s) Found",
                         "action": "Wireless Guest Services External Authentication is enabled - Update the shared secret on each configured entry",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=more%20information.-,Guest%20Services,-Reset%20the%20shared",
@@ -1391,6 +1407,7 @@ class ServerOperationEngine:
                 if wireless_radius_count > 0:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{wireless_radius_count} Zone(s) Found",
                         "action": f"{wireless_radius_count} Wireless Zone(s) configured with Local RADIUS Servers - Update the shared secret on each configured entry",
                         "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-access_points/Content/Access_Points_Settings/access-point-settings-about-local-radius-servers.htm",
@@ -1408,6 +1425,7 @@ class ServerOperationEngine:
                 if radio_radius or radio_psk:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": "Configured",
                         "action": "Internal WLAN Radio is enabled - Update the pre-shared keys, RADIUS, and RADIUS Accounting secrets on the server, then in SonicOS",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi",
@@ -1424,6 +1442,7 @@ class ServerOperationEngine:
                 if vap_count > 0:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{vap_count} Internal WLAN Virtual Access Point(s) Found",
                         "action": "Update the WLAN password(s)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi",
@@ -1440,6 +1459,7 @@ class ServerOperationEngine:
                 if vap_profile_count > 0:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{vap_profile_count} Profile(s) Found",
                         "action": "Update the WLAN Virtual Access Point Profile(s) password(s)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi",
@@ -1456,6 +1476,7 @@ class ServerOperationEngine:
                 if ap_count > 0:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{ap_count} Objects Found",
                         "action": "Update the WLAN SonicPoint/SonicWave Access Point(s) password(s)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi",
@@ -1472,6 +1493,7 @@ class ServerOperationEngine:
                 if ap_profile_count > 0:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{ap_profile_count} Profile(s) Found",
                         "action": "Update the WLAN SonicPoint/SonicWave Access Point Profile(s) password(s)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi",
@@ -1488,6 +1510,7 @@ class ServerOperationEngine:
                 if sp_vap_count > 0:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{sp_vap_count} Objects Found",
                         "action": "Update the WLAN SonicPoint/SonicWave Virtual Access Point(s) password(s)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi",
@@ -1504,6 +1527,7 @@ class ServerOperationEngine:
                 if sp_vap_profile_count > 0:
                     action_items.append({
                         "priority": "Medium",
+                        "area": "Wireless",
                         "finding": f"{sp_vap_profile_count} Profile(s) Found",
                         "action": "Update the WLAN SonicPoint/SonicWave Virtual Access Point Profile(s) password(s)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Wireless_-_Wi-Fi",
@@ -1522,6 +1546,7 @@ class ServerOperationEngine:
                 if botnet_data.get('protocol', False):
                     action_items.append({
                         "priority": "Low",
+                        "area": "Network Services",
                         "finding": f"Configured ({botnet_data.get('protocol', '').upper()})",
                         "action": "Review and update Dynamic Botnet List Server credentials",
                         "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm",
@@ -1548,6 +1573,7 @@ class ServerOperationEngine:
                 if ext_switch_count > 0:
                     action_items.append({
                         "priority": "Low",
+                        "area": "Infrastructure",
                         "finding": f"{ext_switch_count} Extended Switch(es) Found",
                         "action": "Review and update credentials on the switch(es)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/how-to-change-the-password-for-sonicwall-switch/200607142015373",
@@ -1564,6 +1590,7 @@ class ServerOperationEngine:
                 if ext_switch_user_count > 0:
                     action_items.append({
                         "priority": "Low",
+                        "area": "Infrastructure",
                         "finding": f"{ext_switch_user_count} Extended Switch User(s) Found",
                         "action": "Review and update credentials on the switch(es)",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password",
@@ -1580,6 +1607,7 @@ class ServerOperationEngine:
                 if ext_switch_radius_count > 0:
                     action_items.append({
                         "priority": "Low",
+                        "area": "Infrastructure",
                         "finding": f"{ext_switch_radius_count} Extended Switch RADIUS Server(s) Found",
                         "action": "Review and update shared secrets on the switch(es) and in SonicOS",
                         "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=and%20Backup%20Settings)-,Extended%20Switches,-Reset%20the%20password",
@@ -1595,6 +1623,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Authentication",
                     "finding": f"{count} Agents Found",
                     "action": "SSO agent(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets",
@@ -1608,6 +1637,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Authentication",
                     "finding": f"{count} Agents Found",
                     "action": "Terminal Services agent(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets",
@@ -1621,6 +1651,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Authentication",
                     "finding": f"{count} RA Clients Found",
                     "action": "SSO RADIUS Accounting client(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets",
@@ -1634,6 +1665,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Authentication",
                     "finding": f"{count} API Clients Found",
                     "action": "SSO 3rd Party API client(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=External%20Guest%20Authentication-,SSO,-Reset%20shared%20secrets",
@@ -1647,6 +1679,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Authentication",
                     "finding": f"{count} Servers Found",
                     "action": "RADIUS Accounting server(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries",
@@ -1660,6 +1693,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Authentication",
                     "finding": f"{count} Servers Found",
                     "action": "TACACS Accounting server(s) require shared secret updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_RADIUS_Accounting_Servers:~:text=Reset%20RADIUS/TACACS%2B%20shared%20secrets%20used%20for%20Accounting%20server%20entries",
@@ -1672,6 +1706,7 @@ class ServerOperationEngine:
             if converted_results.get('sfr_data', {}).get('smtp_configured', False) or converted_results.get('sfr_data', {}).get('pop_configured', False):
                 action_items.append({
                     "priority": "Low",
+                    "area": "Reporting, Monitoring, and Management",
                     "finding": "Configured",
                     "action": "AppFlow SFR Mailing is configured - Update the email server credentials",
                     "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-appflow_device/Content/appflow-d-flow-reporting-sfr-mailing.htm",
@@ -1685,6 +1720,7 @@ class ServerOperationEngine:
             if count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Network Services",
                     "finding": f"{count} Servers Found",
                     "action": "Custom NTP server(s) require authentication password updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/service-configuration-how-to-configure-ntp-and-snmp-services/210715103828777",
@@ -1697,6 +1733,7 @@ class ServerOperationEngine:
             if converted_results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('enable', False) or converted_results.get('security_services', {}).get('proxy_server', {}).get('authentication', {}).get('user_name', ''):
                 action_items.append({
                     "priority": "Low",
+                    "area": "Security Services",
                     "finding": "Configured",
                     "action": "Security Services Proxy is configured - Update the proxy server credentials",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/signature-downloads-through-a-proxy-server/170503292286520",
@@ -1709,6 +1746,7 @@ class ServerOperationEngine:
             if converted_results.get('gms', {}).get('ipsec_tunnel', False):
                 action_items.append({
                     "priority": "Low",
+                    "area": "Infrastructure",
                     "finding": "Configured",
                     "action": "GMS IPSec Management Tunnel is configured - Update the encryption/authentication keys",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared",
@@ -1726,6 +1764,7 @@ class ServerOperationEngine:
             if adv_routing_count > 0:
                 action_items.append({
                     "priority": "Low",
+                    "area": "Infrastructure",
                     "finding": f"RIP {len(any_rip)}, OSPFv2 {len(any_ospf)}, BGP {len(any_bgp)}",
                     "action": "Routing configuration requires authentication/password updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used",
