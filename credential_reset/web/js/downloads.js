@@ -47,6 +47,10 @@ async function downloadExportFile(category, fileKey, fileName) {
 
         console.log(`Successfully downloaded: ${fileName}`);
 
+        // Reset button state after successful download
+        button.disabled = false;
+        button.innerHTML = originalContent;
+
     } catch (error) {
         console.error('Download failed:', error);
 
