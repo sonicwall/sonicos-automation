@@ -1237,7 +1237,6 @@ function setupReportTabFunctionality() {
 function setupReportDownloadHandlers() {
     const downloadMdBtn = document.getElementById('download-report-md');
     const downloadHtmlBtn = document.getElementById('download-report-html');
-    const printBtn = document.getElementById('print-report');
     const toggleViewBtn = document.getElementById('toggle-report-view');
 
     if (downloadMdBtn) {
@@ -1275,12 +1274,6 @@ function setupReportDownloadHandlers() {
 </html>`;
                 downloadFile(htmlContent, 'playbook-analysis-report.html', 'text/html');
             }
-        });
-    }
-
-    if (printBtn) {
-        printBtn.addEventListener('click', function() {
-            window.print();
         });
     }
 
