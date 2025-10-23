@@ -359,7 +359,7 @@ def test_connection():
 @app.route('/single_analysis', methods=['POST'])
 def single_analysis():
     """Execute security analysis with progress tracking using the server operation engine."""
-    logger.info(f"Received {request.method} -> {request.url}")
+    logger.info(f"single_analysis() - Received {request.method} -> {request.url}")
     if request.method == 'POST':
         try:
             # Extract JSON data from the request body
@@ -368,11 +368,11 @@ def single_analysis():
                 logger.error("single_analysis(): No JSON data received")
                 return {'success': False, 'error': 'No data received', 'function': 'single_analysis() 0'}, 400
 
-            logger.info(f"single_analysis(): Received data: {data}")
+            logger.info(f"single_analysis() - Received data:\n{data}")
 
             # Generate unique operation ID
             operation_id = str(uuid.uuid4())
-            logger.info(f"Generated operation ID: {operation_id}")
+            logger.info(f"single_analysis() - Generated operation ID: {operation_id}")
             
             # Import progress manager and create operation tracker (estimated 8 main steps)
             from common.progress_tracker import progress_manager
@@ -403,7 +403,7 @@ def single_analysis():
 def _execute_analysis_with_progress(data, operation_id):
     """Execute analysis operation with progress tracking in background thread."""
     try:
-        logger.info(f"Starting background analysis for operation {operation_id}")
+        logger.info(f"_execute_analysis_with_progress() - Starting background analysis for operation {operation_id}")
         
         # Import and use the SERVER operation engine
         from credential_reset.server_engine import server_operation_engine
@@ -416,7 +416,11 @@ def _execute_analysis_with_progress(data, operation_id):
             'sshport': int(data.get('sshport', 22)),
             'export_tsr': data.get('export_tsr', 'false').lower() == 'true',
             'export_settings': data.get('export_settings', 'false').lower() == 'true',
-            'severity': data.get('severity', [])
+            'severity': data.get('severity', []),
+            'force_password_change': data.get('force_password_change', 'false').lower() == 'true',
+            'unbind_totp': data.get('unbind_totp', 'false').lower() == 'true',
+            'temp_password': data.get('temp_password', ''),
+            'randomize_temp_password': data.get('randomize_temp_password', 'false').lower() == 'true'
         }
         
         # Execute operation with progress tracking
@@ -431,16 +435,16 @@ def _execute_analysis_with_progress(data, operation_id):
             export_results = result['results'].get('export_results')
             if export_results:
                 cache_export_results(operation_id, export_results)
-                logger.info(f"Cached export results for operation {operation_id}")
+                logger.info(f"_execute_analysis_with_progress() - Cached export results for operation {operation_id}")
 
         # Mark operation as complete in progress manager
         from common.progress_tracker import progress_manager
         progress_manager.complete_operation(operation_id)
         
-        logger.info(f"Background analysis completed for operation {operation_id}")
+        logger.info(f"_execute_analysis_with_progress() - Background analysis completed for operation {operation_id}")
         
     except Exception as e:
-        logger.error(f"Background analysis failed for operation {operation_id}: {e}")
+        logger.error(f"_execute_analysis_with_progress() - Background analysis failed for operation {operation_id}: {e}")
         # Handle errors and update progress tracker
         from common.progress_tracker import progress_manager
         operation_data = progress_manager.active_operations.get(operation_id)
@@ -448,9 +452,10 @@ def _execute_analysis_with_progress(data, operation_id):
             tracker = operation_data["tracker"]
             tracker.error(f"Operation failed: {str(e)}")
         progress_manager.complete_operation(operation_id)
-        logger.info(f"Operation {operation_id} marked as complete due to error")
+        logger.info(f"_execute_analysis_with_progress() - Operation {operation_id} marked as complete due to error")
 
 
+# This function may be removed. I think single_analysis fully replaces it.
 @app.route('/single', methods=['POST', 'GET'])
 def single_target():
     """Proxy endpoint that accepts the single target form data from the web app and triggers the routine for a single device."""
@@ -460,9 +465,9 @@ def single_target():
             # Extract JSON data from the request body (not form data)
             data = request.get_json()
             if not data:
-                logger.error("single_target(): No JSON data received")
+                logger.error("single_target() - No JSON data received")
                 return {'success': False, 'error': 'No data received', 'function': 'single_target() 0'}, 400
-            logger.info(f"single_target(): Received data: {data}")
+            logger.info(f"single_target() - Form data:\n{data}")
 
             # Load the target from form data
             target = load_targets(data)
@@ -571,7 +576,7 @@ def test_connection_with_progress():
                 # The result_data is automatically included in the SSE completion event
 
             except Exception as e:
-                logger.error(f"Connection test thread error: {e}")
+                logger.error(f"run_connection_test() - Connection test thread error: {e}")
                 # Only handle exceptions not caught by server engine
                 from common.progress_tracker import progress_manager
                 operation_data = progress_manager.active_operations.get(operation_id)
@@ -616,7 +621,7 @@ def download_file(category, file_key):
         File download or 404 if not found
     """
     try:
-        logger.info(f"Download request: category={category}, file_key={file_key}")
+        logger.info(f"download_file() - Download request: category={category}, file_key={file_key}")
 
         # Look for the file in the exported files cache
         file_path = None
@@ -659,10 +664,10 @@ def download_file(category, file_key):
                             file_path = matching_files[0]
 
         if not file_path or not os.path.exists(file_path):
-            logger.error(f"File not found: {category}/{file_key}")
+            logger.error(f"download_file() - File not found: {category}/{file_key}")
             return {'error': f'File not found: {file_key}'}, 404
 
-        logger.info(f"Serving file: {file_path}")
+        logger.info(f"download_file() - Serving file: {file_path}")
 
         # Determine MIME type and filename
         import mimetypes
@@ -680,7 +685,7 @@ def download_file(category, file_key):
         )
 
     except Exception as e:
-        logger.error(f"Error serving download file {category}/{file_key}: {e}")
+        logger.error(f"download_file() - Error serving download file {category}/{file_key}: {e}")
         return {'error': f'Error serving file: {str(e)}'}, 500
 
 
@@ -688,7 +693,7 @@ def cache_export_results(operation_id, export_results):
     """Cache export results for later file downloads."""
     global exported_files_cache
     exported_files_cache[operation_id] = export_results
-    logger.info(f"Cached export results for operation {operation_id}: {export_results}")
+    logger.info(f"cache_export_results() - Cached export results for operation {operation_id}: {export_results}")
 
 
 def main():
@@ -700,9 +705,9 @@ def main():
     args = parser.parse_args()
 
     logger.info("="*60)
-    logger.info("CORS Proxy Server for SonicWall Web App")
+    logger.info("SonicWall Essential Credential Reset/Remediation Playbook Web App")
     logger.info("="*60)
-    logger.info(f"Starting proxy server on http://{args.host}:{args.port}")
+    logger.info(f"Starting server on http://{args.host}:{args.port}")
     logger.info(f"Web App: http://{args.host}:{args.port}/")
     logger.info(f"Proxy endpoint: http://{args.host}:{args.port}/proxy?target=YOUR_URL")
     logger.info(f"Health check: http://{args.host}:{args.port}/health")
@@ -747,11 +752,11 @@ def convert_security_checks_to_severity(checks):
 def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
     """Load targets from either CSV file or single target data."""
     if not isinstance(target_input, dict) and path.isfile(target_input):
-        logger.info(f"Loading targets from {target_input}")
+        logger.info(f"load_targets() - Loading targets from {target_input}")
         return parse_csv_targets(target_input)
     elif isinstance(target_input, dict):
         # Target came from web form data
-        logger.info(f"Target came from web form:\n{target_input}\n")
+        logger.info(f"load_targets() - Target came from web form:\n{target_input}\n")
 
         # Convert security_checks list to severity filter
         severity = convert_security_checks_to_severity(target_input.get('severity', []))
@@ -773,7 +778,7 @@ def load_targets(target_input) -> Union[List[FirewallTarget], FirewallTarget]:
         )
     else:
         # Single target from command line - this case may need proper args handling
-        logger.info(f"Target came from CLI: {target_input}")
+        logger.info(f"load_targets() - Target came from CLI: {target_input}")
         # For now, return a basic FirewallTarget - this needs proper CLI args integration
         return FirewallTarget(
             firewall=target_input,
