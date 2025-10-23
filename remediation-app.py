@@ -374,9 +374,10 @@ def single_analysis():
             operation_id = str(uuid.uuid4())
             logger.info(f"single_analysis() - Generated operation ID: {operation_id}")
             
-            # Import progress manager and create operation tracker (estimated 8 main steps)
+            # Import progress manager and create operation tracker (STEPS)
             from common.progress_tracker import progress_manager
-            progress_tracker = progress_manager.create_operation(operation_id, 8)
+            # 59 steps until 'preparing results...' line. some can be skipped based on severity and throws off counters.
+            progress_tracker = progress_manager.create_operation(operation_id, 30)
             
             # Start operation in background thread
             thread = threading.Thread(

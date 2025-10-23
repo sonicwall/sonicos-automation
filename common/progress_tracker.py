@@ -60,7 +60,7 @@ class ProgressTracker:
             increment_step: Whether to increment the current step counter
         """
         if self.is_complete:
-            self.logger.warning(f"Attempted to update completed operation {self.operation_id}")
+            self.logger.warning(f"update() - Attempted to update completed operation {self.operation_id}")
             return
 
         if increment_step:
@@ -70,10 +70,11 @@ class ProgressTracker:
         if percentage is None:
             percentage = min(int((self.current_step / self.total_steps) * 100), 99)
 
-        # Log the progress
-        self.logger.info(f"Operation {self.operation_id}: Step {self.current_step}/{self.total_steps} - {step_name}")
+        # Log the progress and current step.
+        # self.logger.info(f"update() - Operation {self.operation_id}: Step {self.current_step}/{self.total_steps} - {step_name}")
+        self.logger.info(f"update() - Operation {self.operation_id}: Step {self.current_step} - {step_name}")
         if details:
-            self.logger.info(f"Details: {details}")
+            self.logger.info(f"update() - Details: {details}")
 
         # Send progress event
         self._send_progress_event(
