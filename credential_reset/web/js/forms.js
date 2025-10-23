@@ -773,7 +773,7 @@ function displaySummaryData(summaryData) {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                           d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6v6h-6V4z"></path>
                                 </svg>
-                                View Resource
+                                View
                             </a>
                         </td>
                     </tr>
@@ -841,118 +841,6 @@ function displaySummaryData(summaryData) {
     console.log('Summary data displayed successfully');
 }
 
-// Helper function to create summary HTML from the actual data structure
-function createSummaryHTML(summaryData) {
-    let summaryHTML = '<div class="space-y-6">';
-
-    // Device Information (always show this)
-    if (summaryData.device_info) {
-        const device = summaryData.device_info;
-        summaryHTML += `
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 class="text-lg font-semibold text-blue-900 mb-2">Device Information</h4>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                    <div><strong>Model:</strong> ${device.device_model || 'Unknown'}</div>
-                    <div><strong>Serial:</strong> ${device.serial_number || 'Unknown'}</div>
-                    <div><strong>Firmware:</strong> ${device.firmware_version || 'Unknown'}</div>
-                    <div><strong>Generation:</strong> ${device.generation || 'Unknown'}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    // Analysis Overview
-    if (summaryData.overview) {
-        const overview = summaryData.overview;
-        summaryHTML += `
-            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h4 class="text-lg font-semibold text-green-900 mb-2">Analysis Overview</h4>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-green-600">${overview.completed_checks || 0}</div>
-                        <div class="text-green-800">Completed Checks</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-blue-600">${overview.total_checks || 0}</div>
-                        <div class="text-green-800">Total Checks</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-red-600">${overview.failed_checks || 0}</div>
-                        <div class="text-green-800">Failed Checks</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-orange-600">${overview.successful_exports || 0}</div>
-                        <div class="text-green-800">Exports</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    // Action Items Summary
-    if (summaryData.brief_summary && summaryData.brief_summary.action_items && summaryData.brief_summary.action_items.length > 0) {
-        const actionItems = summaryData.brief_summary.action_items;
-        summaryHTML += `
-            <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-                <h4 class="text-lg font-semibold text-red-900 mb-2">Critical Action Items (${actionItems.length})</h4>
-                <div class="space-y-2 text-sm">
-        `;
-
-        actionItems.forEach(item => {
-            summaryHTML += `
-                <div class="flex items-start p-2 bg-white rounded border">
-                    <div class="flex-shrink-0 w-16 text-center">
-                        <span class="inline-block px-2 py-1 text-xs font-bold text-white bg-red-600 rounded">${item.priority}</span>
-                    </div>
-                    <div class="flex-grow ml-3">
-                        <p class="font-medium text-red-900">${item.action}</p>
-                        <p class="text-red-700">${item.finding}</p>
-                        ${item.resource_link ? `<a href="${item.resource_link}" target="_blank" class="text-blue-600 hover:underline text-xs">View Documentation</a>` : ''}
-                    </div>
-                </div>
-            `;
-        });
-
-        summaryHTML += '</div></div>';
-    }
-
-    // Recommendations
-    if (summaryData.recommendations && summaryData.recommendations.length > 0) {
-        summaryHTML += `
-            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h4 class="text-lg font-semibold text-yellow-900 mb-3">Recommendations</h4>
-                <ul class="space-y-2 text-sm">
-        `;
-
-        summaryData.recommendations.slice(0, 5).forEach(rec => {
-            summaryHTML += `<li class="flex items-start">
-                <svg class="w-4 h-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                </svg>
-                <span class="text-yellow-800">${rec}</span>
-            </li>`;
-        });
-
-        summaryHTML += '</ul></div>';
-    }
-
-    // If no specific data, show success message with basic info
-    if (!summaryData.device_info && !summaryData.overview && (!summaryData.recommendations || summaryData.recommendations.length === 0)) {
-        summaryHTML += `
-            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h4 class="text-lg font-semibold text-green-900 mb-2">Analysis Completed Successfully</h4>
-                <p class="text-green-800">The playbook analysis has been completed. Check the Full Report tab for detailed information.</p>
-                <details class="mt-4">
-                    <summary class="cursor-pointer text-sm text-gray-600">View Raw Data</summary>
-                    <pre class="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto max-h-64">${JSON.stringify(summaryData, null, 2)}</pre>
-                </details>
-            </div>
-        `;
-    }
-
-    summaryHTML += '</div>';
-    return summaryHTML;
-}
 
 // Function to populate export status in the summary card
 function populateExportStatus(exportData) {
