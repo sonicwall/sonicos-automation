@@ -232,6 +232,11 @@ function updateNavigationState(sectionId) {
         btn.classList.add('text-white', 'hover:text-gray-200');
     });
 
+    // Special handling for results section - enable the nav button first
+    if (sectionId === 'results-section') {
+        enableResultsNav();
+    }
+
     // Highlight active nav button
     const activeButton = document.getElementById(`nav-${sectionId.replace('-section', '')}`);
     if (activeButton && !activeButton.classList.contains('nav-btn-disabled')) {
