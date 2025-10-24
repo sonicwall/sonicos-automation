@@ -299,7 +299,6 @@ class ServerOperationEngine:
                 os.mkdir(constants.START_TIMESTAMP_FOLDER)
 
             # Execute based on operation type
-            # TODO: Review the operation types.
             if operation_type == "analysis":
                 # Remediation Playbook Security Analysis
                 results = self._execute_security_analysis(api_session, api_base, target, firewall_info, config, progress_tracker, username, password)
@@ -623,7 +622,8 @@ class ServerOperationEngine:
                                                                     config,
                                                                     user_list,
                                                                     progress_tracker)
-                routine_results.update(cred_reset_results)
+                # TODO cannot update here as cred reset results is a list.
+                routine_results[target.firewall].update(cred_reset_results)
                 if progress_tracker:
                     progress_tracker.clear_substeps()
                     progress_tracker.update("Password change process completed", 82)
@@ -644,7 +644,7 @@ class ServerOperationEngine:
                                                                config,
                                                                user_list,
                                                                progress_tracker)
-                routine_results.update(cred_reset_results)
+                routine_results[target.firewall].update(cred_reset_results)
                 if progress_tracker:
                     progress_tracker.clear_substeps()
                     progress_tracker.update("TOTP unbind process completed", 84)
@@ -659,7 +659,7 @@ class ServerOperationEngine:
                     progress_tracker.update("Tech Support Report (TSR) export requested...", 84)
                     # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
                 target_numbers = (1, 1)
-                tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="post-remediation")
+                tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="backup")
                 export_results.update(tsr_result)
                 if progress_tracker:
                     if target.force_password_change and target.unbind_totp:
@@ -679,7 +679,7 @@ class ServerOperationEngine:
                     progress_tracker.update("Preferences export requested...", 86)
                     # progress_tracker.add_substep("Exporting preferences file...", "running")
                 target_numbers = (1, 1)
-                settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="post-remediation")
+                settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="backup")
                 export_results.update(settings_result)
                 if progress_tracker:
                     if target.force_password_change and target.unbind_totp:
@@ -1133,9 +1133,10 @@ class ServerOperationEngine:
                     args = SimpleNamespace(severity="all")
 
                     # Generate markdown report
-                    temp_markdown = generate_markdown_summary(
-                        converted_results, firewall_ip, firewall_info, args
-                    )
+                    temp_markdown = generate_markdown_summary(converted_results,
+                                                              firewall_ip,
+                                                              firewall_info,
+                                                              args)
 
                     if temp_markdown:
                         recommendations = self._extract_recommendations_from_markdown(temp_markdown)
@@ -1228,6 +1229,18 @@ class ServerOperationEngine:
                 },
                 "operation_timestamp": constants.generate_timestamp(),
             }
+
+        # result = {
+        #     "credential_reset": {
+        #         "users_processed": 0,
+        #         "passwords_reset": 0,
+        #         "totp_unbound": 0,
+        #         "user_results": [],
+        #         "status": "Credential reset operation completed",
+        #         "user_json": user_json
+        #     },
+        #     "operation_timestamp": constants.generate_timestamp(),
+        # }
 
         try:
             temp_password = config.get('temp_password', "")
@@ -1393,14 +1406,18 @@ class ServerOperationEngine:
                 user_results.append(routine_result_temp)
                 sleep(1)
 
-            # This would implement the full credential reset logic
+            print("\nDEBUG: Returning user_results from _execute_credential_reset()\n")
+            # TODO: as a list, this looks correct and has commit_successful flags and new password.
+            # return user_results
+
             # For now, return a placeholder result
             return {
                 "credential_reset": {
                     "users_processed": 0,
                     "passwords_reset": 0,
                     "totp_unbound": 0 if not config.get('unbind_totp') else 0,
-                    "status": "Not yet implemented"
+                    "status": "Not yet implemented",
+                    "results": user_results,
                 },
                 "operation_timestamp": constants.generate_timestamp(),
             }
@@ -1608,11 +1625,15 @@ class ServerOperationEngine:
                     progress_tracker.add_substep("Unable to retrieve users for TOTP unbind.", "error", "error")
             result['totp_unbind_get_users_failed'] = True
 
+        # return result
+
         return {
             "totp_unbind": {
                 "users_processed": 0,
                 "totp_unbound": 0,
-                "status": "Not yet implemented"
+                "totp_unbind_attempted": True,
+                "status": "Not yet implemented",
+                "results": result
             },
             "operation_timestamp": constants.generate_timestamp(),
         }

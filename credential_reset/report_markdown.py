@@ -1,5 +1,6 @@
 from common.utils import generate_timestamp
 from credential_reset.utils import should_run_check
+from rich import print
 
 
 def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict, args):
@@ -1177,16 +1178,69 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
 
     # Copies of the two lists to merge
     totp_unbind_results = results.get('totp_unbind_results', [])
-    fpc_results = results.get('users', [])
+    # fpc_results = results.get('users', [])
+    # fpc_results = results.get('users', {}).get('user', {}).get('local', {}).get('user', [])
+    fpc_results = results.get('credential_reset', {}).get('results', [])
+    totp_results = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_results', [])
+
+    # Combine the dictionaries within fpc_results and totp_results lists
+    combined_user_results = {}
+
+    # Process force password change results
+    for user_result in fpc_results:
+        username = user_result.get('name', 'Unknown')
+        combined_user_results[username] = {
+            'name': username,
+            'forced_password_change': user_result.get('forced_password_change', False),
+            'skipped': user_result.get('skipped', False),
+            'reason': user_result.get('reason', ''),
+            'user_update_successful': user_result.get('user_update_successful', False),
+            'commit_successful': user_result.get('commit_successful', False),
+            'new_password': user_result.get('new_password', ''),
+            'totp_unbound': False,
+            'totp_skipped': False,
+            'totp_reason': '',
+            'domain': user_result.get('domain', None),
+            'api_response': user_result.get('api_response', None),
+            'totp_unbind_attempted': False
+        }
+
+    # Process TOTP unbind results and merge with password change results
+    for totp_result in totp_results:
+        username = totp_result.get('name', 'Unknown')
+        if username in combined_user_results:
+            combined_user_results[username]['totp_unbound'] = totp_result.get('totp_unbound', False)
+            combined_user_results[username]['totp_skipped'] = totp_result.get('skipped', False)
+            combined_user_results[username]['totp_reason'] = totp_result.get('reason', '')
+            combined_user_results[username]['domain'] = totp_result.get('domain', None)
+            combined_user_results[username]['api_response'] = totp_result.get('api_response', None)
+            combined_user_results[username]['totp_unbind_attempted'] = totp_result.get('totp_unbind_attempted', False)
+        else:
+            combined_user_results[username] = {
+                'name': username,
+                'forced_password_change': False,
+                'skipped': False,
+                'reason': '',
+                'user_update_successful': False,
+                'commit_successful': False,
+                'new_password': '',
+                'totp_unbound': totp_result.get('totp_unbound', False),
+                'totp_skipped': totp_result.get('skipped', False),
+                'totp_reason': totp_result.get('reason', ''),
+                'domain': totp_result.get('domain', None),
+                'api_response': totp_result.get('api_response', None),
+                'totp_unbind_attempted': totp_result.get('totp_unbind_attempted', False)
+            }
 
     # Change some key named to avoid collision during merge
-    for t in totp_unbind_results:
-        t['totp_skipped'] = t.pop('skipped', False)
-        t['totp_reason'] = t.pop('reason', None)
-    totp_lookup = {t["name"]: t for t in totp_unbind_results}
+    # for t in totp_unbind_results:
+    #     t['totp_skipped'] = t.pop('skipped', False)
+    #     t['totp_reason'] = t.pop('reason', None)
+    # totp_lookup = {t["name"]: t for t in totp_unbind_results}
 
     # Merges the two lists based on username
-    user_list = [{**u, **totp_lookup.get(u["name"], {})} for u in fpc_results]
+    # user_list = [{**u, **totp_lookup.get(u["name"], {})} for u in fpc_results]
+    user_list = list(combined_user_results.values())
 
     try:
         if user_list:
@@ -1198,7 +1252,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
             for user in user_list:
                 force_pass = "Yes" if user.get('commit_successful') else "No"
                 skipped = "Yes" if user.get('skipped') else "No"
-                unbound_totp = "Yes" if user.get('totp_unbound', False) and not user.get('skipped', False) else ("No" if user.get('totp_unbind_attempted') else "N/A")
+                unbound_totp = "Yes" if user.get('totp_unbound', False) and not user.get('totp_skipped', False) else ("No" if user.get('totp_unbind_attempted') else "N/A")
                 totp_skipped = "Yes" if user.get('totp_skipped', False) else "No"
                 new_passwd = user.get('new_password', '')
                 md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} | {new_passwd} |")

@@ -668,7 +668,7 @@ function displaySummaryData(summaryData) {
         if (summaryData.recommendations && summaryData.recommendations.length > 0) {
             summaryHTML += `
                 <div class="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
-                    <h3 class="text-lg font-semibold text-violet-900 mb-3">
+                    <h3 class="text-sm font-semibold text-violet-900 mb-3">
                         <span class="inline-flex items-center">
                             <svg class="w-5 h-5 mr-2 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" clip-rule="evenodd"></path>
