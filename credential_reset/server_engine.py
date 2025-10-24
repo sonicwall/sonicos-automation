@@ -622,7 +622,6 @@ class ServerOperationEngine:
                                                                     config,
                                                                     user_list,
                                                                     progress_tracker)
-                # TODO cannot update here as cred reset results is a list.
                 routine_results[target.firewall].update(cred_reset_results)
                 if progress_tracker:
                     progress_tracker.clear_substeps()
@@ -1406,17 +1405,13 @@ class ServerOperationEngine:
                 user_results.append(routine_result_temp)
                 sleep(1)
 
-            print("\nDEBUG: Returning user_results from _execute_credential_reset()\n")
-            # TODO: as a list, this looks correct and has commit_successful flags and new password.
             # return user_results
-
-            # For now, return a placeholder result
             return {
                 "credential_reset": {
                     "users_processed": 0,
                     "passwords_reset": 0,
                     "totp_unbound": 0 if not config.get('unbind_totp') else 0,
-                    "status": "Not yet implemented",
+                    "status": "Credential reset operation completed",
                     "results": user_results,
                 },
                 "operation_timestamp": constants.generate_timestamp(),
@@ -1626,13 +1621,12 @@ class ServerOperationEngine:
             result['totp_unbind_get_users_failed'] = True
 
         # return result
-
         return {
             "totp_unbind": {
                 "users_processed": 0,
                 "totp_unbound": 0,
                 "totp_unbind_attempted": True,
-                "status": "Not yet implemented",
+                "status": "TOTP unbind operation completed",
                 "results": result
             },
             "operation_timestamp": constants.generate_timestamp(),

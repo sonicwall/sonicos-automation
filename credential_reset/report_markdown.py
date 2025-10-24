@@ -1247,15 +1247,16 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
             md_lines.append(f"")
             md_lines.append(f"#### User Details")
             md_lines.append(f"")
-            md_lines.append(f"| Username | Password Change Forced | Skipped Force Password Change | Reset/Unbind TOTP | Skipped TOTP Binding Reset | New Password |")
-            md_lines.append(f"|----------|-----------------------|-------------------------------|-------------------|----------------------------|--------------|")
+            md_lines.append(f"| Username | Password Change Forced | Skipped Force Password Change | Reset/Unbind TOTP | Skipped TOTP Binding Reset | New Password | Skip Reason |")
+            md_lines.append(f"|----------|-----------------------|-------------------------------|-------------------|----------------------------|--------------|-------------|")
             for user in user_list:
                 force_pass = "Yes" if user.get('commit_successful') else "No"
                 skipped = "Yes" if user.get('skipped') else "No"
                 unbound_totp = "Yes" if user.get('totp_unbound', False) and not user.get('totp_skipped', False) else ("No" if user.get('totp_unbind_attempted') else "N/A")
                 totp_skipped = "Yes" if user.get('totp_skipped', False) else "No"
                 new_passwd = user.get('new_password', '')
-                md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} | {new_passwd} |")
+                skip_reason = user.get('reason', '') or user.get('totp_reason', '') or ''
+                md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} | {new_passwd} | {skip_reason} |")
     except Exception as e:
         print(f"Error generating user details table: {e}")
 
