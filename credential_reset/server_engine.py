@@ -8,14 +8,25 @@ import json
 import importlib.util
 import sys
 import os
+from time import sleep
 from typing import Dict, Any, Tuple, Optional
 
 # Add parent directory to path to access common and sonicos modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from credential_reset.firewall import initialize_session, gather_firewall_info
-from credential_reset.export_helper import export_tsr_if_enabled
-from sonicos.api import logout, disable_sonicos_api_ssh
+from credential_reset.firewall import initialize_session, gather_firewall_info, get_local_users
+from credential_reset.export_helper import export_tsr_if_enabled, export_settings_if_enabled
+from credential_reset.utils import create_random_password
+from sonicos.api import (
+    logout,
+    disable_sonicos_api_ssh,
+    get_request,
+    post_request,
+    patch_request,
+    put_request,
+    commit_pending,
+    post_request_direct_cli
+)
 import common.constants as constants
 
 # Import load_targets from remediation-app.py using importlib
@@ -216,7 +227,7 @@ class ServerOperationEngine:
             if progress_tracker:
                 progress_tracker.update("Initializing operation...", 0)
 
-            self.logger.info(f"Starting {operation_type} operation")
+            self.logger.info(f"execute_single_target_operation() - Starting {operation_type} operation")
 
             # Convert config to target format
             # Get security level from dropdown selection
@@ -245,14 +256,14 @@ class ServerOperationEngine:
             }
 
             if progress_tracker:
-                progress_tracker.update(f"Connecting to {config.get('firewall')}...", 5)
+                progress_tracker.update(f"Connecting to {config.get('firewall')}...", 2)
 
             # Load the target
             target = load_targets(target_data)
             target_numbers = (1, 1)
 
             if progress_tracker:
-                progress_tracker.update("Establishing firewall session...", 5)
+                progress_tracker.update("Establishing firewall session...", 4)
 
             # Initialize session
             api_session, return_msg, api_base, username, password = initialize_session(
@@ -271,7 +282,7 @@ class ServerOperationEngine:
                 return operation_result
 
             if progress_tracker:
-                progress_tracker.update("Gathering firewall information...", 20)
+                progress_tracker.update("Gathering firewall information...", 8)
 
             # Gather firewall info
             firewall_info, error_msg = gather_firewall_info(api_session, api_base, target_numbers, silent=True)
@@ -282,7 +293,7 @@ class ServerOperationEngine:
                 return operation_result
 
             if progress_tracker:
-                progress_tracker.update(f"Connected to {firewall_info['device_model']} (Gen{firewall_info['firewall_generation']}) - {firewall_info['firmware_version']}", 30)
+                progress_tracker.update(f"Connected to {firewall_info['device_model']} - {firewall_info['firmware_version']}", 10)
 
             if os.path.exists(constants.START_TIMESTAMP_FOLDER) is False:
                 os.mkdir(constants.START_TIMESTAMP_FOLDER)
@@ -290,6 +301,7 @@ class ServerOperationEngine:
             # Execute based on operation type
             # TODO: Review the operation types.
             if operation_type == "analysis":
+                # Remediation Playbook Security Analysis
                 results = self._execute_security_analysis(api_session, api_base, target, firewall_info, config, progress_tracker, username, password)
                 if progress_tracker:
                     progress_tracker.clear_substeps()
@@ -299,32 +311,32 @@ class ServerOperationEngine:
                 results = {"error": f"Unknown operation type: {operation_type}"}
 
             if progress_tracker:
-                progress_tracker.update("Finalizing operation. Initializing cleanup...", 91)
+                progress_tracker.update("Finalizing operation. Initializing cleanup...", 90)
 
             # Cleanup
             try:
                 if progress_tracker:
-                    progress_tracker.update("Closing API session...", 92)
+                    progress_tracker.update("Closing API session...", 90)
                 logout(api_base, api_session, firewall_generation=firewall_info.get('firewall_generation'))
             except Exception as e:
-                self.logger.error(f"Error during logout: {e}")
+                self.logger.error(f"execute_single_target_operation() - Error during logout: {e}")
 
             # Reset API flag if needed
             if constants.get_autoenabled_sonicos_api():
                 if progress_tracker:
-                    progress_tracker.update("Disabling SonicOS API...", 94)
+                    progress_tracker.update("Disabling SonicOS API...", 92)
                 disable_sonicos_api_ssh(target.firewall, target.sshport, username, password)
                 constants.set_autoenabled_sonicos_api(False)
 
             if progress_tracker:
-                progress_tracker.update("Closing API session...", 95)
+                progress_tracker.update("Closing API session...", 92)
 
             operation_result["success"] = True
             operation_result["results"] = results
             operation_result["firewall_info"] = firewall_info
 
             if progress_tracker:
-                progress_tracker.update("Preparing results...", 100)
+                progress_tracker.update("Preparing results...", 95)
                 progress_tracker.complete(success=True, message="Operation completed successfully", result_data=operation_result)
 
             return operation_result
@@ -341,7 +353,7 @@ class ServerOperationEngine:
         """Execute security analysis on the firewall with progress tracking."""
         try:
             if progress_tracker:
-                progress_tracker.update("Starting security analysis...", 30)
+                progress_tracker.update("Starting security analysis...", 10)
 
             # Initialize export results dictionary to capture all export statuses
             export_results = {
@@ -353,11 +365,11 @@ class ServerOperationEngine:
             # Export TSR if requested (before analysis)
             if config.get('export_tsr', False):
                 if progress_tracker:
-                    progress_tracker.update("Tech Support Report (TSR) export requested...", 31)
+                    progress_tracker.update("Tech Support Report (TSR) export requested...", 12)
                     # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
                 target_numbers = (1, 1)
                 tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
-                logger.info(f"DEBUG: TSR result: {tsr_result}")
+                # logger.info(f"DEBUG: TSR result: {tsr_result}")
                 export_results.update(tsr_result)  # Merge TSR results into export_results
                 if progress_tracker:
                     progress_tracker.add_substep("Export complete", "completed", "success")
@@ -366,25 +378,23 @@ class ServerOperationEngine:
             # Export Settings if requested (before analysis)
             if config.get('export_settings', False):
                 if progress_tracker:
-                    progress_tracker.update("Preferences export requested...", 32)
+                    progress_tracker.update("Preferences export requested...", 14)
                     # progress_tracker.add_substep("Exporting preferences file...", "running")
-                from credential_reset.export_helper import export_settings_if_enabled
                 target_numbers = (1, 1)
                 settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
                 export_results.update(settings_result)  # Merge settings results into export_results
-                logger.info(f"DEBUG: Settings export result: {settings_result}")
                 if progress_tracker:
                     progress_tracker.add_substep("Export complete", "completed", "success")
                     progress_tracker.clear_substeps()
 
             if progress_tracker:
-                progress_tracker.update("Initializing playbook...", 34)
+                progress_tracker.update("Initializing playbook...", 15)
 
             # If the firewall is a GEN6, establish an alternate API session.
             alt_session = None
             if firewall_info.get('firewall_generation') == 6:
                 if progress_tracker:
-                    progress_tracker.update("Establishing GEN6 alternate API session...", 35)
+                    progress_tracker.update("Establishing GEN6 alternate API session...", 17)
 
                 from sonicos.api2 import Login
 
@@ -413,7 +423,7 @@ class ServerOperationEngine:
                 alt_session = None
 
             if progress_tracker:
-                progress_tracker.update("Executing playbook...", 40)
+                progress_tracker.update("Executing playbook...", 19)
 
             from credential_reset.playbook import Playbook
 
@@ -448,7 +458,7 @@ class ServerOperationEngine:
                           firewall_info=firewall_info)
 
             if progress_tracker:
-                progress_tracker.update("Running security analysis checks...", 45)
+                progress_tracker.update("Running security analysis checks...", 20)
 
             # Execute playbook methods based on security levels selected
             # Use dynamic approach - let each method decide if it should run based on severity filter
@@ -516,7 +526,7 @@ class ServerOperationEngine:
             for method_name, check_description, check_name in methods_to_run:
                 try:
                     if progress_tracker:
-                        progress_percent = 45 + int((completed_checks / total_checks) * 35)
+                        progress_percent = 20 + int((completed_checks / total_checks) * 60)
                         progress_tracker.update(f"Checking {check_description}...", progress_percent)
 
                     # Execute the playbook method if it exists
@@ -550,7 +560,7 @@ class ServerOperationEngine:
                     completed_checks += 1
 
                 except Exception as e:
-                    self.logger.error(f"Error running {method_name}: {e}")
+                    self.logger.error(f"_execute_security_analysis() - Error running {method_name}: {e}")
                     if progress_tracker:
                         progress_tracker.add_substep(f"{check_description} check failed: {str(e)}", "error", "error")
 
@@ -583,7 +593,107 @@ class ServerOperationEngine:
                 progress_tracker.clear_substeps()
                 progress_tracker.update("Security analysis completed", 80)
 
-            self.logger.info(f"Security analysis completed: {completed_checks}/{len(security_check_methods)} checks executed, {len(skipped_checks)} skipped")
+            self.logger.info(f"_execute_security_analysis() - Security analysis completed: {completed_checks}/{len(security_check_methods)} checks executed, {len(skipped_checks)} skipped")
+
+            # Fetch the users if password change or TOTP unbind is requested
+            user_list = {}
+            if target.force_password_change or target.unbind_totp:
+                if progress_tracker:
+                    progress_tracker.update("Fetching user list for remediation...", 80)
+                user_list = get_local_users(api_session,
+                                            api_base,
+                                            firewall_info.get('firewall_generation'),
+                                            firewall=target.firewall,
+                                            sshport=target.sshport,
+                                            username=target.username,
+                                            password=target.password,
+                                            target_numbers=(1, 1),
+                                            silent=False)
+
+                routine_results[target.firewall]['users'] = user_list
+                routine_results[target.firewall]['got_users'] = True
+                routine_results[target.firewall]['total_user_count'] = len(user_list.get('users', {}).get('local', {}).get('user', []))
+
+            if target.force_password_change:
+                self.logger.info("_execute_security_analysis() - Force password change requested")
+                cred_reset_results = self._execute_credential_reset(api_session,
+                                                                    api_base,
+                                                                    target,
+                                                                    firewall_info,
+                                                                    config,
+                                                                    user_list,
+                                                                    progress_tracker)
+                routine_results.update(cred_reset_results)
+                if progress_tracker:
+                    progress_tracker.clear_substeps()
+                    progress_tracker.update("Password change process completed", 82)
+            else:
+                self.logger.info("_execute_security_analysis() - password change was NOT requested")
+                routine_results[target.firewall]['got_users'] = False
+                routine_results[target.firewall]['force_password_change_disabled'] = True
+
+            # TOTP unbind process
+            if target.unbind_totp:
+                self.logger.info("_execute_security_analysis() - TOTP unbind requested")
+                if progress_tracker:
+                    progress_tracker.update("Starting TOTP unbind process...", 82)
+                cred_reset_results = self._execute_totp_unbind(api_session,
+                                                               api_base,
+                                                               target,
+                                                               firewall_info,
+                                                               config,
+                                                               user_list,
+                                                               progress_tracker)
+                routine_results.update(cred_reset_results)
+                if progress_tracker:
+                    progress_tracker.clear_substeps()
+                    progress_tracker.update("TOTP unbind process completed", 84)
+            else:
+                self.logger.info("_execute_security_analysis() - TOTP unbind was NOT requested")
+                routine_results[target.firewall]['totp_unbind_disabled'] = True
+
+            # Export operations after making user changes, if force password change or TOTP unbind were performed
+            if target.force_password_change or target.unbind_totp:
+                routine_results[target.firewall]['post_remediation'] = {}
+                # Export TSR if requested (after analysis and remediation)
+                if config.get('export_tsr', False):
+                    if progress_tracker:
+                        progress_tracker.update("Tech Support Report (TSR) export requested...", 84)
+                        # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
+                    target_numbers = (1, 1)
+                    tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="post-remediation")
+                    routine_results[target.firewall]['post_remediation']['tsr'] = tsr_result
+                    if progress_tracker:
+                        if target.force_password_change and target.unbind_totp:
+                            msg = "after forcing password changes and unbinding TOTP"
+                        elif target.force_password_change:
+                            msg = "after forcing password changes"
+                        elif target.unbind_totp:
+                            msg = "after unbinding TOTP"
+                        else:
+                            msg = ""
+                        progress_tracker.add_substep(f"Export complete {msg}", "completed", "success")
+                        progress_tracker.clear_substeps()
+
+                # Export Settings if requested (after analysis and remediation)
+                if config.get('export_settings', False):
+                    if progress_tracker:
+                        progress_tracker.update("Preferences export requested...", 86)
+                        # progress_tracker.add_substep("Exporting preferences file...", "running")
+                    target_numbers = (1, 1)
+                    settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="post-remediation")
+                    routine_results[target.firewall]['post_remediation']['settings'] = settings_result
+                    if progress_tracker:
+                        if target.force_password_change and target.unbind_totp:
+                            msg = "after forcing password changes and unbinding TOTP"
+                        elif target.force_password_change:
+                            msg = "after forcing password changes"
+                        elif target.unbind_totp:
+                            msg = "after unbinding TOTP"
+                        else:
+                            msg = ""
+                        progress_tracker.add_substep(f"Export complete {msg}", "completed", "success")
+                        progress_tracker.clear_substeps()
 
             # Build the security analysis result
             security_analysis = {
@@ -601,12 +711,12 @@ class ServerOperationEngine:
                 }
             }
 
-            # NEW: Generate markdown report
+            # Generate markdown report
             markdown_report = None
-            converted_results = {}  # Initialize early to avoid reference before assignment
+            converted_results = {}
             try:
                 if progress_tracker:
-                    progress_tracker.update("Generating markdown report...", 85)
+                    progress_tracker.update("Generating markdown report...", 87)
 
                 from credential_reset.report_markdown import generate_markdown_summary
 
@@ -624,7 +734,7 @@ class ServerOperationEngine:
                     progress_tracker.update("Markdown report generated", 88)
 
             except Exception as e:
-                self.logger.error(f"Failed to generate markdown report: {e}")
+                self.logger.error(f"_execute_security_analysis() - Failed to generate markdown report: {e}")
                 markdown_report = f"# Report Generation Error\n\nFailed to generate markdown report: {str(e)}"
                 # Ensure converted_results is available for summary generation even if markdown fails
                 if not converted_results:
@@ -633,15 +743,15 @@ class ServerOperationEngine:
             # Generate summary data for the frontend
             try:
                 if progress_tracker:
-                    progress_tracker.update("Generating summary data...", 90)
+                    progress_tracker.update("Generating summary data...", 89)
 
-                logger.info(f"DEBUG: Exported results: {export_results}")
+                logger.info(f"_execute_security_analysis() - Exported results: {export_results}\n")
                 summary_data = self._generate_summary_data(converted_results, check_results, routine_results, markdown_report, export_results)
 
                 if progress_tracker:
-                    progress_tracker.update("Summary data generated", 92)
+                    progress_tracker.update("Summary data generated", 90)
             except Exception as e:
-                self.logger.error(f"Failed to generate summary data: {e}")
+                self.logger.error(f"_execute_security_analysis() - Failed to generate summary data: {e}")
                 summary_data = {}
 
             return {
@@ -653,7 +763,7 @@ class ServerOperationEngine:
             }
 
         except Exception as e:
-            self.logger.error(f"Security analysis failed: {e}")
+            self.logger.error(f"_execute_security_analysis() - Security analysis failed: {e}")
             if progress_tracker:
                 progress_tracker.add_substep(f"Analysis failed: {str(e)}", "error", "error")
             return {"error": f"Security analysis failed: {str(e)}"}
@@ -1092,14 +1202,196 @@ class ServerOperationEngine:
             self.logger.error(f"Error generating fallback recommendations: {e}")
             return ["Review the detailed report for analysis results"]
 
-    def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, progress_tracker: Optional[Any] = None) -> Dict:
+    def _execute_credential_reset(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, user_json: Dict, progress_tracker: Optional[Any] = None) -> Dict:
         """Execute credential reset operation."""
+        if not user_json:
+            # Get the users
+            user_json = get_local_users(api_session,
+                                        api_base,
+                                        firewall_info.get('firewall_generation'),
+                                        firewall=target.firewall,
+                                        sshport=target.sshport,
+                                        username=target.username,
+                                        password=target.password,
+                                        target_numbers=(1, 1),
+                                        silent=False)
+
+
+        if not user_json:
+            return {
+                "credential_reset": {
+                    "users_processed": 0,
+                    "passwords_reset": 0,
+                    "totp_unbound": 0,
+                    "status": "No users retrieved; credential reset not performed",
+                    "user_json": user_json
+                },
+                "operation_timestamp": constants.generate_timestamp(),
+            }
+
         try:
-            # Export TSR if requested (before making changes)
-            tsr_result = {}
-            if config.get('export_tsr', False):
-                target_numbers = (1, 1)
-                tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-reset")
+            temp_password = config.get('temp_password', "")
+            if progress_tracker:
+                progress_tracker.update("Starting credential reset process...", 80)
+
+            # If the temp password is set and randomize_temp_password is not set...
+            if temp_password != "" and not config.get('randomize_temp_password', False):
+                if progress_tracker:
+                    progress_tracker.add_substep(f"Passwords will be reset to {temp_password} - If the configured password did not meet complexity requirements, it was modified to include one of each character category (upper/lowercase, digit, special)", "warning", "warning")
+                self.logger.info("_execute_credential_reset() - Using provided temp_password for resets")
+
+            # Elif the password is set and randomize_temp_password is set...
+            elif temp_password != "" and config.get('randomize_temp_password', False):
+                if progress_tracker:
+                    progress_tracker.add_substep("Randomized password generation is enabled; ignoring provided temp password", "warning", "warning")
+                self.logger.warning("_execute_credential_reset() - Both temp_password and randomize_temp_password are set; ignoring temp password")
+
+            user_results = []
+            users_list = user_json['user']['local']['user']
+            # For each user....
+            for usr in users_list:
+                # Skip special users
+                skip_users = ['All LDAP Users', 'All RADIUS Users']
+                if usr['name'] in skip_users:
+                    user_results.append({
+                        "name": usr['name'],
+                        "forced_password_change": False,
+                        "skipped": True,
+                        "reason": "Special user entry",
+                        "commit_successful": None
+                    })
+                    continue
+
+                # Skip expired users
+                if (usr.get('account_lifetime', {}).get('lifetime', "") == "expired" or
+                        usr.get('account_lifetime', {}).get('expired', False) is True):
+                    self.logger.info(f"Skipping {usr['name']} (expired user)")
+                    if progress_tracker:
+                        progress_tracker.add_substep(f"Skipping {usr['name']} (expired user)", "info", "info")
+                    user_results.append({
+                        "name": usr['name'],
+                        "forced_password_change": False,
+                        "skipped": True,
+                        "reason": "Expired user",
+                        "commit_successful": None
+                    })
+                    continue
+
+                # Skip domain users based on generation
+                if firewall_info.get('firewall_generation') == 7 and usr.get('domain', None) is not None:
+                    self.logger.info(f"_execute_credential_reset() - GEN7: Skipping {usr['name']} (domain user)")
+                    if progress_tracker:
+                        progress_tracker.add_substep(f"Skipping {usr['name']} (domain user)", "info", "info")
+                    user_results.append({
+                        "name": usr['name'],
+                        "forced_password_change": False,
+                        "skipped": True,
+                        "reason": "Domain user",
+                        "domain": usr.get('domain', ''),
+                        "commit_successful": None
+                    })
+                    if config.get('verbose', False):
+                        self.logger.debug(usr)
+                    continue
+
+                if firewall_info.get('firewall_generation') == 6 and usr.get('domain', {}).get('name', None) is not None:
+                    self.logger.info(f"_execute_credential_reset() - GEN6: Skipping {usr['name']} (domain user)")
+                    if progress_tracker:
+                        progress_tracker.add_substep(f"Skipping {usr['name']} (domain user)", "info", "info")
+                    user_results.append({
+                        "name": usr['name'],
+                        "forced_password_change": False,
+                        "skipped": True,
+                        "reason": "Domain user",
+                        "domain": usr.get('domain', {}).get('name', ''),
+                        "commit_successful": None
+                    })
+                    if config.get('verbose', False):
+                        self.logger.debug(usr)
+                    continue
+
+                # Process user password change
+                usr['force_password_change'] = True
+
+                # When temp password is not blank and randomization is not requested, we'll use the provided temp password.
+                # This temp password should already be validated and padded if necessary.
+                if temp_password != "" and not config.get('randomize_temp_password', False):
+                    if not config.get('silent', False):
+                        self.logger.info(f"_execute_credential_reset() - Using configured temporary password for {usr['name']}.")
+
+                # Overrides any configured temp password and generates a random one instead if
+                # randomization is requested or if the temp password is blank.
+                elif config.get('randomize_temp_password', False) or temp_password == "":
+                    if not config.get('silent', False):
+                        self.logger.info(f"_execute_credential_reset() - Generating random temporary password for {usr['name']}.")
+                    temp_password = create_random_password(length=12)
+
+                if firewall_info.get('firewall_generation') == 7:
+                    usr['password'] = temp_password
+                elif firewall_info.get('firewall_generation') == 6:
+                    usr['password']["pwd"] = temp_password
+                elif firewall_info.get('firewall_generation') == 5:
+                    usr['password'] = temp_password
+
+                uname = usr['name']
+                uuid = usr['uuid']
+
+                routine_result_temp = {
+                    "name": usr['name'],
+                    "forced_password_change": True,
+                    "skipped": False,
+                    "reason": None,
+                    "user_update_successful": False,
+                    "commit_successful": False,
+                    "new_password": temp_password
+                }
+
+                if firewall_info.get('firewall_generation') != 5:
+                    if not config.get('silent', False):
+                        # print(f"\nUpdating '{uname}'", end='')
+                        self.logger.info(f"_execute_credential_reset() - Updating '{uname}'")
+                else:
+                    if not config.get('silent', False):
+                        self.logger.info(f"_execute_credential_reset() - Updating '{uname}'")
+
+                # Create expected JSON structure
+                data_structure = {
+                    "user": {
+                        "local": {
+                            "user": [usr]
+                        }
+                    }
+                }
+
+                # Update the user based on generation
+                update_resp = {'status': {'success': False}}
+                if firewall_info.get('firewall_generation') == 7:
+                    update_resp = patch_request(api_base, api_session,
+                                                api_path=f"/api/sonicos/user/local/users/uuid/{uuid}",
+                                                data=data_structure, silent=config.get('silent', False))
+                elif firewall_info.get('firewall_generation') == 6:
+                    update_resp = put_request(api_base, api_session,
+                                              api_path=f"/api/sonicos/user/local/user/uuid/{uuid}",
+                                              data=data_structure, silent=config.get('silent', False))
+
+                if update_resp['status']['success'] is False:
+                    self.logger.info(f"_execute_credential_reset() - Error updating user: {uname}")
+                    self.logger.debug(update_resp)
+                    if progress_tracker:
+                        progress_tracker.add_substep(f"Error updating user: {uname}", "error", "error")
+
+                if progress_tracker:
+                    progress_tracker.add_substep(f"Updated {uname}", "success", "success")
+
+                routine_result_temp['user_update_successful'] = True
+
+                # Commit changes
+                if firewall_info.get('firewall_generation') != 5:
+                    commit_pending(api_base, api_session, silent=config.get('silent', False))
+                routine_result_temp['commit_successful'] = True
+
+                user_results.append(routine_result_temp)
+                sleep(1)
 
             # This would implement the full credential reset logic
             # For now, return a placeholder result
@@ -1111,12 +1403,219 @@ class ServerOperationEngine:
                     "status": "Not yet implemented"
                 },
                 "operation_timestamp": constants.generate_timestamp(),
-                "tsr_result": tsr_result  # Include TSR result
             }
 
         except Exception as e:
             self.logger.error(f"Credential reset failed: {e}")
             return {"error": f"Credential reset failed: {str(e)}"}
+
+    def _execute_totp_unbind(self, api_session, api_base: str, target, firewall_info: Dict, config: Dict, user_json: Dict, progress_tracker: Optional[Any] = None) -> Dict:
+        """Execute TOTP unbind operations. Unbinds TOTP from all eligible local users."""
+        if not user_json:
+            # Get the users
+            user_json = get_local_users(api_session,
+                                        api_base,
+                                        firewall_info.get('firewall_generation'),
+                                        firewall=target.firewall,
+                                        sshport=target.sshport,
+                                        username=target.username,
+                                        password=target.password,
+                                        target_numbers=(1, 1),
+                                        silent=False)
+
+        if not user_json:
+            return {
+                "totp_unbind": {
+                    "users_processed": 0,
+                    "totp_unbound": 0,
+                    "status": "No users retrieved; TOTP unbind not performed",
+                    "user_json": user_json
+                },
+                "operation_timestamp": constants.generate_timestamp(),
+            }
+
+        result = {
+            'totp_unbind_attempted': True,
+            'totp_unbind_successful_count': 0,
+            'totp_unbind_failed_count': 0,
+            'totp_unbind_results': []
+        }
+
+        self.logger.info(f"_execute_totp_unbind() - Starting TOTP unbind process for all local users...")
+        if progress_tracker:
+            progress_tracker.update("Removing TOTP bindings from all local users...", 83)
+
+        # Skip TOTP unbind for GEN5 firewalls
+        if firewall_info.get('firewall_generation') == 5:
+            self.logger.info(f"_execute_totp_unbind() - TOTP unbind skipped - GEN5 firewalls do not support TOTP.")
+            if progress_tracker:
+                progress_tracker.add_substep("TOTP unbind skipped - GEN5 firewalls do not support TOTP.", "info", "info")
+                progress_tracker.clear_substeps()
+            result['totp_unbind_gen5_skipped'] = True
+            return result
+
+        # Get users for TOTP unbind if not already available
+        totp_users = user_json
+        if totp_users is None:
+            if not config.get('silent', False):
+                self.logger.info(f"_execute_totp_unbind() - Retrieving users for TOTP unbind...")
+            try:
+                if firewall_info.get('firewall_generation') == 7:
+                    totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users', silent=config.get('silent', False))
+                elif firewall_info.get('firewall_generation') == 6:
+                    totp_users = get_request(api_base, api_session, '/api/sonicos/user/local/users', silent=config.get('silent', False))
+            except KeyboardInterrupt:
+                print(f"\nStopped!")
+                exit()
+            except Exception as err:
+                self.logger.info(f"_execute_totp_unbind() - Error getting users for TOTP unbind: {err}")
+                progress_tracker.clear_substeps()
+                # result['totp_unbind_get_users_error'] = err
+                # result['totp_unbind_get_users_error_msg'] = str(err)
+                return result
+
+            # Handle bytes response
+            if isinstance(totp_users, bytes):
+                totp_users = totp_users.replace(b': expired', b': "expired"')
+                totp_users = json.loads(totp_users.decode('utf-8'))
+
+        # Process TOTP unbind if we have users
+        if totp_users and isinstance(totp_users, dict):
+            if totp_users.get('user', {}).get('local', {}).get('user', None) is not None:
+                users_list = totp_users['user']['local']['user']
+                self.logger.info(f"_execute_totp_unbind() - Found {len(users_list)} users for TOTP unbind processing...")
+
+                for usr in users_list:
+                    # Skip special users
+                    skip_users = ['All LDAP Users', 'All RADIUS Users']
+                    if usr['name'] in skip_users:
+                        result['totp_unbind_results'].append({
+                            "name": usr['name'],
+                            "totp_unbound": False,
+                            "skipped": True,
+                            "reason": "Special user entry"
+                        })
+                        continue
+
+                    # Skip expired users
+                    if (usr.get('account_lifetime', {}).get('lifetime', "") == "expired" or
+                            usr.get('account_lifetime', {}).get('expired', False) is True):
+                        self.logger.info(f"_execute_totp_unbind() - Skipping TOTP unbind for {usr['name']} (expired user)")
+                        if progress_tracker:
+                            progress_tracker.add_substep(f"Skipping TOTP unbind for {usr['name']} (expired user)", "info", "info")
+                        result['totp_unbind_results'].append({
+                            "name": usr['name'],
+                            "totp_unbound": False,
+                            "skipped": True,
+                            "reason": "Expired user"
+                        })
+                        continue
+
+                    # Skip domain users
+                    is_domain_user = False
+                    domain_name = ""
+                    if firewall_info.get('firewall_generation') == 7:
+                        is_domain_user = usr.get('domain', None) is not None
+                        domain_name = usr.get('domain', '') if is_domain_user else ""
+                    elif firewall_info.get('firewall_generation') == 6:
+                        is_domain_user = usr.get('domain', {}).get('name', None) is not None
+                        domain_name = usr.get('domain', {}).get('name', '') if is_domain_user else ""
+
+                    if is_domain_user:
+                        self.logger.info(f"_execute_totp_unbind() - Skipping TOTP unbind for {usr['name']} (domain user: {domain_name})")
+                        result['totp_unbind_results'].append({
+                            "name": usr['name'],
+                            "totp_unbound": False,
+                            "skipped": True,
+                            "reason": "Domain user",
+                            "domain": domain_name
+                        })
+                        continue
+
+                    # Perform TOTP unbind for this user
+                    uname = usr['name']
+                    if not config.get('silent', False):
+                        self.logger.info(f"_execute_totp_unbind() - Unbinding TOTP for user '{uname}'...")
+
+                    if firewall_info.get('firewall_generation') == 6:
+                        commands = f"user local\nuser {uname}\nunbind-totp-key\nexit\nexit"
+                        totp_unbound = post_request_direct_cli(api_base,
+                                                               api_session,
+                                                               command=commands,
+                                                               silent=config.get('silent', False))
+
+                    else:
+                        totp_unbound = post_request(api_base,
+                                                    api_session,
+                                                    data=None,
+                                                    api_path=f"/api/sonicos/user/local/unbind-totp-key/{uname}",
+                                                    silent=config.get('silent', False))
+
+                    if totp_unbound:
+                        success = False
+                        api_result = totp_unbound.get('status', {}).get('info', [{}])[-1].get('message',
+                                                                                              'No message returned.')
+                        if api_result.lower() == "changes made." or api_result.lower() == "success.":
+                            success = True
+                        if not config.get('silent', False):
+                            self.logger.info(f"_execute_totp_unbind() - Reset TOTP for user '{uname}'... {api_result}")
+                            if progress_tracker:
+                                progress_tracker.add_substep(f"Reset TOTP for user '{uname}'... {api_result}", "info", "info")
+
+                        result['totp_unbind_results'].append({
+                            "name": uname,
+                            "totp_unbound": success,
+                            "skipped": False,
+                            "reason": None,
+                            "api_response": api_result
+                        })
+
+                        if success:
+                            result['totp_unbind_successful_count'] += 1
+                        else:
+                            result['totp_unbind_failed_count'] += 1
+                    else:
+                        if not config.get('silent', False):
+                            self.logger.info(f"_execute_totp_unbind() - Error unbinding TOTP for user '{uname}' - no response from API.")
+                        result['totp_unbind_results'].append({
+                            "name": uname,
+                            "totp_unbound": False,
+                            "skipped": False,
+                            "reason": "API error - no response",
+                            "api_response": None
+                        })
+                        result['totp_unbind_failed_count'] += 1
+
+                # Commit changes after all TOTP unbinds
+                if result['totp_unbind_successful_count'] > 0:
+                    if not config.get('silent', False):
+                        self.logger.info(f"_execute_totp_unbind() - Committing TOTP unbind changes...")
+                    commit_pending(api_base, api_session, silent=config.get('silent', False))
+
+                self.logger.info(f"_execute_totp_unbind() - Finished resetting TOTP bindings")
+                if progress_tracker:
+                    progress_tracker.add_substep(f"TOTP unbind complete - {result['totp_unbind_successful_count']} successful, {result['totp_unbind_failed_count']} failed", "info", "info")
+            else:
+                if not config.get('silent', False):
+                    self.logger.info(f"_execute_totp_unbind() - No local users found for TOTP unbind.")
+                    if progress_tracker:
+                        progress_tracker.add_substep("No local users found for TOTP unbind.", "info", "info")
+                result['totp_unbind_no_users'] = True
+        else:
+            if not config.get('silent', False):
+                self.logger.info(f"_execute_totp_unbind() - Unable to retrieve users for TOTP unbind.")
+                if progress_tracker:
+                    progress_tracker.add_substep("Unable to retrieve users for TOTP unbind.", "error", "error")
+            result['totp_unbind_get_users_failed'] = True
+
+        return {
+            "totp_unbind": {
+                "users_processed": 0,
+                "totp_unbound": 0,
+                "status": "Not yet implemented"
+            },
+            "operation_timestamp": constants.generate_timestamp(),
+        }
 
     def _extract_brief_summary_items(self, converted_results: Dict, check_results: Dict, routine_results: Dict, args) -> Dict:
         """

@@ -106,7 +106,7 @@ class ProgressTracker:
         }
 
         self.substeps.append(substep)
-        self.logger.info(f"Substep: {description}")
+        self.logger.info(f"add_substep() - Substep: {description}")
 
         # Send substep event
         self._send_progress_event(
@@ -126,7 +126,7 @@ class ProgressTracker:
         without carrying over substeps from previous phases.
         """
         self.substeps.clear()
-        self.logger.debug(f"Cleared substeps for operation {self.operation_id}")
+        self.logger.debug(f"clear_substeps() - Cleared substeps for operation {self.operation_id}")
 
     def complete(self, success: bool = True, message: str = "Operation completed", result_data: Dict = None) -> None:
         """
@@ -146,7 +146,7 @@ class ProgressTracker:
         status = "completed" if success else "error"
         log_level = "success" if success else "error"
 
-        self.logger.info(f"Operation {self.operation_id} {status} in {elapsed_time:.2f}s: {message}")
+        self.logger.info(f"complete() - Operation {self.operation_id} {status} in {elapsed_time:.2f}s: {message}")
 
         # Send completion event with result data
         self._send_progress_event(
@@ -169,7 +169,7 @@ class ProgressTracker:
                     "result_data": result_data
                 }, timeout=1)
             except queue.Full:
-                self.logger.warning(f"Progress queue full, dropped completion event for {self.operation_id}")
+                self.logger.warning(f"complete() - Progress queue full, dropped completion event for {self.operation_id}")
 
     def error(self, error_message: str, details: Optional[str] = None, result_data: Dict = None) -> None:
         """
@@ -232,7 +232,7 @@ class ProgressTracker:
         try:
             self.progress_queue.put(event_data, timeout=1)
         except queue.Full:
-            self.logger.warning(f"Progress queue full, dropped event for {self.operation_id}")
+            self.logger.warning(f"_send_progress_event() - Progress queue full, dropped event for {self.operation_id}")
 
 
 class ProgressManager:
@@ -272,7 +272,7 @@ class ProgressManager:
                 "last_activity": time.time()
             }
 
-        self.logger.info(f"Created operation {operation_id} with {total_steps} steps")
+        self.logger.info(f"create_operation() - Created operation {operation_id} with {total_steps} steps")
         return tracker
 
     def get_operation_queue(self, operation_id: str) -> Optional[queue.Queue]:
@@ -302,7 +302,7 @@ class ProgressManager:
         with self.lock:
             if operation_id in self.active_operations:
                 self.active_operations[operation_id]["completed_at"] = time.time()
-                self.logger.info(f"Marked operation {operation_id} as complete")
+                self.logger.info(f"complete_operation() - Marked operation {operation_id} as complete")
 
     def remove_operation(self, operation_id: str) -> None:
         """
@@ -314,7 +314,7 @@ class ProgressManager:
         with self.lock:
             if operation_id in self.active_operations:
                 del self.active_operations[operation_id]
-                self.logger.info(f"Removed operation {operation_id}")
+                self.logger.info(f"remove_operation() - Removed operation {operation_id}")
 
     def get_active_operations(self) -> List[str]:
         """Get list of currently active operation IDs."""
@@ -346,10 +346,10 @@ class ProgressManager:
 
                     for operation_id in operations_to_remove:
                         del self.active_operations[operation_id]
-                        self.logger.info(f"Cleaned up abandoned operation {operation_id}")
+                        self.logger.info(f"_cleanup_worker() - Cleaned up abandoned operation {operation_id}")
 
             except Exception as e:
-                self.logger.error(f"Error in progress cleanup worker: {e}")
+                self.logger.error(f"_cleanup_worker() - Error in progress cleanup worker: {e}")
 
 
 # Global progress manager instance
