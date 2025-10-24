@@ -671,8 +671,14 @@ function populateUsersTab(usersData) {
                   }
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <button class="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded copy-btn" data-password="${escapeHtml(user.new_password || '')}">Copy</button>
-                    <span class="text-gray-600">${escapeHtml(user.new_password || '')}</span>
+                  ${user.new_password
+                      ? `<button class="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded copy-btn"
+                          data-password="${escapeHtml(user.new_password || '')}">
+                          Copy
+                        </button>
+                        <span class="text-gray-600">${escapeHtml(user.new_password || '')}</span>`
+                      : `<span class="text-gray-600"></span>`
+                  }
                 </td>
             </tr>
         `;
