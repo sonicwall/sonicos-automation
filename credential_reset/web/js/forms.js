@@ -575,6 +575,149 @@ async function handleAnalysisResult(result) {
     console.log('Analysis processing complete');
 }
 
+// Function to extract users data from summary data
+function extractUsersData(summaryData) {
+    console.log('Extracting users data from summary data...');
+
+    if (!summaryData) {
+        console.log('No summary data provided');
+        return null;
+    }
+
+    let usersData = null;
+
+    // Helper function to safely access nested object properties
+    function getNestedProperty(obj, path) {
+        try {
+            return path.split('.').reduce((current, key) => {
+                return current && typeof current === 'object' && current.hasOwnProperty(key) ? current[key] : null;
+            }, obj);
+        } catch (error) {
+            console.log(`Error accessing path ${path}:`, error);
+            return null;
+        }
+    }
+
+    // Try different possible paths where users data might be located
+    const possiblePaths = [
+        'users',
+        'users.user.local.user',
+        'results.local_users',
+        'overview.users',
+    ];
+
+    // First, look for actual user data arrays/objects
+    for (const path of possiblePaths) {
+        const current = getNestedProperty(summaryData, path);
+
+        if (current && Array.isArray(current) && current.length > 0) {
+            console.log(`Found users data array at path: ${path}`, current);
+            usersData = current;
+            break;
+        } else if (current && typeof current === 'object' && Object.keys(current).length > 0) {
+            // Check if this looks like user data (has username-like keys)
+            const keys = Object.keys(current);
+            const looksLikeUserData = keys.some(key =>
+                    typeof key === 'string' && (
+                        key.toLowerCase().includes('admin') ||
+                        key.toLowerCase().includes('user') ||
+                        key.match(/^[a-zA-Z][a-zA-Z0-9_-]*$/) // looks like a username
+                    )
+            );
+
+            if (looksLikeUserData) {
+                // Convert object to array if it's user data in object format
+                const userArray = Object.entries(current).map(([username, userData]) => {
+                    if (typeof userData === 'object') {
+                        return {username, ...userData};
+                    } else {
+                        return {username, status: userData};
+                    }
+                });
+                if (userArray.length > 0) {
+                    console.log(`Found users data as object at path: ${path}, converted to array:`, userArray);
+                    usersData = userArray;
+                    break;
+                }
+            }
+        }
+    }
+
+    // If no users found in standard paths, check if there are any findings related to users
+    if (!usersData && summaryData.findings) {
+        const userFindings = summaryData.findings.filter(finding =>
+                finding && typeof finding === 'object' && (
+                    (finding.check && finding.check.toLowerCase().includes('user')) ||
+                    (finding.category && finding.category.toLowerCase().includes('user')) ||
+                    (finding.type && finding.type.toLowerCase().includes('user')) ||
+                    (finding.description && finding.description.toLowerCase().includes('user'))
+                )
+        );
+
+        // TODO: Look at this.
+        if (userFindings.length > 0) {
+            console.log('Found user-related findings, creating placeholder users data:', userFindings);
+            // Create a user row for each finding
+            usersData = userFindings.map((finding, index) => ({
+                user: `Finding_User_${index + 1}`,
+                pwdChangeForced: '',
+                pwdChangeSkipped: '',
+                totpResetBinding: '',
+                totpResetSkipped: '',
+                userNewPwd: '',
+                skipReason: ''
+            }));
+
+            // Check for user count information to potentially create placeholder entries
+            if (!usersData) {
+                const userCount = getNestedProperty(summaryData, 'overview.total_user_count') ||
+                    getNestedProperty(summaryData, 'brief_summary.total_users') ||
+                    getNestedProperty(summaryData, 'device_info.user_count');
+
+                // TODO: Look at this.
+                if (userCount && typeof userCount === 'number' && userCount > 0) {
+                    console.log(`Found user count (${userCount}), creating placeholder users`);
+                    usersData = Array.from({length: Math.min(userCount, 10)}, (_, index) => ({
+                        username: `User_${index + 1}`,
+                        pwdChangeForced: '',
+                        pwdChangeSkipped: '',
+                        totpResetBinding: '',
+                        totpResetSkipped: '',
+                        userNewPwd: '',
+                        skipReason: '',
+                        source: 'count',
+                        details: `One of ${userCount} users detected on the system`
+                    }));
+                }
+            }
+
+            // Final fallback: check raw data for any mention of users
+            if (!usersData) {
+                console.log('No users data found in standard locations, checking raw data...');
+                const rawDataStr = JSON.stringify(summaryData).toLowerCase();
+                if (rawDataStr.includes('user') || rawDataStr.includes('admin') || rawDataStr.includes('account')) {
+                    console.log('Raw data contains user-related information but no structured users data found');
+                    // Create a single placeholder entry indicating users exist but details are not available
+                    usersData = [{
+                        user: 'Detected_Users',
+                        pwdChangeForced: '',
+                        pwdChangeSkipped: '',
+                        totpResetBinding: '',
+                        totpResetSkipped: '',
+                        userNewPwd: '',
+                        skipReason: '',
+                        source: 'raw_data',
+                        details: 'User information detected in system data but details are not available'
+                    }];
+                }
+            }
+
+            console.log('Users data extraction result:', usersData);
+            return usersData;
+        }
+    }
+}
+
 // Function to display summary data in the results section
 function displaySummaryData(summaryData) {
     console.log('Displaying summary data:', summaryData);
@@ -648,7 +791,7 @@ function displaySummaryData(summaryData) {
     if (summaryData.brief_summary) {
         const briefSummary = summaryData.brief_summary;
 
-        // Recommendations Section - NOW FIRST
+        // Recommendations Section
         if (summaryData.recommendations && summaryData.recommendations.length > 0) {
             summaryHTML += `
                 <div class="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
@@ -678,7 +821,7 @@ function displaySummaryData(summaryData) {
             `;
         }
 
-        // Action Items Section - TABLE FORMAT - NOW SECOND
+        // Action Items Section
         if (briefSummary.action_items && briefSummary.action_items.length > 0) {
             summaryHTML += `
                 <div class="mb-6">
@@ -720,7 +863,7 @@ function displaySummaryData(summaryData) {
             briefSummary.action_items.forEach((item, index) => {
                 // Determine severity styling
                 let severityBadgeClass, severityTextClass;
-                switch(item.priority.toLowerCase()) {
+                switch (item.priority.toLowerCase()) {
                     case 'critical':
                         severityBadgeClass = 'bg-red-100 text-red-800';
                         severityTextClass = 'text-red-900';
@@ -831,12 +974,76 @@ function displaySummaryData(summaryData) {
         `;
     }
 
+    // If no sections were added, provide a fallback message
+    if (summaryHTML.trim() === '') {
+        summaryHTML = `
+        <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 class="text-lg font-semibold text-blue-900 mb-3">
+                <span class="inline-flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    ${summaryData.message || 'Playbook Analysis Complete'}
+                </span>
+            </h3>
+            <p class="text-blue-800 text-sm">
+                ${summaryData.status === 'success' ?
+            'The analysis has completed successfully. Check the other tabs for detailed results.' :
+            'Analysis completed. Review the results in the available tabs.'}
+            </p>
+        </div>
+    `;
+    }
+
     summaryContainer.innerHTML = summaryHTML;
 
     // Populate export status in the new card
     // Transform the actual export data structure to match what populateExportStatus expects
     const transformedExports = transformExportData(summaryData);
     populateExportStatus(transformedExports);
+
+    // Extract and populate users data if available with error handling
+    try {
+        // const usersData = extractUsersData(summaryData);
+        const usersData = summaryData.users;
+        if (usersData && Array.isArray(usersData) && usersData.length > 0) {
+            console.log('Found users data, populating users tab:', usersData);
+            if (typeof window.populateUsersTab !== 'undefined') {
+                window.populateUsersTab(usersData);
+            } else {
+                console.warn('populateUsersTab function not available');
+            }
+        } else {
+            console.log('No users data found, keeping users tab disabled');
+            // Ensure users tab stays disabled
+            if (typeof window.disableUsersTab !== 'undefined') {
+                window.disableUsersTab();
+            }
+        }
+    } catch (error) {
+        console.error('Error processing users data:', error);
+        // Ensure users tab stays disabled on error
+        if (typeof window.disableUsersTab !== 'undefined') {
+            window.disableUsersTab();
+        }
+    }
+
+    // Show the tabs container now that content is ready
+    const tabsContainer = document.getElementById('results-tabs-container');
+    if (tabsContainer) {
+        tabsContainer.classList.remove('hide');
+        console.log('Results tabs container is now visible');
+
+        // Set up tab functionality if not already done
+        if (typeof window.setupResultsTabs !== 'undefined') {
+            window.setupResultsTabs();
+            console.log('Results tabs functionality initialized');
+        } else {
+            console.warn('setupResultsTabs function not available');
+        }
+    } else {
+        console.warn('Results tabs container not found');
+    }
 
     console.log('Summary data displayed successfully');
 }
@@ -845,6 +1052,12 @@ function displaySummaryData(summaryData) {
 // Function to populate export status in the summary card
 function populateExportStatus(exportData) {
     const exportContainer = document.getElementById('export-status-content');
+
+    if (!exportContainer) {
+        // Element not ready yet, retry after DOM update
+        setTimeout(() => populateExportStatus(exportData), 10);
+        return;
+    }
 
     if (!exportData || Object.keys(exportData).length === 0) {
         exportContainer.innerHTML = `

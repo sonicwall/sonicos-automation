@@ -314,10 +314,30 @@ function initializeResults() {
 // Function to set up results tab switching
 function setupResultsTabs() {
     const summaryTab = document.getElementById('tab-summary');
+    const usersTab = document.getElementById('tab-users');
     const reportTab = document.getElementById('tab-report');
 
     if (summaryTab) {
         summaryTab.addEventListener('click', () => showResultsTab('summary'));
+    }
+
+    if (usersTab) {
+        usersTab.addEventListener('click', (event) => {
+            try {
+                console.log('Users tab clicked, checking if enabled...');
+                // Only allow clicking if tab is not disabled
+                if (!usersTab.disabled) {
+                    console.log('Users tab is enabled, switching to users tab');
+                    showResultsTab('users');
+                } else {
+                    console.log('Users tab is disabled, click ignored');
+                    event.preventDefault();
+                }
+            } catch (error) {
+                console.error('Error handling users tab click:', error);
+                event.preventDefault();
+            }
+        });
     }
 
     if (reportTab) {
@@ -331,47 +351,92 @@ function setupResultsTabs() {
 function showResultsTab(tabName) {
     console.log(`Switching to ${tabName} tab`);
 
-    // Update tab button states
-    const summaryTab = document.getElementById('tab-summary');
-    const reportTab = document.getElementById('tab-report');
+    try {
+        // Get all tab elements
+        const summaryTab = document.getElementById('tab-summary');
+        const usersTab = document.getElementById('tab-users');
+        const reportTab = document.getElementById('tab-report');
 
-    if (summaryTab && reportTab) {
-        // Remove active state from both tabs
-        summaryTab.classList.remove('tab-active', 'border-blue-500', 'text-blue-600');
-        summaryTab.classList.add('tab-inactive', 'border-transparent', 'text-gray-500');
+        // Get all content elements
+        const summaryContent = document.getElementById('tab-content-summary');
+        const usersContent = document.getElementById('tab-content-users');
+        const reportContent = document.getElementById('tab-content-report');
 
-        reportTab.classList.remove('tab-active', 'border-blue-500', 'text-blue-600');
-        reportTab.classList.add('tab-inactive', 'border-transparent', 'text-gray-500');
-
-        // Add active state to selected tab
-        if (tabName === 'summary') {
-            summaryTab.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
-            summaryTab.classList.add('tab-active', 'border-blue-500', 'text-blue-600');
-        } else {
-            reportTab.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
-            reportTab.classList.add('tab-active', 'border-blue-500', 'text-blue-600');
+        // Check if users tab is disabled and prevent switching to it
+        if (tabName === 'users' && usersTab && usersTab.disabled) {
+            console.log('Cannot switch to users tab - it is disabled');
+            return;
         }
-    }
 
-    // Show/hide tab content
-    const summaryContent = document.getElementById('tab-content-summary');
-    const reportContent = document.getElementById('tab-content-report');
-
-    if (summaryContent && reportContent) {
-        if (tabName === 'summary') {
-            summaryContent.classList.remove('hide');
-            summaryContent.classList.add('show');
-            reportContent.classList.remove('show');
-            reportContent.classList.add('hide');
-        } else {
-            reportContent.classList.remove('hide');
-            reportContent.classList.add('show');
-            summaryContent.classList.remove('show');
-            summaryContent.classList.add('hide');
+    // Reset all tabs to inactive state
+    const tabs = [summaryTab, usersTab, reportTab];
+    tabs.forEach(tab => {
+        if (tab) {
+            tab.classList.remove('tab-active', 'border-blue-500', 'text-blue-600', 'border-orange-500', 'text-orange-600');
+            tab.classList.add('tab-inactive', 'border-transparent', 'text-gray-500');
         }
+    });
+
+    // Hide all content
+    const contents = [summaryContent, usersContent, reportContent];
+    contents.forEach(content => {
+        if (content) {
+            content.classList.remove('show');
+            content.classList.add('hide');
+        }
+    });
+
+    // Activate the selected tab and show its content
+    switch (tabName) {
+        case 'summary':
+            if (summaryTab && summaryContent) {
+                summaryTab.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
+                summaryTab.classList.add('tab-active', 'border-orange-500', 'text-orange-600');
+                summaryContent.classList.remove('hide');
+                summaryContent.classList.add('show');
+            }
+            break;
+        case 'users':
+            if (usersTab && usersContent) {
+                usersTab.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
+                usersTab.classList.add('tab-active', 'border-blue-500', 'text-blue-600');
+                usersContent.classList.remove('hide');
+                usersContent.classList.add('show');
+            }
+            break;
+        case 'report':
+            if (reportTab && reportContent) {
+                reportTab.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
+                reportTab.classList.add('tab-active', 'border-blue-500', 'text-blue-600');
+                reportContent.classList.remove('hide');
+                reportContent.classList.add('show');
+            }
+            break;
+        default:
+            console.warn(`Unknown tab name: ${tabName}`);
+            // Default to summary tab
+            if (summaryTab && summaryContent) {
+                summaryTab.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
+                summaryTab.classList.add('tab-active', 'border-orange-500', 'text-orange-600');
+                summaryContent.classList.remove('hide');
+                summaryContent.classList.add('show');
+            }
     }
 
     console.log(`Tab switch to ${tabName} completed`);
+
+    } catch (error) {
+        console.error(`Error switching to ${tabName} tab:`, error);
+        // Fallback to summary tab on error
+        const summaryTab = document.getElementById('tab-summary');
+        const summaryContent = document.getElementById('tab-content-summary');
+        if (summaryTab && summaryContent) {
+            summaryTab.classList.remove('tab-inactive', 'border-transparent', 'text-gray-500');
+            summaryTab.classList.add('tab-active', 'border-orange-500', 'text-orange-600');
+            summaryContent.classList.remove('hide');
+            summaryContent.classList.add('show');
+        }
+    }
 }
 
 // Function to initialize help section features
@@ -468,127 +533,175 @@ async function initializeNavigation() {
     }
 }
 
-// Function to handle results card clicks on dashboard
-function handleResultsCardClick() {
-    const resultsButton = document.getElementById('nav-results');
-    if (resultsButton && !resultsButton.classList.contains('nav-btn-disabled')) {
-        showSection('results-section');
+// Function to enable the users tab
+function enableUsersTab() {
+    console.log('Enabling users tab...');
+
+    const usersTab = document.getElementById('tab-users');
+    if (usersTab) {
+        // Remove the disabled attribute - this will automatically make disabled: classes inactive
+        usersTab.disabled = false;
+
+        // Add hover effects that were suppressed by disabled state
+        usersTab.classList.add('hover:text-gray-700');
+
+        // Make the button cursor pointer when enabled
+        usersTab.style.cursor = 'pointer';
+
+        console.log('Users tab enabled successfully');
+    } else {
+        console.warn('Users tab element not found');
     }
 }
 
-// Function to disable the Results nav item
-function disableResultsNav() {
-    const resultsButton = document.getElementById('nav-results');
-    const resultsCard = document.getElementById('results-card');
-    const resultsCardStatus = document.getElementById('results-card-status');
+// Function to disable the users tab
+function disableUsersTab() {
+    console.log('Disabling users tab...');
 
-    if (resultsButton) {
-        resultsButton.classList.add('nav-btn-disabled');
-        resultsButton.classList.remove('nav-btn-enabled', 'nav-btn-highlight');
-    }
+    const usersTab = document.getElementById('tab-users');
+    if (usersTab) {
+        // Set the disabled attribute - this will automatically activate disabled: classes
+        usersTab.disabled = true;
 
-    if (resultsCard) {
-        resultsCard.classList.add('opacity-50');
-        resultsCard.classList.remove('opacity-100');
-        resultsCard.style.cursor = 'not-allowed';
-    }
+        // Remove hover effects
+        usersTab.classList.remove('hover:text-gray-700');
 
-    if (resultsCardStatus) {
-        resultsCardStatus.textContent = 'No results available';
-    }
-}
+        // Reset cursor style
+        usersTab.style.cursor = '';
 
-// Function to enable the Results nav item
-function enableResultsNav() {
-    const resultsButton = document.getElementById('nav-results');
-    const resultsCard = document.getElementById('results-card');
-    const resultsCardStatus = document.getElementById('results-card-status');
+        // If currently active, switch to summary tab
+        if (usersTab.classList.contains('tab-active')) {
+            showResultsTab('summary');
+        }
 
-    if (resultsButton) {
-        resultsButton.classList.remove('nav-btn-disabled');
-        resultsButton.classList.add('nav-btn-enabled');
-    }
-
-    if (resultsCard) {
-        resultsCard.classList.remove('opacity-50');
-        resultsCard.classList.add('opacity-100');
-        resultsCard.style.cursor = 'pointer';
-    }
-
-    if (resultsCardStatus) {
-        resultsCardStatus.textContent = 'Click to view results';
+        console.log('Users tab disabled successfully');
+    } else {
+        console.warn('Users tab element not found');
     }
 }
 
-// Function to preload critical sections
-async function preloadCriticalSections() {
-    try {
-        // Preload dashboard and help sections as they're most commonly accessed
-        await Promise.all([
-            loadSectionContent('dashboard-section'),
-            loadSectionContent('help-section')
-        ]);
-        console.log('Critical sections preloaded successfully');
-    } catch (error) {
-        console.error('Error preloading critical sections:', error);
-    }
-}
+// Function to populate users tab with data
+function populateUsersTab(usersData) {
+    console.log('Populating users tab with data...', usersData);
 
-// Main initialization function
-async function initializeNavigation() {
-    console.log('Initializing navigation system...');
+    // Declare usersTableContainer in function scope so it's available throughout
+    const usersTableContainer = document.getElementById('users-table-container');
 
     try {
-        // Load navigation header
-        await loadNavigationContent();
+        if (!usersTableContainer) {
+            console.error('Users table container not found');
+            return;
+        }
 
-        // Preload critical sections
-        await preloadCriticalSections();
-
-        console.log('Navigation system initialized successfully');
+        if (!usersData || !Array.isArray(usersData) || usersData.length === 0) {
+            console.log('No valid users data provided, showing empty state');
+            usersTableContainer.innerHTML = `
+                <div class="text-center py-8">
+                    <p class="text-gray-500 italic">No user data available.</p>
+                </div>
+            `;
+            disableUsersTab();
+            return;
+        }
     } catch (error) {
-        console.error('Error initializing navigation:', error);
+        console.error('Error in populateUsersTab:', error);
+        // Show error state
+        if (usersTableContainer) {
+            usersTableContainer.innerHTML = `
+                <div class="text-center py-8">
+                    <p class="text-red-500 italic">Error loading user data.</p>
+                </div>
+            `;
+        }
+        disableUsersTab();
+        return;
     }
+
+    // Enable the users tab since we have data
+    enableUsersTab();
+
+    // Create users table
+    let tableHTML = `
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Forced Pwd Change</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pwd Change Skipped</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TOTP Reset Attempted</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TOTP Reset Skipped</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Pwd</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+    `;
+
+    usersData.forEach((user, index) => {
+        const statusClass = user.status === 'active' ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100';
+        const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+
+        tableHTML += `
+            <tr class="${rowClass}">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    ${escapeHtml(user.name || 'N/A')}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${user.forced_password_change ? 
+                        '<span class="text-green-600">✓ Yes</span>' : 
+                        '<span class="text-red-600">No</span>'
+                    }
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${user.skipped
+                        ? `<span class="text-red-600">Skipped<br>(${user.reason})</span>`
+                        : `<span class="text-green-600">✓ Not Skipped</span>`
+                    }
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${user.totp_unbind_attempted ? 
+                        '<span class="text-gray-600">Yes</span>' : 
+                        '<span class="text-gray-600">No</span>'
+                    }
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  ${user.totp_skipped 
+                    ? `<span class="text-red-600">Skipped<br>(${user.totp_reason})</span>` 
+                    : `<span class="text-green-600">✓ Not Skipped</span>`
+                  }
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <button class="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded copy-btn" data-password="${escapeHtml(user.new_password || '')}">Copy</button>
+                    <span class="text-gray-600">${escapeHtml(user.new_password || '')}</span>
+                </td>
+            </tr>
+        `;
+    });
+
+    tableHTML += `
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-4 text-sm text-gray-600">
+            <p>Total users: ${usersData.length}</p>
+        </div>
+    `;
+
+    usersTableContainer.innerHTML = tableHTML;
+    console.log('Users tab populated successfully');
 }
 
-// Function to highlight Results nav item (called when results are available)
-function highlightResultsNav() {
-    console.log('Highlighting results navigation...');
-
-    const resultsButton = document.getElementById('nav-results');
-    if (resultsButton) {
-        // Enable the button
-        resultsButton.classList.remove('nav-btn-disabled');
-        resultsButton.classList.add('nav-btn-enabled', 'nav-btn-highlight');
-
-        // Add visual highlighting
-        resultsButton.style.boxShadow = '0 0 10px rgba(59, 130, 246, 0.5)';
-        resultsButton.style.transition = 'box-shadow 0.3s ease';
-
-        // Remove highlight after 3 seconds
-        setTimeout(() => {
-            if (resultsButton) {
-                resultsButton.style.boxShadow = '';
-                resultsButton.classList.remove('nav-btn-highlight');
-            }
-        }, 3000);
+// Helper function to escape HTML
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') {
+        return String(unsafe);
     }
-
-    // Update results card on dashboard if present
-    const resultsCard = document.getElementById('results-card');
-    const resultsCardStatus = document.getElementById('results-card-status');
-
-    if (resultsCard) {
-        resultsCard.classList.remove('opacity-50');
-        resultsCard.classList.add('opacity-100');
-        resultsCard.style.cursor = 'pointer';
-    }
-
-    if (resultsCardStatus) {
-        resultsCardStatus.textContent = 'Results available - Click to view';
-    }
-
-    console.log('Results navigation highlighted successfully');
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 // Export functions for global access
@@ -597,5 +710,8 @@ window.showResultsTab = showResultsTab;
 window.handleResultsCardClick = handleResultsCardClick;
 window.disableResultsNav = disableResultsNav;
 window.enableResultsNav = enableResultsNav;
-window.highlightResultsNav = highlightResultsNav;
 window.initializeNavigation = initializeNavigation;
+window.enableUsersTab = enableUsersTab;
+window.disableUsersTab = disableUsersTab;
+window.populateUsersTab = populateUsersTab;
+window.setupResultsTabs = setupResultsTabs;

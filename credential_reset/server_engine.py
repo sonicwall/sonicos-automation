@@ -614,7 +614,7 @@ class ServerOperationEngine:
 
                 routine_results[target.firewall]['users'] = user_list
                 routine_results[target.firewall]['got_users'] = True
-                routine_results[target.firewall]['total_user_count'] = len(user_list.get('users', {}).get('local', {}).get('user', []))
+                routine_results[target.firewall]['total_user_count'] = len(user_list.get('user', {}).get('local', {}).get('user', []))
 
             if target.force_password_change:
                 self.logger.info("_execute_security_analysis() - Force password change requested")
@@ -956,12 +956,73 @@ class ServerOperationEngine:
             Dictionary containing summary data for frontend display
         """
         try:
+            fpc_results = converted_results.get('credential_reset', {}).get('results', [])
+            totp_results = converted_results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_results', [])
+
+            # Adding this as a stopgap before I refactor the routine results data structure.
+            totp_unbind_attempted = converted_results.get('totp_unbind', {}).get('totp_unbind_attempted', False)
+
+
+            # Combine the dictionaries within fpc_results and totp_results lists
+            combined_user_results = {}
+
+            # Process force password change results
+            for user_result in fpc_results:
+                username = user_result.get('name', 'Unknown')
+                combined_user_results[username] = {
+                    'name': username,
+                    'forced_password_change': user_result.get('forced_password_change', False),
+                    'skipped': user_result.get('skipped', False),
+                    'reason': user_result.get('reason', ''),
+                    'user_update_successful': user_result.get('user_update_successful', False),
+                    'commit_successful': user_result.get('commit_successful', False),
+                    'new_password': user_result.get('new_password', ''),
+                    'totp_unbound': False,
+                    'totp_skipped': False,
+                    'totp_reason': '',
+                    'domain': user_result.get('domain', None),
+                    'api_response': user_result.get('api_response', None),
+                    'totp_unbind_attempted': totp_unbind_attempted
+                }
+
+            # Process TOTP unbind results and merge with password change results
+            for totp_result in totp_results:
+                username = totp_result.get('name', 'Unknown')
+                if username in combined_user_results:
+                    combined_user_results[username]['totp_unbound'] = totp_result.get('totp_unbound', False)
+                    combined_user_results[username]['totp_skipped'] = totp_result.get('skipped', False)
+                    combined_user_results[username]['totp_reason'] = totp_result.get('reason', '')
+                    combined_user_results[username]['domain'] = totp_result.get('domain', None)
+                    combined_user_results[username]['api_response'] = totp_result.get('api_response', None)
+                    # combined_user_results[username]['totp_unbind_attempted'] = totp_result.get('totp_unbind_attempted', False)
+                    combined_user_results[username]['totp_unbind_attempted'] = totp_unbind_attempted
+                else:
+                    combined_user_results[username] = {
+                        'name': username,
+                        'forced_password_change': False,
+                        'skipped': False,
+                        'reason': '',
+                        'user_update_successful': False,
+                        'commit_successful': False,
+                        'new_password': '',
+                        'totp_unbound': totp_result.get('totp_unbound', False),
+                        'totp_skipped': totp_result.get('skipped', False),
+                        'totp_reason': totp_result.get('reason', ''),
+                        'domain': totp_result.get('domain', None),
+                        'api_response': totp_result.get('api_response', None),
+                        # 'totp_unbind_attempted': totp_result.get('totp_unbind_attempted', False)
+                        'totp_unbind_attempted': totp_unbind_attempted
+                    }
+
+            user_list = list(combined_user_results.values())
+
             summary = {
                 "overview": {
                     "total_checks": len(check_results),
                     "completed_checks": sum(1 for r in check_results.values() if r.get('status') == 'completed'),
                     "failed_checks": sum(1 for r in check_results.values() if r.get('status') == 'error'),
-                    "unavailable_checks": sum(1 for r in check_results.values() if r.get('status') == 'not_available')
+                    "unavailable_checks": sum(1 for r in check_results.values() if r.get('status') == 'not_available'),
+                    "total_user_count": converted_results.get('total_user_count', 0)
                 },
                 "severity_breakdown": {
                     "critical": 0,
@@ -971,6 +1032,8 @@ class ServerOperationEngine:
                 },
                 "findings": [],
                 "device_info": {},
+                # "users": converted_results.get('users', {}).get('user', {}).get('local', {}).get('user', []),
+                "users": user_list,
                 "recommendations": []
             }
 
@@ -1087,10 +1150,11 @@ class ServerOperationEngine:
         except Exception as e:
             self.logger.error(f"Error generating summary data: {e}")
             return {
-                "overview": {"total_checks": 0, "completed_checks": 0, "failed_checks": 0, "unavailable_checks": 0},
+                "overview": {"total_checks": 0, "completed_checks": 0, "failed_checks": 0, "unavailable_checks": 0, "total_user_count": 0},
                 "severity_breakdown": {"critical": 0, "high": 0, "medium": 0, "low": 0},
                 "findings": [],
                 "device_info": {},
+                "users": [],
                 "recommendations": ["Error generating summary data"]
             }
 
