@@ -363,29 +363,29 @@ class ServerOperationEngine:
             }
 
             # Export TSR if requested (before analysis)
-            if config.get('export_tsr', False):
-                if progress_tracker:
-                    progress_tracker.update("Tech Support Report (TSR) export requested...", 12)
-                    # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
-                target_numbers = (1, 1)
-                tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
-                # logger.info(f"DEBUG: TSR result: {tsr_result}")
-                export_results.update(tsr_result)  # Merge TSR results into export_results
-                if progress_tracker:
-                    progress_tracker.add_substep("Export complete", "completed", "success")
-                    progress_tracker.clear_substeps()
+            # if config.get('export_tsr', False):
+            #     if progress_tracker:
+            #         progress_tracker.update("Tech Support Report (TSR) export requested...", 12)
+            #         # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
+            #     target_numbers = (1, 1)
+            #     tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="pre-analysis")
+            #     # logger.info(f"DEBUG: TSR result: {tsr_result}")
+            #     export_results.update(tsr_result)  # Merge TSR results into export_results
+            #     if progress_tracker:
+            #         progress_tracker.add_substep("Export complete", "completed", "success")
+            #         progress_tracker.clear_substeps()
 
             # Export Settings if requested (before analysis)
-            if config.get('export_settings', False):
-                if progress_tracker:
-                    progress_tracker.update("Preferences export requested...", 14)
-                    # progress_tracker.add_substep("Exporting preferences file...", "running")
-                target_numbers = (1, 1)
-                settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
-                export_results.update(settings_result)  # Merge settings results into export_results
-                if progress_tracker:
-                    progress_tracker.add_substep("Export complete", "completed", "success")
-                    progress_tracker.clear_substeps()
+            # if config.get('export_settings', False):
+            #     if progress_tracker:
+            #         progress_tracker.update("Preferences export requested...", 14)
+            #         # progress_tracker.add_substep("Exporting preferences file...", "running")
+            #     target_numbers = (1, 1)
+            #     settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="pre-analysis")
+            #     export_results.update(settings_result)  # Merge settings results into export_results
+            #     if progress_tracker:
+            #         progress_tracker.add_substep("Export complete", "completed", "success")
+            #         progress_tracker.clear_substeps()
 
             if progress_tracker:
                 progress_tracker.update("Initializing playbook...", 15)
@@ -652,48 +652,48 @@ class ServerOperationEngine:
                 self.logger.info("_execute_security_analysis() - TOTP unbind was NOT requested")
                 routine_results[target.firewall]['totp_unbind_disabled'] = True
 
-            # Export operations after making user changes, if force password change or TOTP unbind were performed
-            if target.force_password_change or target.unbind_totp:
-                routine_results[target.firewall]['post_remediation'] = {}
-                # Export TSR if requested (after analysis and remediation)
-                if config.get('export_tsr', False):
-                    if progress_tracker:
-                        progress_tracker.update("Tech Support Report (TSR) export requested...", 84)
-                        # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
-                    target_numbers = (1, 1)
-                    tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="post-remediation")
-                    routine_results[target.firewall]['post_remediation']['tsr'] = tsr_result
-                    if progress_tracker:
-                        if target.force_password_change and target.unbind_totp:
-                            msg = "after forcing password changes and unbinding TOTP"
-                        elif target.force_password_change:
-                            msg = "after forcing password changes"
-                        elif target.unbind_totp:
-                            msg = "after unbinding TOTP"
-                        else:
-                            msg = ""
-                        progress_tracker.add_substep(f"Export complete {msg}", "completed", "success")
-                        progress_tracker.clear_substeps()
+            # Export operations after the analysis.
+            # Export TSR if requested (after analysis and remediation)
+            if config.get('export_tsr', False):
+                if progress_tracker:
+                    progress_tracker.update("Tech Support Report (TSR) export requested...", 84)
+                    # progress_tracker.add_substep("Exporting Tech Support Report...", "running")
+                target_numbers = (1, 1)
+                tsr_result = export_tsr_if_enabled(api_session, api_base, target, target_numbers, firewall_info, silent=False, tag="post-remediation")
+                export_results.update(tsr_result)
+                if progress_tracker:
+                    if target.force_password_change and target.unbind_totp:
+                        msg = "after forcing password changes and unbinding TOTP"
+                    elif target.force_password_change:
+                        msg = "after forcing password changes"
+                    elif target.unbind_totp:
+                        msg = "after unbinding TOTP"
+                    else:
+                        msg = ""
+                    progress_tracker.add_substep(f"Export complete {msg}", "completed", "success")
+                    progress_tracker.clear_substeps()
 
-                # Export Settings if requested (after analysis and remediation)
-                if config.get('export_settings', False):
-                    if progress_tracker:
-                        progress_tracker.update("Preferences export requested...", 86)
-                        # progress_tracker.add_substep("Exporting preferences file...", "running")
-                    target_numbers = (1, 1)
-                    settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="post-remediation")
-                    routine_results[target.firewall]['post_remediation']['settings'] = settings_result
-                    if progress_tracker:
-                        if target.force_password_change and target.unbind_totp:
-                            msg = "after forcing password changes and unbinding TOTP"
-                        elif target.force_password_change:
-                            msg = "after forcing password changes"
-                        elif target.unbind_totp:
-                            msg = "after unbinding TOTP"
-                        else:
-                            msg = ""
-                        progress_tracker.add_substep(f"Export complete {msg}", "completed", "success")
-                        progress_tracker.clear_substeps()
+            # Export Settings if requested (after analysis and remediation)
+            if config.get('export_settings', False):
+                if progress_tracker:
+                    progress_tracker.update("Preferences export requested...", 86)
+                    # progress_tracker.add_substep("Exporting preferences file...", "running")
+                target_numbers = (1, 1)
+                settings_result = export_settings_if_enabled(api_session, api_base, target, target_numbers, firewall_info, username, password, silent=False, tag="post-remediation")
+                export_results.update(settings_result)
+                if progress_tracker:
+                    if target.force_password_change and target.unbind_totp:
+                        msg = "after forcing password changes and unbinding TOTP"
+                    elif target.force_password_change:
+                        msg = "after forcing password changes"
+                    elif target.unbind_totp:
+                        msg = "after unbinding TOTP"
+                    else:
+                        msg = ""
+                    progress_tracker.add_substep(f"Export complete {msg}", "completed", "success")
+                    progress_tracker.clear_substeps()
+
+            routine_results[target.firewall].update(export_results)
 
             # Build the security analysis result
             security_analysis = {
@@ -1594,7 +1594,7 @@ class ServerOperationEngine:
 
                 self.logger.info(f"_execute_totp_unbind() - Finished resetting TOTP bindings")
                 if progress_tracker:
-                    progress_tracker.add_substep(f"TOTP unbind complete - {result['totp_unbind_successful_count']} successful, {result['totp_unbind_failed_count']} failed", "info", "info")
+                    progress_tracker.add_substep(f"TOTP unbind complete", "info", "info")
             else:
                 if not config.get('silent', False):
                     self.logger.info(f"_execute_totp_unbind() - No local users found for TOTP unbind.")
