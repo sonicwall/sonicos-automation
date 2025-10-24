@@ -108,7 +108,7 @@ def index():
         return send_file(os.path.join(BASE_DIR, 'credential_reset/web/index.html'))
     except Exception as e:
         logger.error(f"Error serving HTML file: {e}")
-        return f"Error: Could not find sonicwall_credential_reset_webapp.html in {BASE_DIR}", 404
+        return f"Error: Could not find index html in {BASE_DIR}", 404
 
 @app.route('/<path:filename>')
 def serve_static(filename):

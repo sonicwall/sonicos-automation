@@ -609,6 +609,9 @@ class ServerOperationEngine:
                                             target_numbers=(1, 1),
                                             silent=False)
 
+                if user_list is None:
+                    user_list = {}
+
                 routine_results[target.firewall]['users'] = user_list
                 routine_results[target.firewall]['got_users'] = True
                 routine_results[target.firewall]['total_user_count'] = len(user_list.get('users', {}).get('local', {}).get('user', []))
