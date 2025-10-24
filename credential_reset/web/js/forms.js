@@ -593,7 +593,7 @@ function displaySummaryData(summaryData) {
     if (summaryData.device_info && Object.keys(summaryData.device_info).length > 0) {
         const device = summaryData.device_info;
         summaryHTML += `
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <!-- Device Information Card (Left) -->
                 <div class="bg-white rounded-lg card-shadow p-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">
@@ -624,7 +624,7 @@ function displaySummaryData(summaryData) {
                     </div>
                 </div>
 
-                <!-- Log, Diagnostic, and Configuration Exports Card (Middle/Center) -->
+                <!-- Log, Diagnostic, and Configuration Exports Card (Right) -->
                 <div class="bg-white rounded-lg card-shadow p-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">
                         <span class="inline-flex items-center">
@@ -636,22 +636,6 @@ function displaySummaryData(summaryData) {
                         </span>
                     </h3>
                     <div id="export-status-content" class="space-y-4">
-                        <!-- Export content will be populated by JavaScript -->
-                    </div>
-                </div>
-
-                <!-- Markdown Report Export Card (Right) -->
-                <div class="bg-white rounded-lg card-shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                        <span class="inline-flex items-center">
-                            <svg class="w-5 h-5 mr-2 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zM3 7a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" clip-rule="evenodd"></path>
-                                <path d="M13 3H7v2h6V3z"></path>
-                            </svg>
-                            Downloadable Report
-                        </span>
-                    </h3>
-                    <div id="export-report-content" class="space-y-4">
                         <!-- Export content will be populated by JavaScript -->
                     </div>
                 </div>
