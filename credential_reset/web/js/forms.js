@@ -106,10 +106,10 @@ function handleAnalysisError(errorMessage) {
 function resetSingleTargetForm() {
     // Clear all text inputs
     // TODO: Remove the test values before deployment
-    document.getElementById('firewall-ip').value = '192.168.0.208';
+    document.getElementById('firewall-ip').value = '';
     document.getElementById('ssh-port').value = '22';
-    document.getElementById('admin-username').value = 'admin';
-    document.getElementById('admin-password').value = 'password';
+    document.getElementById('admin-username').value = '';
+    document.getElementById('admin-password').value = '';
     document.getElementById('temp-password').value = '';
 
     // Reset checkboxes to unchecked
