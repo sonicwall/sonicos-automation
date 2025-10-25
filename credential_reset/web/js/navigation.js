@@ -441,11 +441,65 @@ function showResultsTab(tabName) {
 
 // Function to initialize help section features
 function initializeHelpFeatures() {
+    console.log('Initializing help section features...');
+
     // Handle markdown rendering if needed
     const markdownElements = document.querySelectorAll('[data-markdown]');
     markdownElements.forEach(element => {
         if (typeof marked !== 'undefined') {
             element.innerHTML = marked.parse(element.textContent);
+        }
+    });
+
+    // Initialize collapsible sections
+    initializeCollapsibles();
+}
+
+// Function to initialize collapsible sections
+function initializeCollapsibles() {
+    console.log('Initializing collapsibles...');
+
+    // Define the toggle function globally if not already defined
+    if (typeof window.toggleCollapsible !== 'function') {
+        window.toggleCollapsible = function(button) {
+            const content = button.nextElementSibling;
+            if (!content) {
+                console.log('No content element found for collapsible');
+                return;
+            }
+
+            const isHidden = content.classList.contains('hidden');
+            console.log('Toggle collapsible:', isHidden ? 'showing' : 'hiding');
+
+            if (isHidden) {
+                content.classList.remove('hidden');
+                button.textContent = button.textContent.replace('▼', '▲');
+            } else {
+                content.classList.add('hidden');
+                button.textContent = button.textContent.replace('▲', '▼');
+            }
+        };
+    }
+
+    // Find all collapsible buttons and ensure their content is hidden initially
+    const collapsibleButtons = document.querySelectorAll('button[onclick*="toggleCollapsible"]');
+    console.log('Found', collapsibleButtons.length, 'collapsible buttons');
+
+    collapsibleButtons.forEach((button, index) => {
+        const content = button.nextElementSibling;
+        if (content) {
+            // Ensure content starts hidden
+            if (!content.classList.contains('hidden')) {
+                content.classList.add('hidden');
+                console.log('Initialized collapsible', index, 'as hidden');
+            }
+
+            // Ensure button shows the correct arrow
+            if (!button.textContent.includes('▼') && !button.textContent.includes('▲')) {
+                button.textContent = button.textContent + ' ▼';
+            } else if (button.textContent.includes('▲')) {
+                button.textContent = button.textContent.replace('▲', '▼');
+            }
         }
     });
 }
