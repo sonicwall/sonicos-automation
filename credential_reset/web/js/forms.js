@@ -106,15 +106,15 @@ function handleAnalysisError(errorMessage) {
 function resetSingleTargetForm() {
     // Clear all text inputs
     // TODO: Remove the test values before deployment
-    document.getElementById('firewall-ip').value = '';
+    document.getElementById('firewall-ip').value = '192.168.0.208';
     document.getElementById('ssh-port').value = '22';
-    document.getElementById('admin-username').value = '';
-    document.getElementById('admin-password').value = '';
+    document.getElementById('admin-username').value = 'admin';
+    document.getElementById('admin-password').value = 'password';
     document.getElementById('temp-password').value = '';
 
     // Reset checkboxes to unchecked
-    document.getElementById('force-password-change').checked = false;
-    document.getElementById('unbind-totp').checked = false;
+    document.getElementById('force-password-change').checked = true;
+    document.getElementById('unbind-totp').checked = true;
     document.getElementById('export-settings').checked = false;
     document.getElementById('export-tsr').checked = false;
 
@@ -1414,6 +1414,111 @@ function initializeForms() {
             }
         });
     }
+}
+
+// Clipboard functionality for copy buttons
+// Fallback method using execCommand for older browsers or HTTP contexts
+function copyToClipboardFallback(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+    textArea.select();
+    textArea.setSelectionRange(0, 99999); // For mobile devices
+
+    try {
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        return successful;
+    } catch (err) {
+        document.body.removeChild(textArea);
+        console.error('Fallback copy failed:', err);
+        return false;
+    }
+}
+
+// Main clipboard copy function with modern API and fallback
+async function copyPasswordToClipboard(button, password) {
+    const originalText = button.textContent;
+    const originalClasses = [...button.classList];
+
+    try {
+        // Try modern clipboard API first (requires HTTPS or localhost)
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(password);
+        } else {
+            // Fall back to older method
+            const success = copyToClipboardFallback(password);
+            if (!success) throw new Error('Copy operation failed');
+        }
+
+        // Success feedback
+        button.textContent = 'Copied!';
+        button.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+        button.classList.add('bg-green-500', 'hover:bg-green-600');
+
+        // Reset button after 2 seconds
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.className = originalClasses.join(' ');
+        }, 2000);
+
+        console.log('Password copied to clipboard successfully');
+
+    } catch (err) {
+        // Error feedback
+        button.textContent = 'Failed';
+        button.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+        button.classList.add('bg-red-500', 'hover:bg-red-600');
+
+        // Reset button after 2 seconds
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.className = originalClasses.join(' ');
+        }, 2000);
+
+        console.error('Copy to clipboard failed:', err);
+
+        // Show user-friendly error message
+        if (window.alert) {
+            alert('Failed to copy password to clipboard. Please manually select and copy the password.');
+        }
+    }
+}
+
+// Initialize clipboard functionality when DOM is loaded
+function initializeClipboardFunctionality() {
+    // Event delegation for copy buttons (handles dynamically generated buttons)
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('copy-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const password = e.target.getAttribute('data-password');
+            if (password) {
+                copyPasswordToClipboard(e.target, password);
+            } else {
+                console.error('No password data found on copy button');
+            }
+        }
+    });
+
+    console.log('Clipboard functionality initialized');
+}
+
+// Export clipboard functions for global access
+window.copyPasswordToClipboard = copyPasswordToClipboard;
+window.copyToClipboardFallback = copyToClipboardFallback;
+window.initializeClipboardFunctionality = initializeClipboardFunctionality;
+
+// Initialize clipboard functionality when the script loads
+// Also initialize when DOM is ready if it hasn't loaded yet
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeClipboardFunctionality);
+} else {
+    initializeClipboardFunctionality();
 }
 
 // Export functions for global access
