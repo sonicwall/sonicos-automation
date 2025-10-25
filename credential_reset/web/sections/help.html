@@ -317,70 +317,6 @@ firewall.company.com,admin,"Complex,Pass!",22,CustomTemp789,true,false,false</co
             </div>
         </section>
 
-        <!-- Troubleshooting -->
-        <section>
-            <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">Troubleshooting</h3>
-            <div class="space-y-4">
-                <div class="space-y-4">
-                    <div class="border border-gray-200 rounded-lg">
-                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
-                            Connection Issues ▼
-                        </button>
-                        <div class="p-4 border-t border-gray-200 hidden">
-                            <ul class="space-y-2 text-sm text-gray-700">
-                                <li><strong>Cannot reach firewall:</strong> Verify IP address, network connectivity, and firewall accessibility</li>
-                                <li><strong>Port access denied:</strong> Check firewall rules, ensure HTTPS (443) and SSH ports are accessible</li>
-                                <li><strong>Timeout errors:</strong> Increase timeout values, verify network stability</li>
-                                <li><strong>SSL certificate issues:</strong> Verify HTTPS certificate validity or accept self-signed certificates</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div class="border border-gray-200 rounded-lg">
-                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
-                            Authentication Problems ▼
-                        </button>
-                        <div class="p-4 border-t border-gray-200 hidden">
-                            <ul class="space-y-2 text-sm text-gray-700">
-                                <li><strong>Invalid credentials:</strong> Verify username and password, check for account lockouts</li>
-                                <li><strong>API access denied:</strong> Ensure SonicOS API is enabled or SSH access is available for auto-enablement</li>
-                                <li><strong>Permission errors:</strong> Verify administrative privileges on the target firewall</li>
-                                <li><strong>TOTP conflicts:</strong> Disable TOTP temporarily or use backup codes if available</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div class="border border-gray-200 rounded-lg">
-                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
-                            CSV File Issues ▼
-                        </button>
-                        <div class="p-4 border-t border-gray-200 hidden">
-                            <ul class="space-y-2 text-sm text-gray-700">
-                                <li><strong>Parse errors:</strong> Check CSV formatting, ensure proper column headers and data types</li>
-                                <li><strong>Missing columns:</strong> Verify all required columns are present and spelled correctly</li>
-                                <li><strong>Invalid values:</strong> Check boolean values (true/false), port numbers (1-65535), and IP formats</li>
-                                <li><strong>Encoding issues:</strong> Save CSV as UTF-8 encoding, avoid special characters in wrong encoding</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div class="border border-gray-200 rounded-lg">
-                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
-                            Operation Failures ▼
-                        </button>
-                        <div class="p-4 border-t border-gray-200 hidden">
-                            <ul class="space-y-2 text-sm text-gray-700">
-                                <li><strong>Configuration errors:</strong> Check firewall configuration, ensure no conflicting settings</li>
-                                <li><strong>API limitations:</strong> Verify SonicOS version compatibility, check API rate limits</li>
-                                <li><strong>Partial failures:</strong> Review individual operation results, retry failed operations separately</li>
-                                <li><strong>Rollback issues:</strong> Manual intervention may be required, consult operation logs</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <!-- FAQ -->
         <section>
             <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">Frequently Asked Questions</h3>
@@ -390,25 +326,16 @@ firewall.company.com,admin,"Complex,Pass!",22,CustomTemp789,true,false,false</co
                         What's the difference between Analysis and Remediation modes? ▼
                     </button>
                     <div class="p-4 border-t border-gray-200 hidden">
-                        <p class="text-sm text-gray-700">Analysis mode performs read-only operations to assess configurations and generate reports without making changes. Remediation mode actively modifies firewall configurations to address identified issues. Always run analysis first to understand what changes will be made.</p>
+                        <p class="text-sm text-gray-700">Analysis mode performs read-only operations to assess configurations and generate reports without making changes (except perhaps temporarily enabling SonicOS API if needed). Remediation mode actively modifies firewall configuration. Settings that make configuration changes will be marked as 'Config Change'.</p>
                     </div>
                 </div>
 
                 <div class="border border-gray-200 rounded-lg">
                     <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
-                        How are passwords generated and what complexity is required? ▼
+                        What password complexity is required? ▼
                     </button>
                     <div class="p-4 border-t border-gray-200 hidden">
-                        <p class="text-sm text-gray-700">Generated passwords automatically meet SonicWall complexity requirements: minimum 8 characters with uppercase, lowercase, numbers, and special characters. We recommend 12+ character passwords. The tool generates cryptographically secure random passwords when temporary_password is empty.</p>
-                    </div>
-                </div>
-
-                <div class="border border-gray-200 rounded-lg">
-                    <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
-                        Can I run operations on multiple firewalls simultaneously? ▼
-                    </button>
-                    <div class="p-4 border-t border-gray-200 hidden">
-                        <p class="text-sm text-gray-700">Yes, batch operations process multiple firewalls in parallel for efficiency. However, start with smaller batches (5-10 firewalls) to verify connectivity and credentials before processing larger groups. Monitor system resources and network capacity when processing large batches.</p>
+                        <p class="text-sm text-gray-700">Generated passwords automatically meet some basic complexity requirements: minimum 12 characters with uppercase, lowercase, numbers, and special characters. The tool generates random passwords when the temporary password is empty. Additionally, if your set password does not meet these requirements, it will be padded with extra characters.</p>
                     </div>
                 </div>
 
@@ -417,7 +344,7 @@ firewall.company.com,admin,"Complex,Pass!",22,CustomTemp789,true,false,false</co
                         What happens if SonicOS API is disabled on the target firewall? ▼
                     </button>
                     <div class="p-4 border-t border-gray-200 hidden">
-                        <p class="text-sm text-gray-700">The tool automatically enables SonicOS API via SSH if SSH management is available. After operations complete, the API is automatically disabled to restore the original configuration. Set SSH port to 0 to disable this failback mechanism.</p>
+                        <p class="text-sm text-gray-700">The tool tries to automatically enable SonicOS API via SSH if SSH management is available. After operations complete, the API is automatically disabled to restore the original configuration. Set SSH port to 0 to disable this failback mechanism.</p>
                     </div>
                 </div>
 
@@ -426,7 +353,7 @@ firewall.company.com,admin,"Complex,Pass!",22,CustomTemp789,true,false,false</co
                         Are my credentials and data secure when using this tool? ▼
                     </button>
                     <div class="p-4 border-t border-gray-200 hidden">
-                        <p class="text-sm text-gray-700">Yes, all operations are performed entirely client-side in your browser. No credentials or firewall data are sent to external servers. Data is cleared from browser memory when the session ends. All communication with firewalls uses HTTPS encryption.</p>
+                        <p class="text-sm text-gray-700">Yes, all operations are performed entirely client-side. No credentials or firewall data are sent to external servers. All communication with firewalls uses HTTPS encryption.</p>
                     </div>
                 </div>
             </div>
