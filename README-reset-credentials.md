@@ -47,6 +47,27 @@ security analysis and credential management operations without requiring command
 
 #### Setup and Usage
 
+To setup the web interface:
+
+```bash
+# Extract the zip file and navigate to the directory where the files were extracted.
+# Create a new virtual environment
+python3 -m venv venv
+
+# Active the virtual environment
+## On Windows
+venv\Scripts\activate
+
+## On macOS/Linux
+source venv/bin/activate
+
+# Install required dependencies
+pip install -r requirements.txt
+
+# Start the tool - refer to the section below to customize the host/port/debug settings
+python3 remediation-app.py
+```
+
 To launch the web interface:
 
 ```bash
