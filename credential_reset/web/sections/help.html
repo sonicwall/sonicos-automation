@@ -183,7 +183,7 @@ firewall.company.com,admin,"Complex,Pass!",22,CustomTemp789,true,false,false</co
         <section>
             <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">Security & Privacy</h3>
             <div class="space-y-4">
-                <div class="grid grid-cols-1 grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="bg-green-50 border border-green-200 p-4 rounded-lg">
                         <h4 class="font-medium text-green-900 mb-2">Data Protection</h4>
                         <ul class="text-sm text-green-800 space-y-1">
@@ -317,6 +317,70 @@ firewall.company.com,admin,"Complex,Pass!",22,CustomTemp789,true,false,false</co
             </div>
         </section>
 
+        <!-- Troubleshooting -->
+        <section>
+            <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">Troubleshooting</h3>
+            <div class="space-y-4">
+                <div class="space-y-4">
+                    <div class="border border-gray-200 rounded-lg">
+                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
+                            Connection Issues ▼
+                        </button>
+                        <div class="p-4 border-t border-gray-200 hidden">
+                            <ul class="space-y-2 text-sm text-gray-700">
+                                <li><strong>Cannot reach firewall:</strong> Verify IP address, network connectivity, and firewall accessibility</li>
+                                <li><strong>Port access denied:</strong> Check firewall rules, ensure HTTPS (443) and SSH ports are accessible</li>
+                                <li><strong>Timeout errors:</strong> Increase timeout values, verify network stability</li>
+                                <li><strong>SSL certificate issues:</strong> Verify HTTPS certificate validity or accept self-signed certificates</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg">
+                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
+                            Authentication Problems ▼
+                        </button>
+                        <div class="p-4 border-t border-gray-200 hidden">
+                            <ul class="space-y-2 text-sm text-gray-700">
+                                <li><strong>Invalid credentials:</strong> Verify username and password, check for account lockouts</li>
+                                <li><strong>API access denied:</strong> Ensure SonicOS API is enabled or SSH access is available for auto-enablement</li>
+                                <li><strong>Permission errors:</strong> Verify administrative privileges on the target firewall</li>
+                                <li><strong>TOTP conflicts:</strong> Disable TOTP temporarily or use backup codes if available</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg">
+                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
+                            CSV File Issues ▼
+                        </button>
+                        <div class="p-4 border-t border-gray-200 hidden">
+                            <ul class="space-y-2 text-sm text-gray-700">
+                                <li><strong>Parse errors:</strong> Check CSV formatting, ensure proper column headers and data types</li>
+                                <li><strong>Missing columns:</strong> Verify all required columns are present and spelled correctly</li>
+                                <li><strong>Invalid values:</strong> Check boolean values (true/false), port numbers (1-65535), and IP formats</li>
+                                <li><strong>Encoding issues:</strong> Save CSV as UTF-8 encoding, avoid special characters in wrong encoding</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg">
+                        <button class="w-full px-4 py-3 text-left font-medium text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-t-lg focus:outline-none" onclick="toggleCollapsible(this)">
+                            Operation Failures ▼
+                        </button>
+                        <div class="p-4 border-t border-gray-200 hidden">
+                            <ul class="space-y-2 text-sm text-gray-700">
+                                <li><strong>Configuration errors:</strong> Check firewall configuration, ensure no conflicting settings</li>
+                                <li><strong>API limitations:</strong> Verify SonicOS version compatibility, check API rate limits</li>
+                                <li><strong>Partial failures:</strong> Review individual operation results, retry failed operations separately</li>
+                                <li><strong>Rollback issues:</strong> Manual intervention may be required, consult operation logs</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- FAQ -->
         <section>
             <h3 class="text-xl font-semibold text-gray-900 mb-3 border-b pb-2">Frequently Asked Questions</h3>
@@ -370,18 +434,5 @@ firewall.company.com,admin,"Complex,Pass!",22,CustomTemp789,true,false,false</co
 
     </div>
 
-    <script>
-    function toggleCollapsible(button) {
-        const content = button.nextElementSibling;
-        const isVisible = !content.classList.contains('hidden');
 
-        if (isVisible) {
-            content.classList.add('hidden');
-            button.textContent = button.textContent.replace('▲', '▼');
-        } else {
-            content.classList.remove('hidden');
-            button.textContent = button.textContent.replace('▼', '▲');
-        }
-    }
-    </script>
 </div>
