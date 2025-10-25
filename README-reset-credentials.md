@@ -40,6 +40,50 @@ Results are logged and exported to timestamped directories within the `runs` fol
 - **Individual Firewall Targeting**: Can target single firewalls via command line arguments
 
 
+### Web User Interface
+
+The Essential Credential Reset Tool includes a web-based user interface that provides an intuitive way to perform
+security analysis and credential management operations without requiring command-line usage.
+
+#### Setup and Usage
+
+To launch the web interface:
+
+```bash
+# Start the web server (default: http://127.0.0.1:8080)
+python remediation-app.py
+
+# Specify a different port
+python remediation-app.py --port 9000
+
+# Bind to all interfaces (allows remote access)
+python remediation-app.py --host 0.0.0.0 --port 8080
+
+# Enable debug mode for development
+python remediation-app.py --debug
+```
+
+Once started, open your web browser and navigate to the displayed URL (typically `http://127.0.0.1:8080`).
+
+#### Web Interface Features
+
+- **Interactive Dashboard**: Modern web interface with intuitive navigation
+- **Single Target Operations**: Point-and-click interface for individual firewall analysis
+- **Batch Operations**: Upload CSV files and manage multiple firewall operations
+- **Real-time Progress**: Live progress monitoring with detailed step-by-step updates  
+- **Results Viewer**: Interactive display of analysis results and reports
+- **Built-in Help**: Comprehensive help documentation integrated within the web app
+- **Download Reports**: Direct download of generated reports, TSR files, and configuration exports
+
+#### Requirements for Web Interface
+
+- Modern web browser (Chrome, Firefox, Safari, Edge)
+- Network connectivity between your browser and the server
+- Same Python requirements as the command-line tool
+
+Note: The web interface includes comprehensive built-in help and documentation, eliminating the need for external references during operation.
+
+
 ### Security Configuration Areas Analyzed
 
 The tool analyzes the configuration areas as outlined in the "Remediation Playbook" and "Essential Credential Reset" articles 
@@ -66,10 +110,23 @@ Refer to the following links for detailed information on the configuration areas
   - HTTPS Management access to target firewall(s)
   - SSH access to target firewall(s) (if API auto-enabling is needed)
 
+- **Web Interface Requirements** (if using web UI):
+  - Modern web browser (Chrome, Firefox, Safari, Edge)
+  - Network connectivity between your browser and the server hosting the web interface
+
 
 ### Usage
 
-#### Single Firewall Target
+The Essential Credential Reset Tool can be used in two ways:
+- **Web Interface**: User-friendly browser-based interface (recommended for most users)
+- **Command Line**: Direct script execution for automation and advanced use cases
+
+#### Web Interface Usage
+For an intuitive graphical interface, see the [Web User Interface](#web-user-interface) section above and the Documentation page on the web interface.
+
+#### Command Line Usage
+
+##### Single Firewall Target
 ```bash
 # Basic security analysis, interactive admin login, no changes made to the target firewall, most output is printed to console
 python reset_credentials.py 192.168.1.1
@@ -103,6 +160,7 @@ python reset_credentials.py 192.168.1.1 --sshport 2222 --force-password-change -
 ```
 
 #### Multiple Firewall Targets (CSV)
+##### Multiple Firewall Targets (CSV)
 The CSV file can also control the key operations for each firewall
 ```bash
 # Process multiple firewalls from CSV
@@ -113,7 +171,6 @@ python reset_credentials.py firewalls.csv --verbose
 
 # Silent mode for automated processing
 python reset_credentials.py firewalls.csv --silent
-```
 
 #### Command Line Arguments
 - `target` : Target firewall IP/hostname or CSV file path (positional argument, required).
