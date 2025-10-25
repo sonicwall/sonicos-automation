@@ -4,7 +4,7 @@
         Run the playbook against a single <strong>live</strong> firewall. Fill in the details below and select the desired operations.
         <ul class="list-disc list-inside mb-4 text-gray-600 text-xs">
             <li>Ensure the firewall is reachable over the network and that the provided credentials are valid.</li>
-            <li>SonicOS API access will be auto-enabled if needed, using the provided SSH port as a failback. Set the port to 0 to disable SSH failback.</li>
+            <li>SonicOS API access will be <strong>temporarily</strong> auto-enabled if needed, using the provided SSH port as a failback. <strong>Set the port to 0 to disable SSH failback.</strong></li>
             <li>You can provide a custom (non-443) target port by adding the port number to the IP/hostname. For example: 192.168.168.168:4443</li>
             <li>Running the playbook with any "Config Change" options enabled will modify the firewall's configuration.</li>
         </ul>
@@ -44,6 +44,10 @@
         <div class="border-t pt-6 mb-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Operation Options</h3>
             <p class="text-sm text-gray-600 mb-4">Select the desired optional actions for the execution.</p>
+            <p class="text-sm text-gray-600 mb-4"><strong>The playbook checks do not modify the firewall's configuration. Remediation must be done manually.</strong></p>
+            <p class="text-sm text-gray-600 mb-5">The options marked
+                <span class="inline-block bg-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full" title="This option commits changes to the firewall">Config Change</span>
+                will modify the firewall's configuration.</p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-4">
@@ -66,14 +70,14 @@
                         <span class="ml-2 text-sm text-gray-700">Export Settings</span>
                         <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
                     </label>
-                        <span class="text-xs text-gray-500 mt-1">Downloads the preferences file before/after running the playbook.</span>
+                        <span class="text-xs text-gray-500 mt-1">Downloads the preferences file after running the playbook.</span>
 
                     <label class="flex items-center">
                         <input type="checkbox" id="export-tsr" class="rounded border-gray-300 text-orange-600 focus:ring-orange-500">
                         <span class="ml-2 text-sm text-gray-700">Export Tech Support Report (TSR)</span>
                         <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-0.5 rounded-full" title="Recommended option">Recommended</span>
                     </label>
-                        <span class="text-xs text-gray-500 mt-1">Downloads technical support report before/after running the playbook.</span>
+                        <span class="text-xs text-gray-500 mt-1">Downloads technical support report after running the playbook.</span>
                 </div>
 
                 <div>
@@ -90,10 +94,10 @@
                             <input type="radio" name="password-option" value="custom" id="custom-password" class="text-orange-600 focus:ring-orange-500">
                             <span class="ml-2 text-sm text-gray-700">Use Custom Password:</span>
                         </label>
-                        <input type="password" id="temp-password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ml-6"
+                        <input type="password" id="temp-password" class="w-5/6 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ml-6"
                                placeholder="Enter temporary password" disabled>
                     </div>
-                    <p class="text-xs text-gray-500 mt-1">Password must meet complexity requirements (12+ chars, uppercase, lowercase, digit, special char)</p>
+                    <p class="text-xs text-gray-500 mt-1">Password must meet complexity requirements<br>(12+ chars, uppercase, lowercase, digit, special char)</p>
                 </div>
             </div>
         </div>
@@ -101,6 +105,14 @@
         <!-- Security Analysis Options -->
         <div class="border-t pt-6 mb-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Playbook Options</h3>
+            <p class="text-sm text-gray-600 mb-2">
+                The remediation playbook performs a variety of checks and provides guidance/prioritization of next steps.
+                For more information, please visit the following resources:
+            </p>
+            <ul class="text-xs text-gray-600 mb-5">
+                <li class="mb-1"><a href="https://www.sonicwall.com/support/knowledge-base/remediation-playbook/kA1VN0000000RzV0AU" target="_blank" class="text-orange-600 underline">SonicWall Remediation Playbook Knowledge Base Article</a></li>
+                <li class="mb-1"><a href="https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/kA1VN0000000RzX0AU " target="_blank" class="text-orange-600 underline">Essential Credential Reset Knowledge Base Article</a></li>
+            </ul>
 
             <div class="mb-4">
                 <label for="security-level-select" class="block text-sm font-medium text-gray-700 mb-2">
