@@ -1,0 +1,50 @@
+<div class="bg-white rounded-lg card-shadow p-6">
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Batch Operations</h2>
+
+    <!-- CSV Upload Area -->
+    <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Upload CSV File</label>
+        <div id="csv-drop-zone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors cursor-pointer">
+            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="mt-4">
+                <p class="text-lg text-gray-600">Drag & drop your CSV file here</p>
+                <p class="text-sm text-gray-500">or click to browse files</p>
+            </div>
+            <input type="file" id="csv-file-input" accept=".csv" class="hidden">
+        </div>
+
+        <div class="mt-4 flex space-x-4">
+            <button id="download-template-btn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                Download CSV Template
+            </button>
+            <button id="clear-csv-btn" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 disabled:opacity-50" disabled>
+                Clear File
+            </button>
+        </div>
+    </div>
+
+    <!-- Target Preview -->
+    <div id="targets-preview" class="hide mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Detected Targets</h3>
+        <div class="bg-gray-50 rounded-lg p-4">
+            <div id="targets-list" class="space-y-2 max-h-64 overflow-y-auto">
+                <!-- Targets will be populated here -->
+            </div>
+            <div class="mt-4 text-sm text-gray-600">
+                <span id="targets-count">0</span> targets detected
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Action Buttons -->
+    <div id="batch-actions" class="hide flex space-x-4">
+        <button id="process-all-btn" class="bg-orange-600 text-white px-6 py-2 rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500">
+            Process All Targets
+        </button>
+        <button class="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400" onclick="showSection('dashboard-section')">
+            Cancel
+        </button>
+    </div>
+</div>

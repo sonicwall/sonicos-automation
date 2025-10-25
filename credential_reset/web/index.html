@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SonicWall Credential Reset Tool</title>
+
+    <!-- PyScript configuration -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Custom markdown styles -->
+    <link rel="stylesheet" href="css/markdown.css">
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- Navigation Header -->
+    <div id="navigation-header">
+        <!-- Navigation content will be loaded dynamically -->
+    </div>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-4 py-8">
+
+        <!-- Dashboard Section - Content loaded from sections/dashboard.html -->
+        <div id="dashboard-section" class="section show"></div>
+
+        <!-- Single Target Section - Content loaded from sections/single-target-content.html -->
+        <div id="single-section" class="section hide"></div>
+
+        <!-- Batch Operations Section - Content loaded from sections/batch-operations-content.html -->
+        <div id="batch-section" class="section hide"></div>
+
+        <!-- Results Section -->
+        <div id="results-section" class="section hide">
+            <!-- Embedded fallback content in case dynamic loading fails -->
+            <div class="bg-white rounded-lg card-shadow p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Playbook Analysis Results</h2>
+
+                <div id="results-content">
+                    <p class="text-gray-500 italic">Review the playbook's actions and recommendations.</p>
+                </div>
+
+                <!-- Results Tabs -->
+                <div id="results-tabs-container" class="hide mt-6">
+                    <div class="border-b border-gray-200 mb-6">
+                        <nav class="flex space-x-8">
+                            <button id="tab-summary" class="tab-button tab-active border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Summary
+                            </button>
+                            <button id="tab-users" class="tab-button tab-inactive border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                Users
+                            </button>
+                            <button id="tab-report" class="tab-button tab-inactive border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-500 hover:text-gray-700">
+                                Full Report
+                            </button>
+                        </nav>
+                    </div>
+
+                    <!-- Tab Content -->
+                    <div id="tab-content-summary" class="tab-content">
+                        <!-- Summary content will be injected here -->
+                    </div>
+
+                    <!-- Users Tab Content -->
+                    <div id="tab-content-users" class="tab-content hide">
+                        <div class="mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4">Local Users</h3>
+                            <div id="users-table-container">
+                                <!-- Users table will be dynamically populated here -->
+                                <div class="text-center py-8">
+                                    <p class="text-gray-500 italic">No user data available.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Report Tab Content -->
+                    <div id="tab-content-report" class="tab-content hide">
+                        <div class="mb-4 flex justify-between items-center">
+<!--                            <h3 class="text-lg font-semibold text-gray-900">Playbook Results Report</h3>-->
+                            <div class="space-x-3">
+                                <button id="download-report-md" class="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700">
+                                    Download Markdown
+                                </button>
+                                <button id="download-report-html" class="bg-green-600 text-white px-3 py-1 rounded-md text-sm hover:bg-green-700">
+                                    Download HTML
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Report Display Container -->
+                        <div id="report-container" class="border border-gray-200 rounded-lg p-6 bg-white">
+                            <!-- Rendered Markdown Content -->
+                            <div id="markdown-rendered" class="markdown-content max-w-none">
+                                <p class="text-gray-500 italic">No report available. Run a playbook analysis to generate a report.</p>
+                            </div>
+
+                            <!-- Raw Markdown Content (hidden by default) -->
+                            <div id="markdown-raw" class="hide">
+                                <pre class="bg-gray-50 p-4 rounded-md text-sm overflow-x-auto font-mono"><code id="markdown-code"></code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Help Section -->
+        <div id="help-section" class="section hide">
+            <!-- Content loaded from sections/help.html -->
+        </div>
+
+    </div>
+
+    <!-- Progress Modal - Content loaded from sections/progress.html -->
+    <div id="progress-modal-container"></div>
+
+    <!-- JavaScript modules (loaded before PyScript) -->
+    <script src="js/navigation.js"></script>
+    <script src="js/progress.js"></script>
+    <script src="js/downloads.js"></script>
+    <script src="js/forms.js"></script>
+
+    <!-- Initialization script -->
+    <script>
+        // Initialize all modules when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing SonicWall Credential Reset Tool');
+
+            // Initialize all modules
+            initializeNavigation();
+            initializeProgressModal();
+            initializeForms();
+            initializeDownloads();
+
+            // Show dashboard section by default
+            showSection('dashboard-section');
+
+            // Disable results navigation initially
+            disableResultsNav();
+
+            console.log('All modules initialized successfully');
+        });
+    </script>
+
+    <!-- PyScript can be used for Python functionality if needed -->
+    <!-- <py-script src="python_code.py"></py-script> -->
+
+</body>
+</html>
+

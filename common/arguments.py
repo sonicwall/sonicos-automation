@@ -20,7 +20,7 @@ def get_parser(arg_set="all", description="", parse=True):
     ap.add_argument("target", type=str, default="",
                     help="Provide a target firewall IP address/name and port (if other than port 443) or CSV file containing 'ip,username,password,sshport' of each firewall.")
 
-    if arg_set == "snwlid-2025-0001" or arg_set == "snwlid-2024-0015":
+    if arg_set == "snwlid-2025-0001" or arg_set == "snwlid-2024-0015" or arg_set == "remediation":
         ap.add_argument("-s", "--sshport", type=str, default='22',
                         help="If SonicOS API is disabled, the script will attempt to use SSH Management on port 22 to *temporarily* enable SonicOS API. Use this argument to specify a different SSH port. This has no effect if using a CSV file.")
 
@@ -58,6 +58,37 @@ def get_parser(arg_set="all", description="", parse=True):
     if arg_set == "snwlid-2024-0015":
         ap.add_argument("-w", "--wait_for_upgrade", action='store_true',
                         help="If set, the script will wait for the firmware upgrade to complete and confirm reachability.")
+
+    if arg_set == "remediation":
+        ap.add_argument("-fpc", "--force-password-change", action='store_true',
+                        help="If set, the script will enable the logic that forces a password change for each local user, skipping domain users and expired users.")
+
+        ap.add_argument("-tp", "--temp-password", type=str, default='',
+                        help="If set, the script will reset each user's password to the specified temporary password. This has no effect if using a CSV file.")
+
+        ap.add_argument("-rp", "--randomize-password", action='store_true',
+                        help="If set, the script will reset each user's password to a randomized 12-character password. This overrides the --temp_password argument.")
+
+        ap.add_argument("-ut", "--unbind-totp", action='store_true',
+                        help="If set, the script will unbind TOTP for all users.")
+
+        ap.add_argument("-es", "--export-settings", action='store_true',
+                        help="If set, the script will export the firewall settings to a .exp file.")
+
+        ap.add_argument("-etl", "--export-tracelogs", action='store_true',
+                        help="If set, the script will export the firewall trace logs.")
+
+        ap.add_argument("-etsr", "--export-tsr", action='store_true',
+                        help="If set, the script will export the Tech Support Report (TSR).")
+
+        ap.add_argument("--severity", type=str, choices=['all', 'low', 'medium', 'high', 'critical'], default='all',
+                        help="Sets the severity level for the remediation check actions to take. For example, setting critical would perform only the critical remediation checks. Default is 'all'.")
+
+        ap.add_argument("--silent", action='store_true',
+                        help="If set, the script will run in silent mode, suppressing non-essential output. To also silence the summary, use the --no-summary argument in combination with --silent.")
+
+        ap.add_argument("--no-summary", action='store_true',
+                        help="If set, the script will not print the summary at the end of the remediation checks.")
 
     ap.add_argument("-v", "--verbose", action='store_true',
                     help="Enable verbose output. This will print additional information to the console.")
