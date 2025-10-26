@@ -50,7 +50,10 @@ security analysis and credential management operations without requiring command
 To setup the web interface:
 
 ```bash
-# Extract the zip file and navigate to the directory where the files were extracted.
+# Clone the repository
+git clone https://github.com/sonicwall/sonicos-automation.git
+
+# Navigate to the directory you cloned to
 # Create a new virtual environment
 python3 -m venv venv
 
