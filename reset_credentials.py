@@ -278,7 +278,7 @@ def routine(target: FirewallTarget, target_numbers=None, silent=False, **kwargs)
         print()
 
     # List RADIUS servers
-    pb.list_ldap_servers()
+    pb.list_radius_servers()
 
     if not silent:
         print()

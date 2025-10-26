@@ -45,7 +45,7 @@ from sonicos.api2 import Login
 class Firewall:
     def __init__(self, url, username, password, sshport="22"):
         self.url = url.rstrip("/")
-        if "http://" not in self.url or "https://" not in self.url:
+        if "http://" not in self.url and "https://" not in self.url:
             self.url = f"https://{self.url}"
         self.api_base = f"{self.url}/api/sonicos/"
         self.host = url.split("//")[-1].split(":")[0]
