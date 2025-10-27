@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from credential_reset.firewall import initialize_session, gather_firewall_info, get_local_users
 from credential_reset.export_helper import export_tsr_if_enabled, export_settings_if_enabled
 from credential_reset.utils import create_random_password
+from common.utils import write_to_file
 from sonicos.api import (
     logout,
     disable_sonicos_api_ssh,
@@ -732,8 +733,26 @@ class ServerOperationEngine:
                     args=target
                 )
 
+                # Write the markdown report locally.
+                try:
+                    dm = firewall_info['device_model'].replace(" ", "")
+                    sn = firewall_info['serial_number']
+                    write_to_file(markdown_report, filename=f"{constants.START_TIMESTAMP_FOLDER}/{dm}-{sn}-report.md")
+                except Exception as e:
+                    logger.warning(f"_execute_security_analysis() - Could not write the markdown report file. Error during write_to_file: {e}")
+
                 if progress_tracker:
                     progress_tracker.update("Markdown report generated", 88)
+
+                # Write the results to a JSON file for later reference
+                try:
+                    results_str = json.dumps(security_analysis, indent=4)
+                    results_str = "\n" + results_str + "\n"
+                    dm = firewall_info['device_model'].replace(" ", "")
+                    sn = firewall_info['serial_number']
+                    write_to_file(results_str, filename=f"{constants.START_TIMESTAMP_FOLDER}/{dm}-{sn}-debug-json.txt")
+                except Exception as e:
+                    logger.warning(f"_execute_security_analysis() - Could not write the report results JSON file. Error during write_to_file: {e}")
 
             except Exception as e:
                 self.logger.error(f"_execute_security_analysis() - Failed to generate markdown report: {e}")
