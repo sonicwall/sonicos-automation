@@ -198,8 +198,9 @@ class Firewall:
             print("Not implemented.")
             return False
         elif self.gen == 7 or self.gen == 8:
-            url = self.api_base.split("/api/sonicos/")[0]
             return upload_firmware(fw=url, session=self.session, filepath=filepath, firewall_generation=self.gen)
+        print("Unhandled firewall generation.")
+        return False
 
     def boot_uploaded_firmware(self):
         """
