@@ -1,11 +1,10 @@
 import time
 import re
-from xml.etree.ElementTree import indent
-
 import requests
-import hashlib
 import os
 from datetime import datetime
+# import hashlib
+# from xml.etree.ElementTree import indent
 
 
 class Login:
