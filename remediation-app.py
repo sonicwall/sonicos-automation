@@ -81,9 +81,6 @@ from credential_reset.report_helper import (
 from rich import print
 
 
-
-
-
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -100,6 +97,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Get the directory where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+try:
+    if not os.path.exists('runs'):
+        os.makedirs('runs', exist_ok=True)
+except Exception as e:
+    logger.error(f"Error creating runs directory: {e}")
+    exit(1)
 
 @app.route('/')
 def index():

@@ -74,6 +74,42 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
             print(f"Error getting count from '{data}': {e}")
             return 0
 
+    # Force Password Change
+    try:
+        fpc_attempted = results.get('credential_reset', False)
+        total_users = results.get('total_user_count', 0)
+        users_updated = results.get('credential_reset', {}).get('passwords_reset', 0)
+        users_skipped = total_users - users_updated
+        if not fpc_attempted:
+            review_items.append(f"- Force Password Change was not attempted.")
+            action_items.append(f"| Critical | Not Performed | It is strongly recommended to reset user passwords and force a password update on next login. | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/kA1VN0000000RzX0AU#_Reset_any_passwords) |")
+        elif users_updated > 0 or users_skipped > 0:
+            completed_items.append(f"- **Password Reset & Forced Change Results:**")
+            completed_items.append(f"  - **{users_updated} local user(s)** forced to change password on next login.")
+            completed_items.append(f"  - **{users_skipped} user(s)** skipped (e.g., non-local users).")
+        elif total_users == 0:
+            review_items.append(f"- No local users found.")
+    except Exception as e:
+        print(f"Error checking users updated count: {e}")
+
+    # TOTP Unbind
+    try:
+        totp_unbind_attempted = results.get('totp_unbind', {}).get('totp_unbind_attempted', False)
+        if totp_unbind_attempted:
+            failed = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_failed_count', 0)
+            success = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_successful_count', 0)
+            skipped = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_skipped_count', 0)
+            if success > 0 or failed > 0 or skipped > 0:
+                completed_items.append(f"- **TOTP Unbind Results:**")
+                completed_items.append(f"  - **{success} user(s)** had TOTP unbound successfully.")
+                completed_items.append(f"  - **{failed} user(s)** failed to unbind TOTP.")
+                completed_items.append(f"  - **{skipped} user(s)** were skipped.")
+        else:
+            review_items.append(f"- TOTP unbind was not attempted.")
+            action_items.append(f"| Critical | Not Performed | It is strongly recommended to reset TOTP bindings for users. | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/kA1VN0000000RzX0AU#_Reset_any_passwords) |")
+    except Exception as e:
+        print(f"Error checking TOTP unbind count: {e}")
+
     # LDAP Servers
     if should_run_check('ldap_servers', args.severity):
         if get_count(results.get('ldap_servers', {})) > 0:
@@ -362,31 +398,6 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         if adv_routing_count > 0:
             action_items.append(f"| Low | RIP {len(any_rip)}, OSPFv2 {len(any_ospf)}, BGP {len(any_bgp)} | Routing configuration requires authentication/password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used) |")
 
-    # Force Password Change
-    try:
-        total_users = results.get('total_user_count', 0)
-        users_updated = results.get('total_users_forced_to_update_password', 0)
-        users_skipped = results.get('skipped_user_count', 0)
-        if users_updated > 0 or users_skipped > 0:
-            completed_items.append(f"- **{users_updated} local user(s)** forced to change password on next login. **{users_skipped} user(s)** skipped (e.g., non-local users).")
-        elif total_users == 0:
-            review_items.append(f"- No local users found or not executed. Ensure the 'Force Password Change' action is enabled in the input CSV file or using CLI arguments. This is strongly recommended for all local users.")
-    except Exception as e:
-        print(f"Error checking users updated count: {e}")
-
-    # TOTP Unbind
-    try:
-        totp_unbind_attempted = results.get('totp_unbind_attempted', False)
-        if totp_unbind_attempted:
-            failed = results.get('totp_unbind_failed_count', 0)
-            success = results.get('totp_unbind_successful_count', 0)
-            if success > 0 or failed > 0:
-                completed_items.append(f"- **{success} user(s)** had TOTP unbound successfully. **{failed} user(s)** failed to unbind TOTP.")
-        else:
-            review_items.append(f"- TOTP unbind was not attempted. Enable TOTP unbinding in the input CSV file or using CLI arguments. This is strongly recommended for all users.")
-    except Exception as e:
-        print(f"Error checking TOTP unbind count: {e}")
-
     if action_items:
         md_lines.append(f"### Action Items ({len(action_items)}) for {firewall_info.get('device_model', 'Unknown')} ({firewall_info.get('serial_number', 'Unknown')})")
         md_lines.append(f"The following items were identified by the tool during the execution of the remediation playbook checks. Please review and manually take action as necessary.")
@@ -407,7 +418,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
 
     if completed_items:
         md_lines.append(f"### Completed Actions ({len(completed_items)})")
-        md_lines.append(f"The following actions were completed by the tool, as requested via CLI argument or CSV input file.")
+        md_lines.append(f"The following actions were completed by the tool, as requested.")
         md_lines.append(f"")
         for item in completed_items:
             md_lines.append(item)
@@ -1161,17 +1172,25 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     # User Counts and Details
     try:
         md_lines.append(f"#### Statistics")
+        fpc_attempted = results.get('credential_reset', False)
         total_users = results.get('total_user_count', 0)
-        users_updated = results.get('total_users_forced_to_update_password', 0)
-        users_skipped = results.get('skipped_user_count', 0)
-        totp_unbind_attempted = results.get('totp_unbind_attempted', False)
-        totp_unbind_successful_count = results.get('totp_unbind_successful_count', 0)
-        totp_unbind_failed_count = results.get('totp_unbind_failed_count', 0)
+        users_updated = results.get('credential_reset', {}).get('passwords_reset', 0)
+        users_skipped = total_users - users_updated
+        totp_unbind_attempted = results.get('totp_unbind', {}).get('totp_unbind_attempted', False)
+        totp_unbind_successful_count = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_successful_count', 0)
+        totp_unbind_failed_count = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_failed_count', 0)
+        totp_unbind_skipped_count = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_skipped_count', 0)
 
         md_lines.append(f"- **Total Local Users:** {total_users}")
-        md_lines.append(f"- **Users Updated:**")
-        md_lines.append(f"  - **Forced Password Change:** {users_updated} successful, {users_skipped} skipped")
-        md_lines.append(f"  - **Reset/Unbound TOTP:** {totp_unbind_successful_count} successful, {totp_unbind_failed_count} skipped or failed")
+        if not fpc_attempted:
+            md_lines.append(f"- **Forced Password Change:** Not Enabled")
+        else:
+            md_lines.append(f"- **Forced Password Change:** {users_updated} successful, {users_skipped} skipped")
+
+        if not totp_unbind_attempted:
+            md_lines.append(f"- **Reset/Unbound TOTP:** Not Enabled")
+        else:
+            md_lines.append(f"- **Reset/Unbound TOTP:** {totp_unbind_successful_count} successful, {totp_unbind_failed_count} failed, {totp_unbind_skipped_count} skipped")
     except Exception as e:
         print(f"Error processing local users: {e}")
         md_lines.append(f"- **Local Users:** Error retrieving information")
@@ -1182,6 +1201,13 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     # fpc_results = results.get('users', {}).get('user', {}).get('local', {}).get('user', [])
     fpc_results = results.get('credential_reset', {}).get('results', [])
     totp_results = results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_results', [])
+    fpc_attempted = results.get('credential_reset', False)
+    totp_unbind_attempted = results.get('totp_unbind', {}).get('totp_unbind_attempted', False)
+
+    # If neither was attempted, we'll use the local users list to build the table of users.
+    if not fpc_attempted and not totp_unbind_attempted:
+        fpc_results = results.get('users', {}).get('user', {}).get('local', {}).get('user', [])
+        totp_results = []
 
     # Combine the dictionaries within fpc_results and totp_results lists
     combined_user_results = {}
@@ -1252,8 +1278,12 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
             for user in user_list:
                 force_pass = "Yes" if user.get('commit_successful') else "No"
                 skipped = "Yes" if user.get('skipped') else "No"
+                if force_pass == "No":
+                    skipped = "N/A"
                 unbound_totp = "Yes" if user.get('totp_unbound', False) and not user.get('totp_skipped', False) else ("No" if user.get('totp_unbind_attempted') else "N/A")
                 totp_skipped = "Yes" if user.get('totp_skipped', False) else "No"
+                if unbound_totp == "N/A":
+                    totp_skipped = "N/A"
                 new_passwd = user.get('new_password', '')
                 skip_reason = user.get('reason', '') or user.get('totp_reason', '') or ''
                 md_lines.append(f"| {user.get('name', 'Unknown')} | {force_pass} | {skipped} | {unbound_totp} | {totp_skipped} | {new_passwd} | {skip_reason} |")
