@@ -597,25 +597,24 @@ class ServerOperationEngine:
 
             # Fetch the users if password change or TOTP unbind is requested
             user_list = {}
-            if target.force_password_change or target.unbind_totp:
-                if progress_tracker:
-                    progress_tracker.update("Fetching user list for remediation...", 80)
-                user_list = get_local_users(api_session,
-                                            api_base,
-                                            firewall_info.get('firewall_generation'),
-                                            firewall=target.firewall,
-                                            sshport=target.sshport,
-                                            username=target.username,
-                                            password=target.password,
-                                            target_numbers=(1, 1),
-                                            silent=False)
+            if progress_tracker:
+                progress_tracker.update("Fetching user list...", 80)
+            user_list = get_local_users(api_session,
+                                        api_base,
+                                        firewall_info.get('firewall_generation'),
+                                        firewall=target.firewall,
+                                        sshport=target.sshport,
+                                        username=target.username,
+                                        password=target.password,
+                                        target_numbers=(1, 1),
+                                        silent=False)
 
-                if user_list is None:
-                    user_list = {}
+            if user_list is None:
+                user_list = {}
 
-                routine_results[target.firewall]['users'] = user_list
-                routine_results[target.firewall]['got_users'] = True
-                routine_results[target.firewall]['total_user_count'] = len(user_list.get('user', {}).get('local', {}).get('user', []))
+            routine_results[target.firewall]['users'] = user_list
+            routine_results[target.firewall]['got_users'] = True
+            routine_results[target.firewall]['total_user_count'] = len(user_list.get('user', {}).get('local', {}).get('user', []))
 
             if target.force_password_change:
                 self.logger.info("_execute_security_analysis() - Force password change requested")
@@ -977,10 +976,14 @@ class ServerOperationEngine:
         try:
             fpc_results = converted_results.get('credential_reset', {}).get('results', [])
             totp_results = converted_results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_results', [])
+            fpc_attempted = converted_results.get('credential_reset', False)
 
             # Adding this as a stopgap before I refactor the routine results data structure.
             totp_unbind_attempted = converted_results.get('totp_unbind', {}).get('totp_unbind_attempted', False)
 
+            if not fpc_attempted and not totp_unbind_attempted:
+                fpc_results = converted_results.get('users', {}).get('user', {}).get('local', {}).get('user', [])
+                totp_results = []
 
             # Combine the dictionaries within fpc_results and totp_results lists
             combined_user_results = {}
@@ -1041,7 +1044,9 @@ class ServerOperationEngine:
                     "completed_checks": sum(1 for r in check_results.values() if r.get('status') == 'completed'),
                     "failed_checks": sum(1 for r in check_results.values() if r.get('status') == 'error'),
                     "unavailable_checks": sum(1 for r in check_results.values() if r.get('status') == 'not_available'),
-                    "total_user_count": converted_results.get('total_user_count', 0)
+                    "total_user_count": converted_results.get('total_user_count', 0),
+                    "force_password_change_attempted": False if not fpc_attempted else True,
+                    "totp_unbind_attempted": False if not totp_unbind_attempted else True
                 },
                 "severity_breakdown": {
                     "critical": 0,
@@ -1494,9 +1499,8 @@ class ServerOperationEngine:
             # return user_results
             return {
                 "credential_reset": {
-                    "users_processed": 0,
-                    "passwords_reset": 0,
-                    "totp_unbound": 0 if not config.get('unbind_totp') else 0,
+                    "users_processed": 0 if not user_results else len(user_results),
+                    "passwords_reset": 0 if not user_results else sum(1 for ur in user_results if ur.get('forced_password_change', False) and not ur.get('skipped', False)),
                     "status": "Credential reset operation completed",
                     "results": user_results,
                 },
@@ -1536,6 +1540,7 @@ class ServerOperationEngine:
             'totp_unbind_attempted': True,
             'totp_unbind_successful_count': 0,
             'totp_unbind_failed_count': 0,
+            'totp_unbind_skipped_count': 0,
             'totp_unbind_results': []
         }
 
@@ -1593,6 +1598,7 @@ class ServerOperationEngine:
                             "skipped": True,
                             "reason": "Special user entry"
                         })
+                        result['totp_unbind_skipped_count'] += 1
                         continue
 
                     # Skip expired users
@@ -1607,6 +1613,7 @@ class ServerOperationEngine:
                             "skipped": True,
                             "reason": "Expired user"
                         })
+                        result['totp_unbind_skipped_count'] += 1
                         continue
 
                     # Skip domain users
@@ -1628,6 +1635,7 @@ class ServerOperationEngine:
                             "reason": "Domain user",
                             "domain": domain_name
                         })
+                        result['totp_unbind_skipped_count'] += 1
                         continue
 
                     # Perform TOTP unbind for this user
@@ -1709,8 +1717,10 @@ class ServerOperationEngine:
         # return result
         return {
             "totp_unbind": {
-                "users_processed": 0,
-                "totp_unbound": 0,
+                "users_processed": 0 if not result else len([r for r in result.get('totp_unbind_results', [])]),
+                "totp_unbound": 0 if not result else result.get('results', {}).get('totp_unbind_successful_count', 0),
+                "totp_unbind_failed": 0 if not result else result.get('results', {}).get('totp_unbind_failed_count', 0),
+                "totp_unbind_skipped": 0 if not result else result.get('results', {}).get('totp_unbind_skipped_count', 0),
                 "totp_unbind_attempted": True,
                 "status": "TOTP unbind operation completed",
                 "results": result
@@ -1745,6 +1755,32 @@ class ServerOperationEngine:
                 return 0
 
         # CRITICAL PRIORITY ITEMS
+
+        # Force Password Change and Reset
+        fpc_attempted = converted_results.get('credential_reset', False)
+        totp_unbind_attempted = converted_results.get('totp_unbind', {}).get('totp_unbind_attempted', False)
+        if not fpc_attempted:
+            action_items.append({
+                "priority": "Critical",
+                "area": "Authentication",
+                "finding": "Not Performed",
+                "action": "Force Password Change operation was not requested. It is strongly recommended to reset local user passwords and force a password change on next login.",
+                "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/kA1VN0000000RzX0AU#_Reset_any_passwords",
+                "count": 1,
+                "check_type": "force_password_change"
+            })
+
+        # Reset TOTP Bindings
+        if not totp_unbind_attempted:
+            action_items.append({
+                "priority": "Critical",
+                "area": "Authentication",
+                "finding": "Not Performed",
+                "action": "TOTP reset/unbind operation was not requested. It is strongly recommended to reset TOTP bindings from all local users.",
+                "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/kA1VN0000000RzX0AU#_Reset_TOTP_bindings",
+                "count": 1,
+                "check_type": "totp_unbind"
+            })
 
         # LDAP Servers
         if should_run_check('ldap_servers', args.severity):
@@ -2374,8 +2410,9 @@ class ServerOperationEngine:
 
         # Force Password Change (Completed Items)
         try:
-            users_updated = converted_results.get('total_users_forced_to_update_password', 0)
-            users_skipped = converted_results.get('skipped_user_count', 0)
+            users_processed = converted_results.get('credential_reset', {}).get('users_processed', 0)
+            users_updated = converted_results.get('credential_reset', {}).get('passwords_reset', 0)
+            users_skipped = users_processed - users_updated
             total_users = converted_results.get('total_user_count', 0)
 
             if users_updated > 0 or users_skipped > 0:
@@ -2389,8 +2426,8 @@ class ServerOperationEngine:
         try:
             totp_unbind_attempted = converted_results.get('totp_unbind_attempted', False)
             if totp_unbind_attempted:
-                failed = converted_results.get('totp_unbind_failed_count', 0)
-                success = converted_results.get('totp_unbind_successful_count', 0)
+                failed = converted_results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_failed_count', 0)
+                success = converted_results.get('totp_unbind', {}).get('results', {}).get('totp_unbind_successful_count', 0)
                 if success > 0 or failed > 0:
                     completed_items.append(f"<strong>{success} user(s)</strong> had TOTP unbound successfully. <strong>{failed} user(s)</strong> failed to unbind TOTP.")
             else:
