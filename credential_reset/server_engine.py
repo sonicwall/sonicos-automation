@@ -2182,7 +2182,17 @@ class ServerOperationEngine:
         if should_run_check('dynamic_botnet_list_server', args.severity):
             try:
                 botnet_data = converted_results.get('botnet_data', {})
-                if botnet_data.get('protocol', False):
+                if botnet_data.get('protocol', '') == 'ftp' and botnet_data.get('ftp_server', '') != '0.0.0.0' and botnet_data.get('ftp_server', '') != '':
+                    action_items.append({
+                        "priority": "Low",
+                        "area": "Network Services",
+                        "finding": f"Configured ({botnet_data.get('protocol', '').upper()})",
+                        "action": "Review and update Dynamic Botnet List Server credentials",
+                        "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm",
+                        "count": 1,
+                        "check_type": "dynamic_botnet_list_server"
+                    })
+                elif botnet_data.get('protocol', '') == 'https' and botnet_data.get('https_url', '') != '':
                     action_items.append({
                         "priority": "Low",
                         "area": "Network Services",

@@ -202,7 +202,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             if results.get('clearpass_enabled', False):
                 clearpass_server_count = len(results.get('clearpass_servers', []))
-                action_items.append(f"| High | Enabled ({clearpass_server_count} Servers) | ClearPass/Network Access Control (NAC) is enabled with {clearpass_server_count} server(s) - {'update the shared secret on each configured entry' if clearpass_server_count > 0 else 'configure NAC entries or disable the feature if not in use'} | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440) |")
+                action_items.append(f"| High | Enabled ({clearpass_server_count} Servers) | ClearPass/Network Access Control (NAC) is enabled with {clearpass_server_count} server(s) - {'Update the shared secret on each configured entry' if clearpass_server_count > 0 else 'Configure NAC entries or disable the feature if not in use'} | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440) |")
         except Exception as e:
             print(f"Error checking ClearPass setting: {e}")
 
@@ -306,7 +306,9 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('dynamic_botnet_list_server', args.severity):
         try:
             botnet_data = results.get('botnet_data', {})
-            if botnet_data.get('protocol', False):
+            if botnet_data.get('protocol', '') == 'ftp' and botnet_data.get('ftp_server') not in ('0.0.0.0', ''):
+                action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm) |")
+            elif botnet_data.get('protocol', '') == 'https' and botnet_data['https_url'] != '':
                 action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm) |")
         except Exception as e:
             print(f"Error checking Dynamic Botnet List Server: {e}")
@@ -687,10 +689,20 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('dynamic_botnet_list_server', args.severity):
         try:
             botnet_data = results.get('botnet_data', {})
-            if botnet_data.get('protocol', False):
-                md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {botnet_data.get('protocol', '').upper()}")
+            protocol = botnet_data.get('protocol', '')
+            ftp_server = botnet_data.get('ftp_server', '')
+            https_url = botnet_data.get('https_url', '')
+            valid_ftp = protocol == 'ftp' and ftp_server not in ('0.0.0.0', '')
+            valid_https = protocol == 'https' and https_url != ''
+            if valid_ftp or valid_https:
+                md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {protocol.upper()}")
                 md_lines.append(f"  - **Action:** Review and update Dynamic Botnet List Server credentials")
                 md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Server Details:**")
+                if protocol == 'ftp':
+                    md_lines.append(f"    - **FTP Server:** {botnet_data.get('ftp_username', '')}@{ftp_server}")
+                if protocol == 'https':
+                    md_lines.append(f"    - **HTTPS URL:** {https_url}")
                 md_lines.append(f"  - **Reference:** [Dynamic Botnet List Server](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm)")
             else:
                 md_lines.append(f"- **Dynamic Botnet List Server:** Not configured")
