@@ -386,26 +386,32 @@ class NetworkingMixin():
                 else:
                     dynamic_botnet_list = get_request(self.api_base, self.api_session, '/api/sonicos/botnet/base', silent=self.silent)
 
-                # print(dynamic_botnet_list)
                 dynamic_botnet_data = {}
                 if dynamic_botnet_list:
-                    botnet_dynlist_enabled = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('enable',
-                                                                                                               False)
-                    botnet_dynlist_protocol = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get(
-                        'protocol', None)
-                    botnet_dynlist_ftp_server = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('ftp',
-                                                                                                                  {}).get(
-                        'server_ip_address', None)
-                    botnet_dynlist_ftp_username = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get(
-                        'ftp', {}).get('login', None)
-                    botnet_dynlist_ftp_password = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get(
-                        'ftp', {}).get('password', None)
-                    botnet_dynlist_https_username = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get(
-                        'https', {}).get('login', None)
-                    botnet_dynlist_https_password = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get(
-                        'https', {}).get('password', None)
-                    botnet_dynlist_https_url = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get(
-                        'https', {}).get('url_name', None)
+                    botnet_dynlist_enabled = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('enable', False)
+                    # GEN6 does not have the protocol key, GEN7 does. To determine the protocol on GEN6, I check if a URL is set or a file name is set.
+                    _gen6_protocol = "https" if dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('url_name', None) else "ftp" if dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('file_name', None) else None
+                    botnet_dynlist_protocol = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('protocol', None) or _gen6_protocol
+                    # GEN6 and GEN7 have different keys
+                    botnet_dynlist_ftp_server = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('ftp', {}).get('server_ip_address', None) or dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('server_ip_address', None)
+
+                    if isinstance(botnet_dynlist_ftp_server, str):
+                        botnet_dynlist_ftp_server = botnet_dynlist_ftp_server.strip()
+                    if isinstance(botnet_dynlist_protocol, str):
+                        botnet_dynlist_protocol = botnet_dynlist_protocol.strip()
+
+                    botnet_dynlist_ftp_username = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('ftp', {}).get('login', None) or dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('login', None)
+                    botnet_dynlist_ftp_password = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('ftp', {}).get('password', None) or dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('password', None)
+
+                    # GEN6 does not include the name/password that was set for HTTPS. GEN7 does.
+                    botnet_dynlist_https_username = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('https', {}).get('login', None)
+                    botnet_dynlist_https_password = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('https', {}).get('password', None)
+
+                    # The key name is different in GEN6 vs GEN7.
+                    botnet_dynlist_https_url = dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('https', {}).get('url_name', None) or dynamic_botnet_list.get('botnet', {}).get('dynamic_list', {}).get('url_name', None)
+                    if isinstance(botnet_dynlist_https_url, str):
+                        botnet_dynlist_https_url = botnet_dynlist_https_url.strip()
+
                     dynamic_botnet_data = {
                         'enabled': botnet_dynlist_enabled,
                         'protocol': botnet_dynlist_protocol,
@@ -416,34 +422,28 @@ class NetworkingMixin():
                         'https_username': botnet_dynlist_https_username,
                         'https_password_set': bool(botnet_dynlist_https_password)
                     }
-                    if botnet_dynlist_protocol == 'ftp':
+                    if botnet_dynlist_protocol == 'ftp' and botnet_dynlist_ftp_server not in ('0.0.0.0', ''):
                         if not self.silent:
-                            print(
-                                f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: A Dynamic Botnet List Server is configured. Protocol: {botnet_dynlist_protocol}, {botnet_dynlist_ftp_username}@{botnet_dynlist_ftp_server}. Please update the password on the server, then update it in SonicOS.")
-                    elif botnet_dynlist_protocol == 'https':
+                            print(f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: A Dynamic Botnet List Server is configured. Protocol: {botnet_dynlist_protocol}, {botnet_dynlist_ftp_username}@{botnet_dynlist_ftp_server}. Please update the password on the server, then update it in SonicOS.")
+                    elif botnet_dynlist_protocol == 'https' and botnet_dynlist_https_url != '':
                         if not self.silent:
-                            print(
-                                f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: A Dynamic Botnet List Server is configured. Protocol: {botnet_dynlist_protocol}, URL: {botnet_dynlist_https_url}, Login: {botnet_dynlist_https_username}. Please update the password on the server, then update it in SonicOS.")
+                            print(f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: A Dynamic Botnet List Server is configured. Protocol: {botnet_dynlist_protocol}, URL: {botnet_dynlist_https_url}, Login: {botnet_dynlist_https_username}. Please update the password on the server, then update it in SonicOS.")
                     else:
                         if not self.silent:
-                            print(
-                                f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: Dynamic Botnet List Server is not configured.")
+                            print(f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: Dynamic Botnet List Server is not configured.")
 
                     dynamic_botnet_list = {'botnet': dynamic_botnet_list, 'botnet_data': dynamic_botnet_data}
                     update_routine_results(self.routine_results, self.firewall, 'dynamic_botnet_list_server', dynamic_botnet_list)
                 else:
                     if not self.silent:
-                        print(
-                            f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: No dynamic botnet list information found")
+                        print(f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: No dynamic botnet list information found")
                         print(type(dynamic_botnet_list), "->", dynamic_botnet_list)
                         print()
             except Exception as e:
                 if not self.silent:
-                    print(
-                        f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic botnet list information: {e}")
+                    print(f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: Error retrieving dynamic botnet list information: {e}")
         else:
-            print(
-                f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: Skipping Dynamic Botnet List Server check (severity: {get_check_severity('dynamic_botnet_list_server')}, filter: {self.a.severity})")
+            print(f"({self.target_numbers[0]}/{self.target_numbers[1]}) {generate_timestamp()}: Skipping Dynamic Botnet List Server check (severity: {get_check_severity('dynamic_botnet_list_server')}, filter: {self.a.severity})")
             update_routine_results(self.routine_results, self.firewall, 'skipped_checks', data=['dynamic_botnet_list_server'])
 
     # Custom NTP Servers

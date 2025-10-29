@@ -1829,16 +1829,19 @@ class ServerOperationEngine:
             vpn_policies = converted_results.get('vpn', {}).get('policy', [])
             if len(vpn_policies) > 0:
                 s2s_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('site_to_site', {}).get('name')])
-                s2s_disabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+                s2s_enabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+                s2s_disabled_count = s2s_count - s2s_enabled_count
                 groupvpn_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('group_vpn', {}).get('name')])
-                groupvpn_disabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+                groupvpn_enabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+                groupvpn_disabled_count = groupvpn_count - groupvpn_enabled_count
                 tunnelint_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('tunnel_interface', {}).get('name')])
-                tunnelint_disabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
+                tunnelint_enabled_count = len([p for p in vpn_policies if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
+                tunnelint_disabled_count = tunnelint_count - tunnelint_enabled_count
 
                 action_items.append({
                     "priority": "Critical",
                     "area": "VPN",
-                    "finding": f"{len(vpn_policies)} Policies Found<br>- {groupvpn_count} GroupVPN, {groupvpn_disabled_count} Disabled<br>- {s2s_count} Site-to-Site, {s2s_disabled_count} Disabled<br>- {tunnelint_count} Tunnel Interface, {tunnelint_disabled_count} Disabled",
+                    "finding": f"{len(vpn_policies)} Policies Found<br>{groupvpn_count} GroupVPN<br>  - {groupvpn_enabled_count} Enabled<br>  - {groupvpn_disabled_count} Disabled<br>{s2s_count} Site-to-Site<br>  - {s2s_enabled_count} Enabled<br>  - {s2s_disabled_count} Disabled<br>{tunnelint_count} Tunnel Interface<br>  - {tunnelint_enabled_count} Enabled<br>  - {tunnelint_disabled_count} Disabled",
                     "action": "VPN policies require pre-shared key, authentication/encryption key updates",
                     "resource_link": "https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared",
                     "count": len(vpn_policies),
@@ -2179,7 +2182,17 @@ class ServerOperationEngine:
         if should_run_check('dynamic_botnet_list_server', args.severity):
             try:
                 botnet_data = converted_results.get('botnet_data', {})
-                if botnet_data.get('protocol', False):
+                if botnet_data.get('protocol', '') == 'ftp' and botnet_data.get('ftp_server', '') != '0.0.0.0' and botnet_data.get('ftp_server', '') != '':
+                    action_items.append({
+                        "priority": "Low",
+                        "area": "Network Services",
+                        "finding": f"Configured ({botnet_data.get('protocol', '').upper()})",
+                        "action": "Review and update Dynamic Botnet List Server credentials",
+                        "resource_link": "https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm",
+                        "count": 1,
+                        "check_type": "dynamic_botnet_list_server"
+                    })
+                elif botnet_data.get('protocol', '') == 'https' and botnet_data.get('https_url', '') != '':
                     action_items.append({
                         "priority": "Low",
                         "area": "Network Services",

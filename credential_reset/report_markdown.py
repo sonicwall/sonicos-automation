@@ -130,19 +130,15 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         if get_count(results.get('vpn', {}).get('policy', [])) > 0:
             # Counts the number of GroupVPN, Site-to-Site, and Tunnel Interface policies
             s2s_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('name')])
-            s2s_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+            s2s_enabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+            s2s_disabled_count = s2s_count - s2s_enabled_count
             groupvpn_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('name')])
-            groupvpn_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+            groupvpn_enabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+            groupvpn_disabled_count = groupvpn_count - groupvpn_enabled_count
             tunnelint_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('name')])
-            tunnelint_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
-            action_items.append(f"| Critical | {get_count(results.get('vpn', {}).get('policy', []))} Policies Found<br>- {groupvpn_count} GroupVPN, {groupvpn_disabled_count} Disabled<br> - {s2s_count} Site-to-Site, {s2s_disabled_count} Disabled<br>- {tunnelint_count} Tunnel Interface, {tunnelint_disabled_count} Disabled | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
-
-    # Dynamic DNS
-    if should_run_check('ddns_services', args.severity):
-        ddns_v4 = get_count(results.get('ddns_services_v4', []))
-        ddns_v6 = get_count(results.get('ddns_services_v6', []))
-        if ddns_v4 + ddns_v6 > 0:
-            action_items.append(f"| High | {ddns_v4 + ddns_v6} Profile(s) | Dynamic DNS profile(s) require credential updates | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835) |")
+            tunnelint_enabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
+            tunnelint_disabled_count = tunnelint_count - tunnelint_enabled_count
+            action_items.append(f"| Critical | {get_count(results.get('vpn', {}).get('policy', []))} Policies Found<br>{groupvpn_count} GroupVPN<br>  - {groupvpn_enabled_count} Enabled<br>  - {groupvpn_disabled_count} Disabled<br>{s2s_count} Site-to-Site<br>  - {s2s_enabled_count} Enabled<br>  - {s2s_disabled_count} Disabled<br>{tunnelint_count} Tunnel Interface<br>  - {tunnelint_enabled_count} Enabled<br>  - {tunnelint_disabled_count} Disabled | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
 
     # WAN Interfaces (L2TP/PPPoE/PPTP)
     if should_run_check('wan_interfaces', args.severity):
@@ -159,6 +155,41 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('cloud_secure_edge', args.severity):
         if results.get('cloud_secure_edge', {}).get('created', False):
             action_items.append(f"| Critical | Enabled | Cloud Secure Edge is enabled - Reset the CSE connector's API token | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_CSE) |")
+
+    # Dynamic DNS
+    if should_run_check('ddns_services', args.severity):
+        ddns_v4 = get_count(results.get('ddns_services_v4', []))
+        ddns_v6 = get_count(results.get('ddns_services_v6', []))
+        if ddns_v4 + ddns_v6 > 0:
+            action_items.append(f"| High | {ddns_v4 + ddns_v6} Profile(s) | Dynamic DNS profile(s) require credential updates | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-configure-dynamic-dns-for-a-particular-interface/170504323594835) |")
+
+    # SNMPv3 Users
+    if should_run_check('snmp_users', args.severity):
+        if get_count(results.get('snmp', {}).get('user', [])) > 0:
+            action_items.append(f"| High | {get_count(results.get('snmp', {}).get('user', []))} Users Found | SNMPv3 user(s) require authentication/privacy password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP) |")
+
+    # ClearPass/Network Access Control (NAC)
+    if should_run_check('clearpass_nac', args.severity):
+        try:
+            if results.get('clearpass_enabled', False):
+                clearpass_server_count = len(results.get('clearpass_servers', []))
+                action_items.append(f"| High | Enabled ({clearpass_server_count} Servers) | ClearPass/Network Access Control (NAC) is enabled with {clearpass_server_count} server(s) - {'Update the shared secret on each configured entry' if clearpass_server_count > 0 else 'Configure NAC entries or disable the feature if not in use'} | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440) |")
+        except Exception as e:
+            print(f"Error checking ClearPass setting: {e}")
+
+    # Cellular WWAN
+    if should_run_check('cellular_wwan', args.severity):
+        if results.get('cellular_attached', False):
+            action_items.append(f"| High | Modem Found | Cellular WWAN is enabled - Update the cellular provider credentials | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
+
+    # Dynamic External Address Objects
+    if should_run_check('dynamic_address_objects', args.severity):
+        try:
+            dynamic_address_count = results.get('dynamic_ao_count', 0)
+            if dynamic_address_count > 0:
+                action_items.append(f"| High | {dynamic_address_count} Object(s) Found | Review and update credentials for Dynamic External Address Object(s) | [Link](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280) |")
+        except Exception as e:
+            print(f"Error checking Dynamic External Address Objects: {e}")
 
     # Email logging actions
     if should_run_check('email_logging', args.severity):
@@ -188,25 +219,6 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 action_items.append(f"| Medium | Configured | TSR/EXP Scheduled Exports credentials require updates | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm) |")
         except Exception as e:
             print(f"Error checking scheduled exports FTP setting: {e}")
-
-    # SNMPv3 Users
-    if should_run_check('snmp_users', args.severity):
-        if get_count(results.get('snmp', {}).get('user', [])) > 0:
-            action_items.append(f"| High | {get_count(results.get('snmp', {}).get('user', []))} Users Found | SNMPv3 user(s) require authentication/privacy password updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_SNMP_-_SNMP) |")
-
-    # ClearPass/Network Access Control (NAC)
-    if should_run_check('clearpass_nac', args.severity):
-        try:
-            if results.get('clearpass_enabled', False):
-                clearpass_server_count = len(results.get('clearpass_servers', []))
-                action_items.append(f"| High | Enabled ({clearpass_server_count} Servers) | ClearPass/Network Access Control (NAC) is enabled with {clearpass_server_count} server(s) - {'update the shared secret on each configured entry' if clearpass_server_count > 0 else 'configure NAC entries or disable the feature if not in use'} | [Link](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440) |")
-        except Exception as e:
-            print(f"Error checking ClearPass setting: {e}")
-
-    # Cellular WWAN
-    if should_run_check('cellular_wwan', args.severity):
-        if results.get('cellular_attached', False):
-            action_items.append(f"| High | Modem Found | Cellular WWAN is enabled - Update the cellular provider credentials | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a) |")
 
     # Wireless: Guest Services External Authentication
     if should_run_check('guest_services_auth', args.severity):
@@ -290,20 +302,13 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         except Exception as e:
             print(f"Error checking SonicPoint/SonicWave VAP Profiles: {e}")
 
-    # Dynamic External Address Objects
-    if should_run_check('dynamic_address_objects', args.severity):
-        try:
-            dynamic_address_count = results.get('dynamic_ao_count', 0)
-            if dynamic_address_count > 0:
-                action_items.append(f"| High | {dynamic_address_count} Object(s) Found | Review and update credentials for Dynamic External Address Object(s) | [Link](https://www.sonicwall.com/support/knowledge-base/what-are-dynamic-external-objects-groups-and-how-can-we-configure-it/200507105852280) |")
-        except Exception as e:
-            print(f"Error checking Dynamic External Address Objects: {e}")
-
     # Dynamic Botnet List Server (FTP/HTTPS)
     if should_run_check('dynamic_botnet_list_server', args.severity):
         try:
             botnet_data = results.get('botnet_data', {})
-            if botnet_data.get('protocol', False):
+            if botnet_data.get('protocol', '') == 'ftp' and botnet_data.get('ftp_server') not in ('0.0.0.0', ''):
+                action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm) |")
+            elif botnet_data.get('protocol', '') == 'https' and botnet_data['https_url'] != '':
                 action_items.append(f"| Low | Configured ({botnet_data.get('protocol', '').upper()}) | Review and update Dynamic Botnet List Server credentials | [Link](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm) |")
         except Exception as e:
             print(f"Error checking Dynamic Botnet List Server: {e}")
@@ -451,7 +456,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('ldap_servers', args.severity):
         try:
             ldap_count = get_count(results.get('ldap_servers', {}))
-            md_lines.append(f"- **LDAP Servers:** {ldap_count}")
+            if ldap_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**LDAP Servers:** {ldap_count}</span>')
+            else:
+                md_lines.append(f"- **LDAP Servers:** {ldap_count}")
             if ldap_count > 0:
                 md_lines.append(f"  - **Action:** Update bind password on the LDAP server(s), then update in SonicOS")
                 md_lines.append(f"  - **Priority:** Critical")
@@ -464,7 +472,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('radius_servers', args.severity):
         try:
             radius_count = get_count(results.get('radius_servers', {}))
-            md_lines.append(f"- **RADIUS Servers:** {radius_count}")
+            if radius_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**RADIUS Servers:** {radius_count}</span>')
+            else:
+                md_lines.append(f"- **RADIUS Servers:** {radius_count}")
             if radius_count > 0:
                 md_lines.append(f"  - **Action:** Update RADIUS shared secrets on the RADIUS server(s), then update in SonicOS")
                 md_lines.append(f"  - **Priority:** Critical")
@@ -477,7 +488,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('tacacs_servers', args.severity):
         try:
             tacacs_count = get_count(results.get('tacacs_servers', {}))
-            md_lines.append(f"- **TACACS Servers:** {tacacs_count}")
+            if tacacs_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**TACACS Servers:** {tacacs_count}</span>')
+            else:
+                md_lines.append(f"- **TACACS Servers:** {tacacs_count}")
             if tacacs_count > 0:
                 md_lines.append(f"  - **Action:** Update TACACS+ shared secrets")
                 md_lines.append(f"  - **Priority:** Critical")
@@ -490,7 +504,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('sso_agents', args.severity):
         try:
             sso_count = get_count(results.get('sso_agents', {}).get('user', {}).get('sso', {}).get('agent', []))
-            md_lines.append(f"- **SSO Agents:** {sso_count}")
+            if sso_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**SSO Agents:** {sso_count}</span>')
+            else:
+                md_lines.append(f"- **SSO Agents:** {sso_count}")
             if sso_count > 0:
                 md_lines.append(f"  - **Action:** Update shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -503,7 +520,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('ts_agents', args.severity):
         try:
             ts_count = get_count(results.get('ts_agents', {}).get('user', {}).get('sso', {}).get('terminal_services_agent', []))
-            md_lines.append(f"- **Terminal Services Agents:** {ts_count}")
+            if ts_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Terminal Services Agents:** {ts_count}</span>')
+            else:
+                md_lines.append(f"- **Terminal Services Agents:** {ts_count}")
             if ts_count > 0:
                 md_lines.append(f"  - **Action:** Update shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -516,7 +536,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('sso_radius_clients', args.severity):
         try:
             radius_acct_count = get_count(results.get('sso_radius_clients', {}).get('user', {}).get('sso', {}).get('radius_accounting_client', []))
-            md_lines.append(f"- **RADIUS Accounting Clients:** {radius_acct_count}")
+            if radius_acct_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**RADIUS Accounting Clients:** {radius_acct_count}</span>')
+            else:
+                md_lines.append(f"- **RADIUS Accounting Clients:** {radius_acct_count}")
             if radius_acct_count > 0:
                 md_lines.append(f"  - **Action:** Update shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -529,7 +552,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('sso_api_clients', args.severity):
         try:
             api_client_count = get_count(results.get('sso_api_clients', {}).get('user', {}).get('sso', {}).get('third_party_api', {}).get('client', []))
-            md_lines.append(f"- **3rd Party API Clients:** {api_client_count}")
+            if api_client_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**3rd Party API Clients:** {api_client_count}</span>')
+            else:
+                md_lines.append(f"- **3rd Party API Clients:** {api_client_count}")
             if api_client_count > 0:
                 md_lines.append(f"  - **Action:** Update shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -542,7 +568,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('radius_accounting_servers', args.severity):
         try:
             radius_acct_server_count = get_count(results.get('acct_servers', {}).get('user', {}).get('radius', {}).get('accounting', {}).get('server', []))
-            md_lines.append(f"- **RADIUS Accounting Servers:** {radius_acct_server_count}")
+            if radius_acct_server_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**RADIUS Accounting Servers:** {radius_acct_server_count}</span>')
+            else:
+                md_lines.append(f"- **RADIUS Accounting Servers:** {radius_acct_server_count}")
             if radius_acct_server_count > 0:
                 md_lines.append(f"  - **Action:** Update shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -555,7 +584,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('tacacs_accounting_servers', args.severity):
         try:
             tacacs_acct_server_count = get_count(results.get('tacacs_accounting_servers', {}).get('user', {}).get('tacacs', {}).get('accounting', {}).get('server', []))
-            md_lines.append(f"- **TACACS Accounting Servers:** {tacacs_acct_server_count}")
+            if tacacs_acct_server_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**TACACS Accounting Servers:** {tacacs_acct_server_count}</span>')
+            else:
+                md_lines.append(f"- **TACACS Accounting Servers:** {tacacs_acct_server_count}")
             if tacacs_acct_server_count > 0:
                 md_lines.append(f"  - **Action:** Update shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -571,23 +603,26 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         md_lines.append(f"")
         try:
             vpn_count = get_count(results.get('vpn', {}).get('policy', []))
-            md_lines.append(f"- **VPN Policies:** {vpn_count}")
+            if vpn_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**VPN Policies:** {vpn_count}</span>')
+            else:
+                md_lines.append(f"- **VPN Policies:** {vpn_count}")
             if vpn_count > 0:
                 md_lines.append(f"  - **Action:** Review and update pre-shared keys and authentication/encryption keys")
                 md_lines.append(f"  - **Priority:** Critical")
                 md_lines.append(f"  - **Reference:** [IPSec VPN pre-shared keys](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
-            md_lines.append(f"  - **Enabled Policies:**")
-            for policy in results.get('vpn', {}).get('policy', []):
-                policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
-                policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
-                if policy_status:
-                    md_lines.append(f"    - **{policy_name}**")
-            md_lines.append(f"  - **Disabled Policies:**")
-            for policy in results.get('vpn', {}).get('policy', []):
-                policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
-                policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
-                if not policy_status:
-                    md_lines.append(f"    - **{policy_name}**")
+                md_lines.append(f"  - **Enabled Policies:**")
+                for policy in results.get('vpn', {}).get('policy', []):
+                    policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
+                    policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
+                    if policy_status:
+                        md_lines.append(f"    - **{policy_name}**")
+                md_lines.append(f"  - **Disabled Policies:**")
+                for policy in results.get('vpn', {}).get('policy', []):
+                    policy_name = policy.get('ipv4', {}).get('group_vpn', {}).get('name') or policy.get('ipv4', {}).get('site_to_site', {}).get('name') or policy.get('ipv4', {}).get('tunnel_interface', {}).get('name')
+                    policy_status = policy.get('ipv4', {}).get('group_vpn', {}).get('enable', False) or policy.get('ipv4', {}).get('site_to_site', {}).get('enable', False) or policy.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)
+                    if not policy_status:
+                        md_lines.append(f"    - **{policy_name}**")
         except Exception as e:
             print(f"Error processing VPN policies: {e}")
             md_lines.append(f"- **VPN Policies:** Error retrieving count")
@@ -602,7 +637,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             interesting_wans = results.get('interesting_wan_list', [])
             wan_interface_count = get_count(interesting_wans)
-            md_lines.append(f"- **PPPoE/PPTP/L2TP WAN Interfaces:** {wan_interface_count}")
+            if wan_interface_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**PPPoE/PPTP/L2TP WAN Interfaces:** {wan_interface_count}</span>')
+            else:
+                md_lines.append(f"- **PPPoE/PPTP/L2TP WAN Interfaces:** {wan_interface_count}")
             if wan_interface_count > 0:
                 md_lines.append(f"  - **Action:** Update the username and password for each WAN interface configured with PPPoE, PPTP, or L2TP")
                 md_lines.append(f"  - **Priority:** High")
@@ -619,20 +657,26 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             wwan_attached = results.get('cellular_attached', False)
             if wwan_attached:
-                md_lines.append(f"- **Cellular WWAN Model Detected:**")
+                md_lines.append(f"- **Cellular WWAN Modem Detected:**")
                 md_lines.append(f"  - **Action:** Update cellular provider credentials at the provider's website, then update in SonicOS")
                 if firewall_info['firewall_generation'] == 6:
-                    md_lines.append(f"  - **GEN6 Notice:** For GEN6 firewalls, this check found cellular model connection profiles. Please ensure to update credentials for each profile as applicable.")
+                    md_lines.append(f"  - **GEN6 Notice:** For GEN6 firewalls, this check found cellular modem connection profiles. Please ensure to update credentials for each profile as applicable.")
                 md_lines.append(f"  - **Priority:** High")
                 md_lines.append(f"  - **Reference:** [Cellular WWAN Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Interface_L2TP/PPPoE/PPTP%C2%A0password(s)_a)")
+            else:
+                md_lines.append(f'- <span style="color:grey;">**Cellular WWAN Interfaces:** No Cellular WWAN modem detected</span>')
         except Exception as e:
             print(f"Error processing Cellular WWAN: {e}")
             md_lines.append(f"- **Cellular WWAN Interfaces:** Error retrieving information")
 
     # Dynamic DNS
     if should_run_check('ddns_services', args.severity):
-        md_lines.append(f"- **Dynamic DNS (IPv4) Profiles:** {ddns_v4}")
-        md_lines.append(f"- **Dynamic DNS (IPv6) Profiles:** {ddns_v6}")
+        if (ddns_v4 + ddns_v6) == 0:
+            md_lines.append(f'- <span style="color:grey;">**Dynamic DNS (IPv4) Profiles:** {ddns_v4}</span>')
+            md_lines.append(f'- <span style="color:grey;">**Dynamic DNS (IPv6) Profiles:** {ddns_v6}</span>')
+        else:
+            md_lines.append(f"- **Dynamic DNS (IPv4) Profiles:** {ddns_v4}")
+            md_lines.append(f"- **Dynamic DNS (IPv6) Profiles:** {ddns_v6}")
         if ddns_v4 + ddns_v6 > 0:
             md_lines.append(f"  - **Action:** Update DDNS provider credentials for each configured entry at the provider's website, then update in SonicOS")
             md_lines.append(f"  - **Priority:** High")
@@ -650,7 +694,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 md_lines.append(f"  - **Priority:** High")
                 md_lines.append(f"  - **Reference:** [ClearPass/NAC Configuration](https://www.sonicwall.com/support/knowledge-base/how-to-add-a-clearpass-server-on-a-sonicwall-firewall/240523045608440)")
             else:
-                md_lines.append(f"- **ClearPass/NAC:** Not enabled")
+                md_lines.append(f'- <span style="color:grey;">**ClearPass/NAC:** Not Enabled</span>')
         except Exception as e:
             print(f"Error generating ClearPass section: {e}")
             md_lines.append(f"- **ClearPass/NAC:** Error retrieving information")
@@ -663,7 +707,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
             ftp_deaos = [d for d in deao_data if d['protocol'] == 'ftp']
             http_deaos = [d for d in deao_data if d['protocol'] == 'https']
 
-            md_lines.append(f"- **Dynamic External Address Objects:** {dynamic_address_count}")
+            if dynamic_address_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Dynamic External Address Objects:** {dynamic_address_count}</span>')
+            else:
+                md_lines.append(f"- **Dynamic External Address Objects:** {dynamic_address_count}")
             if dynamic_address_count > 0:
                 md_lines.append(f"  - **Action:** Review and update credentials for Dynamic External Address Object(s)")
                 md_lines.append(f"  - **Priority:** High")
@@ -684,13 +731,23 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('dynamic_botnet_list_server', args.severity):
         try:
             botnet_data = results.get('botnet_data', {})
-            if botnet_data.get('protocol', False):
-                md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {botnet_data.get('protocol', '').upper()}")
+            protocol = botnet_data.get('protocol', '')
+            ftp_server = botnet_data.get('ftp_server', '')
+            https_url = botnet_data.get('https_url', '')
+            valid_ftp = protocol == 'ftp' and ftp_server not in ('0.0.0.0', '')
+            valid_https = protocol == 'https' and https_url != ''
+            if valid_ftp or valid_https:
+                md_lines.append(f"- **Dynamic Botnet List Server:** Configured using {protocol.upper()}")
                 md_lines.append(f"  - **Action:** Review and update Dynamic Botnet List Server credentials")
                 md_lines.append(f"  - **Priority:** Low")
+                md_lines.append(f"  - **Server Details:**")
+                if protocol == 'ftp':
+                    md_lines.append(f"    - **FTP Server:** {botnet_data.get('ftp_username', '')}@{ftp_server}")
+                if protocol == 'https':
+                    md_lines.append(f"    - **HTTPS URL:** {https_url}")
                 md_lines.append(f"  - **Reference:** [Dynamic Botnet List Server](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-1-rules_policies_policy/Content/Settings/settings-botnet-dynamic-botnet-list-server-config.htm)")
             else:
-                md_lines.append(f"- **Dynamic Botnet List Server:** Not configured")
+                md_lines.append(f'- <span style="color:grey;">**Dynamic Botnet List Server:** Not configured</span>')
         except Exception as e:
             print(f"Error processing Dynamic Botnet List Server: {e}")
             md_lines.append(f"- **Dynamic Botnet List Server:** Error retrieving information")
@@ -699,7 +756,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('ntp_servers', args.severity):
         try:
             ntp_count = get_count(results.get('ntp_data', []))
-            md_lines.append(f"- **Custom NTP Servers:** {ntp_count}")
+            if ntp_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Custom NTP Servers:** {ntp_count}</span>')
+            else:
+                md_lines.append(f"- **Custom NTP Servers:** {ntp_count}")
             if ntp_count > 0:
                 md_lines.append(f"  - **Action:** Update authentication passwords on each NTP server and in SonicOS")
                 md_lines.append(f"  - **Priority:** Low")
@@ -719,7 +779,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 md_lines.append(f"  - **Priority:** Low")
                 md_lines.append(f"  - **Reference:** [Signature Downloads Through a Proxy Server](https://www.sonicwall.com/support/knowledge-base/signature-downloads-through-a-proxy-server/170503292286520)")
             else:
-                md_lines.append(f"- **Security Services Proxy:** Not configured")
+                md_lines.append(f'- <span style="color:grey;">**Security Services Proxy:** Not Configured</span>')
         except Exception as e:
             print(f"Error processing Security Services Proxy: {e}")
             md_lines.append(f"- **Security Services Proxy:** Error retrieving information")
@@ -733,7 +793,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('guest_services_auth', args.severity):
         try:
             guest_zones = results.get('guest_zone_data', [])
-            md_lines.append(f"- **Guest Services External Authentication (Message Authentication):** {len(guest_zones)} Zone(s) configured")
+            if len(guest_zones) == 0:
+                md_lines.append(f'- <span style="color:grey;">**Guest Services External Authentication (Message Authentication):** {len(guest_zones)} Zone(s) configured</span>')
+            else:
+                md_lines.append(f"- **Guest Services External Authentication (Message Authentication):** {len(guest_zones)} Zone(s) configured")
             if len(guest_zones) > 0:
                 md_lines.append(f"  - **Action:** Update shared secrets on each server and in SonicOS")
                 md_lines.append(f"  - **Priority:** Low")
@@ -749,7 +812,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('wlan_radius_servers', args.severity):
         try:
             wlan_radius_zones = results.get('wlan_zone_data', [])
-            md_lines.append(f"- **WLAN Local RADIUS Server:** {len(wlan_radius_zones)} Zone(s) configured")
+            if len(wlan_radius_zones) == 0:
+                md_lines.append(f'- <span style="color:grey;">**WLAN Local RADIUS Servers:** {len(wlan_radius_zones)} Zone(s) configured</span>')
+            else:
+                md_lines.append(f"- **WLAN Local RADIUS Server:** {len(wlan_radius_zones)} Zone(s) configured")
             if len(wlan_radius_zones) > 0:
                 md_lines.append(f"  - **Action:** Update the RADIUS shared secrets and LDAP server password in SonicOS")
                 md_lines.append(f"  - **Priority:** Low")
@@ -769,7 +835,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             radio_radius = results.get('wireless', {}).get('radius', {}).get('server', {}).get('server1', {}).get('ip', None)
             radio_psk = results.get('wireless', {}).get('wpa', {}).get('passphrase', None)
-            md_lines.append(f"- **Internal WLAN Radio:** {'Configured' if radio_radius or radio_psk else 'Not Configured'}")
+            if not radio_radius and not radio_psk:
+                md_lines.append(f'- <span style="color:grey;">**Internal WLAN Radio:** Not Configured</span>')
+            else:
+                md_lines.append(f"- **Internal WLAN Radio:** {'Configured' if radio_radius or radio_psk else 'Not Configured'}")
             if radio_radius or radio_psk:
                 md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -787,7 +856,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             vap_count = get_count(results.get('internal_wlan_vaps', {}).get('wireless', {}).get('virtual_access_point', {}).get('object', []))
             vap_data = results.get('internal_wlan_vap_data', [])
-            md_lines.append(f"- **Internal WLAN Virtual Access Points:** {vap_count} Object(s) configured")
+            if vap_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Internal WLAN Virtual Access Points:** {vap_count} Object(s) configured</span>')
+            else:
+                md_lines.append(f"- **Internal WLAN Virtual Access Points:** {vap_count} Object(s) configured")
             if vap_count > 0:
                 md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -807,7 +879,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             vap_profile_count = get_count(results.get('internal_wlan_vap_profiles', {}).get('wireless', {}).get('virtual_access_point', {}).get('profile', []))
             vap_profile_data = results.get('internal_wlan_vap_profile_data', [])
-            md_lines.append(f"- **Internal WLAN Virtual Access Point Profiles:** {vap_profile_count} Profile(s) configured")
+            if vap_profile_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Internal WLAN Virtual Access Point Profiles:** {vap_profile_count} Profile(s) configured</span>')
+            else:
+                md_lines.append(f"- **Internal WLAN Virtual Access Point Profiles:** {vap_profile_count} Profile(s) configured")
             if vap_profile_count > 0:
                 md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -828,7 +903,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             ap_count = get_count(results.get('sonicpoint_objects', {}).get('sonicpoint', {}).get('sonicpoint', []))
             ap_data = results.get('sonicpoint_object_data', [])
-            md_lines.append(f"- **SonicPoint/SonicWave Access Points:** {ap_count} Object(s) configured")
+            if ap_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**SonicPoint/SonicWave Access Points:** {ap_count} Object(s) configured</span>')
+            else:
+                md_lines.append(f"- **SonicPoint/SonicWave Access Points:** {ap_count} Object(s) configured")
             if ap_count > 0:
                 md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -852,7 +930,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             ap_profile_count = get_count(results.get('sonicpoint_profiles', {}).get('sonicpoint', {}).get('profile', []))
             ap_profile_data = results.get('sonicpoint_profile_data', [])
-            md_lines.append(f"- **SonicPoint/SonicWave Access Point Provisioning Profiles:** {ap_profile_count} Profile(s) configured")
+            if ap_profile_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**SonicPoint/SonicWave Access Point Provisioning Profiles:** {ap_profile_count} Profile(s) configured</span>')
+            else:
+                md_lines.append(f"- **SonicPoint/SonicWave Access Point Provisioning Profiles:** {ap_profile_count} Profile(s) configured")
             if ap_profile_count > 0:
                 md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS/RADIUS Accounting shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -878,7 +959,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             spvap_count = get_count(results.get('sonicpoint_vaps', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('object', []))
             spvap_data = results.get('sonicpoint_vap_data', [])
-            md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Points:** {spvap_count} VAP Object(s) configured")
+            if spvap_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**SonicPoint/SonicWave Virtual Access Points:** {spvap_count} VAP Object(s) configured</span>')
+            else:
+                md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Points:** {spvap_count} VAP Object(s) configured")
             if spvap_count > 0:
                 md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -900,7 +984,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         try:
             spvap_profile_count = get_count(results.get('sonicpoint_vap_profiles', {}).get('sonicpoint', {}).get('virtual_access_point', {}).get('profile', []))
             spvap_profile_data = results.get('sonicpoint_vap_profile_data', [])
-            md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Point Profiles:** {spvap_profile_count} VAP Profile(s) configured")
+            if spvap_profile_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**SonicPoint/SonicWave Virtual Access Point Profiles:** {spvap_profile_count} VAP Profile(s) configured</span>')
+            else:
+                md_lines.append(f"- **SonicPoint/SonicWave Virtual Access Point Profiles:** {spvap_profile_count} VAP Profile(s) configured")
             if spvap_profile_count > 0:
                 md_lines.append(f"  - **Action:** Update pre-shared keys and RADIUS shared secrets")
                 md_lines.append(f"  - **Priority:** Low")
@@ -929,7 +1016,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 switch_count = get_count(results.get('switch_controller', {}).get('switch', []))
             else:
                 switch_count = get_count(results.get('switch_controller', {}).get('switch_info', []))
-            md_lines.append(f"- **Extended Switches:** {switch_count}")
+            if switch_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Extended Switches:** {switch_count}</span>')
+            else:
+                md_lines.append(f'- **Extended Switches:** {switch_count}')
             if switch_count > 0:
                 md_lines.append(f"  - **Action:** Update the password for any connected switches")
                 md_lines.append(f"  - **Priority:** Low")
@@ -942,7 +1032,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('extended_switch_users', args.severity):
         try:
             switch_user_count = get_count(results.get('extended_switch_users', []))
-            md_lines.append(f"- **Extended Switch Users:** {switch_user_count}")
+            if switch_user_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Extended Switch Users:** {switch_user_count}</span>')
+            else:
+                md_lines.append(f"- **Extended Switch Users:** {switch_user_count}")
             if switch_user_count > 0:
                 md_lines.append(f"  - **Action:** Update each user's password in the switch configuration")
                 md_lines.append(f"  - **Priority:** Low")
@@ -955,7 +1048,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('extended_switch_radius', args.severity):
         try:
             switch_radius_count = get_count(results.get('switch_controller', {}).get('radius', []))
-            md_lines.append(f"- **Extended Switch RADIUS Servers:** {switch_radius_count}")
+            if switch_radius_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**Extended Switch RADIUS Servers:** {switch_radius_count}</span>')
+            else:
+                md_lines.append(f"- **Extended Switch RADIUS Servers:** {switch_radius_count}")
             if switch_radius_count > 0:
                 md_lines.append(f"  - **Action:** Update the shared secret on each server and in the switch configuration")
                 md_lines.append(f"  - **Priority:** Low")
@@ -973,6 +1069,8 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 md_lines.append(f"  - **Action:** Update the authentication/encryption keys")
                 md_lines.append(f"  - **Priority:** Low")
                 md_lines.append(f"  - **Reference:** [GMS IPSec Management Tunnel](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared)")
+            else:
+                md_lines.append(f'- <span style="color:grey;">**GMS IPSec Management Tunnel:** Not detected</span>')
         except Exception as e:
             print(f"Error processing GMS IPSec Management Tunnels: {e}")
             md_lines.append(f"- **GMS IPSec Management Tunnels:** Error retrieving information")
@@ -1005,7 +1103,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                     md_lines.append(f"  - **Priority:** Low")
                     md_lines.append(f"  - **Reference:** [Advanced Routing Protocols](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#:~:text=the%20remediation%20instructions.-,Advanced%20Routing,-Update%20passwords%20used)")
             else:
-                md_lines.append(f"- **Advanced Routing Protocols:** None enabled")
+                md_lines.append(f'- <span style="color:grey;">**Advanced Routing Protocols:** None enabled</span>')
         except Exception as e:
             print(f"Error processing advanced routing protocols: {e}")
             md_lines.append(f"- **Advanced Routing Protocols:** Error retrieving information")
@@ -1020,7 +1118,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('snmp_users', args.severity):
         try:
             snmp_count = get_count(results.get('snmp', {}).get('user', []))
-            md_lines.append(f"- **SNMPv3 Users:** {snmp_count}")
+            if snmp_count == 0:
+                md_lines.append(f'- <span style="color:grey;">**SNMPv3 Users:** {snmp_count}</span>')
+            else:
+                md_lines.append(f"- **SNMPv3 Users:** {snmp_count}")
             if snmp_count > 0:
                 md_lines.append(f"  - **Action:** Update authentication and privacy passwords")
                 md_lines.append(f"  - **Priority:** High")
@@ -1047,7 +1148,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 md_lines.append(f"  - Priority: Medium")
                 md_lines.append(f"  - Reference: [Email Logging Configuration](https://www.sonicwall.com/support/knowledge-base/how-can-i-e-mail-logs-and-alerts-via-smtp-server/170503803088038)")
             else:
-                md_lines.append(f"- **Email Logging:** Not configured")
+                md_lines.append(f'- <span style="color:grey;">**Email Logging:** Not configured</span>')
         except Exception as e:
             print(f"Error generating Email Logging section: {e}")
             md_lines.append(f"- **Email Logging:** Error retrieving information")
@@ -1061,7 +1162,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 md_lines.append(f"  - Priority: Medium")
                 md_lines.append(f"  - Reference: [Packet Monitor Configuration](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_Reset_any_passwords:~:text=for%20more%20information.-,FTP/Web%20Passwords,-Reset%20the%20password)")
             else:
-                md_lines.append(f"- **Packet Monitor FTP:** Not configured")
+                md_lines.append(f'- <span style="color:grey;">**Packet Monitor FTP:** Not configured</span>')
         except Exception as e:
             print(f"Error generating Packet Monitor section: {e}")
             md_lines.append(f"- **Packet Monitor FTP:** Error retrieving information")
@@ -1075,7 +1176,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 md_lines.append(f"  - Priority: Medium")
                 md_lines.append(f"  - Reference: [TSR/EXP Scheduled Exports](https://www.sonicwall.com/support/technical-documentation/docs/sonicos-7-0-0-0-device_settings/Content/Topics/Firmware_Settings/firmware-backup-configuring.htm)")
             else:
-                md_lines.append(f"- **TSR/EXP Scheduled Exports:** Not configured")
+                md_lines.append(f'- <span style="color:grey;">**TSR/EXP Scheduled Exports:** Not configured</span>')
         except Exception as e:
             print(f"Error generating Scheduled Exports section: {e}")
             md_lines.append(f"- **TSR/EXP Scheduled Exports:** Error retrieving information")
@@ -1095,7 +1196,7 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
                 if sfr_pop:
                     md_lines.append(f"  - **POP3 Server:** Configured")
             else:
-                md_lines.append(f"- **AppFlow SFR Mailing:** Not configured")
+                md_lines.append(f'- <span style="color:grey;">**AppFlow SFR Mailing:** Not configured</span>')
         except Exception as e:
             print(f"Error generating AppFlow SFR Mailing section: {e}")
             md_lines.append(f"- **AppFlow SFR Mailing:** Error retrieving information")
@@ -1108,7 +1209,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('aws_api', args.severity):
         try:
             aws_enabled = results.get('log', {}).get('aws', {}).get('enable', False)
-            md_lines.append(f"- **AWS API Logging:** {'Enabled' if aws_enabled else 'Not Enabled'}")
+            if not aws_enabled:
+                md_lines.append(f'- <span style="color:grey;">**AWS API Logging:** Not Enabled</span>')
+            else:
+                md_lines.append(f"- **AWS API Logging:** {'Enabled' if aws_enabled else 'Not Enabled'}")
             if aws_enabled:
                 md_lines.append(f"  - **Action:** Update the AWS secret key on the AWS console and in SonicOS")
                 md_lines.append(f"  - **Priority:** Critical")
@@ -1121,7 +1225,10 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
     if should_run_check('cloud_secure_edge', args.severity):
         try:
             cse_enabled = results.get('cloud_secure_edge', {}).get('created', False)
-            md_lines.append(f"- **Cloud Secure Edge:** {'Enabled' if cse_enabled else 'Not Enabled'}")
+            if not cse_enabled:
+                md_lines.append(f'- <span style="color:grey;">**Cloud Secure Edge:** Not Enabled</span>')
+            else:
+                md_lines.append(f"- **Cloud Secure Edge:** {'Enabled' if cse_enabled else 'Not Enabled'}")
             if cse_enabled:
                 md_lines.append(f"  - **Action:** Reset Cloud Secure Edge connector authentication key")
                 md_lines.append(f"  - **Priority:** Critical")

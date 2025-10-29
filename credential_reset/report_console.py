@@ -385,17 +385,17 @@ def generate_summary_table(results: dict, args):
         if should_run_check('dynamic_botnet_list_server', args.severity):
             botnet_data = results.get('botnet_data', {})
             if botnet_data:
-                if botnet_data['protocol'] == 'ftp':
-                    table.add_row("Botnet Server List (FTP)", "Checks Botnet server list protocol", "Low",
-                                  "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
-                elif botnet_data['protocol'] == 'https':
-                    table.add_row("Botnet Server List (HTTP)", "Checks Botnet server list protocol", "Low",
-                                  "[green]Configured[/green]", "", "[red]Change the Botnet server list protocol to HTTPS.[/red]")
+                if botnet_data.get('protocol', '') == 'ftp' and botnet_data.get('ftp_server') not in ('0.0.0.0', ''):
+                    table.add_row("Botnet List Server (FTP)", "Checks Dynamic Botnet List Server", "Low",
+                                  "[green]Configured[/green]", "", "[red]FTP server is configured. Update the FTP credentials on the server and in SonicOS.[/red]")
+                elif botnet_data['protocol'] == 'https' and botnet_data['https_url'] != '':
+                    table.add_row("Botnet List Server (HTTPS)", "Checks Dynamic Botnet List Server", "Low",
+                                  "[green]Configured[/green]", "", "[red]HTTPS URL is set. If credentials were provided, update them on the server and in SonicOS.[/red]")
                 else:
-                    table.add_row("Botnet Server List", "Checks Botnet server list protocol", "Low",
+                    table.add_row("Botnet List Server", "Checks Dynamic Botnet List Server", "Low",
                                   "[dim]Not configured[/dim]", "", "[dim]No action required[/dim]")
             else:
-                table.add_row("Botnet Server List", "Checks Botnet server list protocol", "Low",
+                table.add_row("Botnet List Server", "Checks Dynamic Botnet List Server", "Low",
                               "[dim]No configuration found[/dim]", "", "[dim]No action required[/dim]")
 
         # Extended Switches
