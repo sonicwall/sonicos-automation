@@ -289,6 +289,34 @@ function initializeDashboardFeatures() {
             });
         }
     });
+
+    // Check if results are available and update the results card state accordingly
+    const resultsButton = document.getElementById('nav-results');
+    const resultsCard = document.getElementById('results-card');
+    const resultsCardStatus = document.getElementById('results-card-status');
+
+    // If the results nav button is enabled, make sure the card reflects that
+    if (resultsButton && !resultsButton.classList.contains('nav-btn-disabled')) {
+        console.log('Results are available, updating results card to enabled state');
+        if (resultsCard) {
+            resultsCard.classList.remove('opacity-50');
+            resultsCard.classList.add('opacity-100');
+            resultsCard.style.cursor = 'pointer';
+        }
+        if (resultsCardStatus) {
+            resultsCardStatus.textContent = 'Click to view results';
+        }
+    } else {
+        console.log('Results not available, keeping results card in disabled state');
+        if (resultsCard) {
+            resultsCard.classList.add('opacity-50');
+            resultsCard.classList.remove('opacity-100');
+            resultsCard.style.cursor = 'not-allowed';
+        }
+        if (resultsCardStatus) {
+            resultsCardStatus.textContent = 'Run the playbook to view results';
+        }
+    }
 }
 
 // Function to initialize results section features
