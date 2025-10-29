@@ -702,28 +702,33 @@ function populateUsersTab(usersData) {
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     ${user.forced_password_change ? 
-                        '<span class="text-green-600">✓ Yes</span>' : 
+                        '<span class="text-green-600">Yes</span>' : 
                         '<span class="text-red-600">No</span>'
                     }
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${user.skipped
+                  ${
+                    user.forced_password_change === false
+                      ? `<span class="text-red-600">N/A</span>`
+                      : user.skipped
                         ? `<span class="text-red-600">Skipped<br>(${user.reason})</span>`
-                        : `<span class="text-green-600">✓ Not Skipped</span>`
-                    }
+                        : `<span class="text-green-600">Not Skipped</span>`
+                  }
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     ${user.totp_unbind_attempted ? 
-                        '<span class="text-gray-600">Yes</span>' : 
-                        '<span class="text-gray-600">No</span>'
+                        '<span class="text-green-600">Yes</span>' : 
+                        '<span class="text-red-600">No</span>'
                     }
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  ${user.totp_skipped 
-                    ? `<span class="text-red-600">Skipped<br>(${user.totp_reason})</span>` 
-                    : `<span class="text-green-600">✓ Not Skipped</span>`
+                  ${
+                    user.totp_unbind_attempted === false
+                      ? `<span class="text-red-600">N/A</span>`
+                      : user.totp_skipped
+                        ? `<span class="text-red-600">Skipped<br>(${user.totp_reason})</span>`
+                        : `<span class="text-green-600">Not Skipped</span>`
                   }
-                </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   ${user.new_password
                       ? `<button class="ml-2 mr-2 px-2 py-1 bg-blue-500 text-white text-xs rounded copy-btn"

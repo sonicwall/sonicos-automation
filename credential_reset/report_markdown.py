@@ -130,12 +130,15 @@ def generate_markdown_summary(results: dict, firewall: str, firewall_info: dict,
         if get_count(results.get('vpn', {}).get('policy', [])) > 0:
             # Counts the number of GroupVPN, Site-to-Site, and Tunnel Interface policies
             s2s_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('name')])
-            s2s_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+            s2s_enabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('site_to_site', {}).get('enable', False)])
+            s2s_disabled_count = s2s_count - s2s_enabled_count
             groupvpn_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('name')])
-            groupvpn_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+            groupvpn_enabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('group_vpn', {}).get('enable', False)])
+            groupvpn_disabled_count = groupvpn_count - groupvpn_enabled_count
             tunnelint_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('name')])
-            tunnelint_disabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
-            action_items.append(f"| Critical | {get_count(results.get('vpn', {}).get('policy', []))} Policies Found<br>- {groupvpn_count} GroupVPN, {groupvpn_disabled_count} Disabled<br> - {s2s_count} Site-to-Site, {s2s_disabled_count} Disabled<br>- {tunnelint_count} Tunnel Interface, {tunnelint_disabled_count} Disabled | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
+            tunnelint_enabled_count = len([p for p in results.get('vpn', {}).get('policy', []) if p.get('ipv4', {}).get('tunnel_interface', {}).get('enable', False)])
+            tunnelint_disabled_count = tunnelint_count - tunnelint_enabled_count
+            action_items.append(f"| Critical | {get_count(results.get('vpn', {}).get('policy', []))} Policies Found<br>{groupvpn_count} GroupVPN<br>  - {groupvpn_enabled_count} Enabled<br>  - {groupvpn_disabled_count} Disabled<br>{s2s_count} Site-to-Site<br>  - {s2s_enabled_count} Enabled<br>  - {s2s_disabled_count} Disabled<br>{tunnelint_count} Tunnel Interface<br>  - {tunnelint_enabled_count} Enabled<br>  - {tunnelint_disabled_count} Disabled | VPN policies require pre-shared key, authentication/encryption key updates | [Link](https://www.sonicwall.com/support/knowledge-base/essential-credential-reset/250909151701590#_IPSec_VPN_pre-shared) |")
 
     # Dynamic DNS
     if should_run_check('ddns_services', args.severity):
